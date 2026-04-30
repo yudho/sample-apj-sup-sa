@@ -176,18 +176,6 @@
       "summary": "Exported Glue catalog metadata with table and column descriptions for embedding generation"
     },
     {
-      "path": "infrastructure/tests/test_init_database.py",
-      "summary": "Unit tests for init_database.py - tests get_cast function, type casting logic for UUID, integer, decimal, boolean, timestamp columns"
-    },
-    {
-      "path": "infrastructure/tests/test_generate_embeddings.py",
-      "summary": "Unit tests for generate_embeddings.py - tests embedding generation, pgvector storage, and metadata processing"
-    },
-    {
-      "path": "infrastructure/tests/test_integration.py",
-      "summary": "Integration tests for infrastructure deployment - tests CloudFormation stack creation, database connectivity, and Glue catalog"
-    },
-    {
       "path": ".kiro/specs/agentic-analytics/requirements.md",
       "summary": "13 requirements with acceptance criteria covering natural language processing, multi-tenant isolation, core data access, analytics tools, write operations, and infrastructure automation"
     },
