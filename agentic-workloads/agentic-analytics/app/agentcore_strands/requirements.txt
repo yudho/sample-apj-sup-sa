@@ -1,0 +1,16 @@
+boto3==1.42.21
+fastapi
+uvicorn[standard]
+websockets==11.0.3
+python-multipart
+python-dotenv==1.0.0
+strands-agents[otel]==1.21.0
+strands-agents-tools==0.2.19
+mcp==1.25.0
+requests
+bedrock-agentcore==1.0.7
+requests-aws4auth
+opensearch-py
+bedrock-agentcore-starter-toolkit==0.2.1
+aws-opentelemetry-distro
+psycopg2-binary

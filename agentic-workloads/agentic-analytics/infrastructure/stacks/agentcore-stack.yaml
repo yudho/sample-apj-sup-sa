@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AgentCore Gateway Stack - Custom Resource for Lambda and Gateway deployment'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: agentic-analytics
+
+  AuroraEndpoint:
+    Type: String
+    Description: Aurora cluster endpoint
+
+  DatabaseSecretArn:
+    Type: String
+    Description: Secrets Manager ARN for database credentials
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: Private subnet IDs for Lambda VPC config
+
+  SecurityGroupId:
+    Type: String
+    Description: Security group ID for Lambda
+
+  ArtifactsBucket:
+    Type: String
+    Description: S3 bucket containing Lambda code
+
+  KnowledgeBaseId:
+    Type: String
+    Default: ''
+    Description: Bedrock Knowledge Base ID (optional)
+
+  GatewayName:
+    Type: String
+    Default: AgenticAnalyticsMCPGateway
+
+  DeploymentMode:
+    Type: String
+    Default: full
+    AllowedValues:
+      - full
+      - workshop
+    Description: 'full = deploy Gateway + Policy + Interceptor, workshop = Gateway only (manual policy/interceptor)'
+
+  CognitoUserPoolId:
+    Type: String
+    Description: 'Cognito User Pool ID (from cognito-stack or pre-deployed)'
+
+  CognitoClientId:
+    Type: String
+    Description: 'Cognito App Client ID (from cognito-stack or pre-deployed)'
+
+  LambdaS3Key:
+    Type: String
+    Default: lambda/agentcore_gateway.zip
+    Description: S3 key for AgentCore Gateway Lambda code
+
+  DataFoundationLambdaKey:
+    Type: String
+    Default: lambda/datafoundation_lambda.zip
+    Description: S3 key for DataFoundation Lambda code (passed to custom resource)
+
+Resources:
+  #============================================================================
+  # IAM Role for AgentCore Gateway Lambda
+  #============================================================================
+  AgentCoreGatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-agentcore-gw-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: AgentCoreGatewayPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:GetFunction
+                  - lambda:ListLayerVersions
+                  - lambda:AddPermission
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:GetRole
+                  - iam:PutRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/*
+              - Effect: Allow
+                Action:
+                  - bedrock-agentcore:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - cognito-idp:*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${ArtifactsBucket}/*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecretArn
+              - Effect: Allow
+                Action:
+                  - ssm:PutParameter
+                  - ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agentic-analytics/*
+
+  #============================================================================
+  # AgentCore Gateway Lambda Function
+  #============================================================================
+  AgentCoreGatewayFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-agentcore-gw
+      Description: Deploy AgentCore MCP Gateway and Lambda
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !GetAtt AgentCoreGatewayRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref LambdaS3Key
+      Environment:
+        Variables:
+          AWS_REGION_NAME: !Ref AWS::Region
+
+  #============================================================================
+  # Custom Resource to Deploy Gateway
+  #============================================================================
+  AgentCoreGatewayTrigger:
+    Type: Custom::AgentCoreGateway
+    DependsOn: AgentCoreGatewayFunction
+    Properties:
+      ServiceToken: !GetAtt AgentCoreGatewayFunction.Arn
+      GatewayName: !Ref GatewayName
+      LambdaFunctionName: !Sub ${EnvironmentName}-datafoundation
+      AuroraEndpoint: !Ref AuroraEndpoint
+      DatabaseSecretArn: !Ref DatabaseSecretArn
+      SubnetIds: !Join [',', !Ref SubnetIds]
+      SecurityGroupId: !Ref SecurityGroupId
+      ArtifactsBucket: !Ref ArtifactsBucket
+      LambdaCodeKey: !Ref DataFoundationLambdaKey
+      KnowledgeBaseId: !Ref KnowledgeBaseId
+      DeploymentMode: !Ref DeploymentMode
+      CognitoUserPoolId: !Ref CognitoUserPoolId
+      CognitoClientId: !Ref CognitoClientId
+
+Outputs:
+  AgentCoreGatewayFunctionArn:
+    Description: AgentCore Gateway Lambda Function ARN
+    Value: !GetAtt AgentCoreGatewayFunction.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-AgentCoreGatewayFunctionArn
+
+  DataFoundationLambdaArn:
+    Description: DataFoundation Lambda ARN
+    Value: !GetAtt AgentCoreGatewayTrigger.LambdaArn
+    Export:
+      Name: !Sub ${EnvironmentName}-DataFoundationLambdaArn
+
+  GatewayId:
+    Description: AgentCore Gateway ID
+    Value: !GetAtt AgentCoreGatewayTrigger.GatewayId
+    Export:
+      Name: !Sub ${EnvironmentName}-GatewayId
+
+  GatewayUrl:
+    Description: AgentCore Gateway URL
+    Value: !GetAtt AgentCoreGatewayTrigger.GatewayUrl
+    Export:
+      Name: !Sub ${EnvironmentName}-GatewayUrl
+
+  PolicyEngineId:
+    Description: Policy Engine ID (only in full mode)
+    Value: !GetAtt AgentCoreGatewayTrigger.PolicyEngineId
+    Export:
+      Name: !Sub ${EnvironmentName}-PolicyEngineId
+    Condition: IsFullMode
+
+Conditions:
+  IsFullMode: !Equals [!Ref DeploymentMode, 'full']

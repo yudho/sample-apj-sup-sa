@@ -1,0 +1,53 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+*DS_Store*
+
+# AgentCore runtime files
+.bedrock_agentcore*
+
+# Generated/build artifacts
+*.zip
+app/agentcore_strands/gateway_config.json
+app/agentcore_strands/Dockerfile
+
+# Environment files (contain credentials)
+.env
+*/.env
+config.env
+*/config.env
+app/agentcore_strands/.env
+app/agentcore_strands/*.env
+app/ui/.env
+
+# Node.js
+app/ui/node_modules/
+app/ui/build/
+
+# Temporary files
+dataset/dev/tmp/
+dev/tmp/
+
+# Workshop Studio
+workshop/.deploy-config
+workshop/assets/
+workshop/static/main-stack.yaml
+workshop/static/assets/
+
+**/.hypothesis/
+
+# personal
+sean_prompt*
+tmp/*
+.kiro/specs/semantic-layer-cube/*
+changes.md
+
+# Test artifacts
+app/agentcore_strands/lambda_tests/
+.pytest_cache/

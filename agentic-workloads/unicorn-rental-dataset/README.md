@@ -81,7 +81,6 @@ data/
 ## Directory Structure
 
 ```
-dataset/
 ├── schema/
 │   └── schema.sql              # Complete DDL with tables, views, triggers
 ├── data/                       # CSV data files
