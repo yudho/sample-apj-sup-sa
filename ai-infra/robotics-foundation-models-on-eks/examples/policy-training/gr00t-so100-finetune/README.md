@@ -15,6 +15,7 @@ On a scale-to-zero cluster, prewarm is required for this GPU workflow because
 OSMO validates platform capacity before Karpenter can provision a node.
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 GPU_PREWARM_INSTANCE_TYPE=g7e.8xlarge infra/kubernetes/prewarm-gpu-node.sh
 SMOKE_SET_NGC_CREDENTIAL=true \
   SMOKE_SET_HF_CREDENTIAL=true \
@@ -27,9 +28,12 @@ infra/kubernetes/wait-gpu-node-cleanup.sh
 
 Use `g7e.8xlarge` for the validated path because the workflow requests `cpu: 16`, `memory: 96Gi`, and `gpu: 1`.
 
-For a longer quality-oriented run matching the SO-101 tutorial checkpoint scale:
+For a longer quality-oriented run matching the SO-101 tutorial checkpoint scale,
+submit directly after `huggingface_token` exists in OSMO:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g7e.8xlarge infra/kubernetes/prewarm-gpu-node.sh
 osmo workflow submit examples/policy-training/gr00t-so100-finetune/workflow.yaml \
   --pool default \
   -t json \
@@ -40,6 +44,13 @@ osmo workflow submit examples/policy-training/gr00t-so100-finetune/workflow.yaml
   --set gpu_metrics_interval_seconds=10 \
   --set-string output_dataset=gr00t-finetune-10k-artifacts \
   --set-string retain_model_weights=true
+```
+
+After the submitted workflow reaches `COMPLETED`, clean up the G7e nodepool:
+
+```bash
+cd ai-infra/robotics-foundation-models-on-eks
+infra/kubernetes/wait-gpu-node-cleanup.sh
 ```
 
 The default workflow values are intentionally small because this repo uses them to validate OSMO execution, credentials, scheduling, artifact upload, and cleanup. They are not a full policy-quality benchmark.

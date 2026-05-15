@@ -13,6 +13,7 @@ On a scale-to-zero cluster, prewarm is required for this GPU workflow because
 OSMO validates platform capacity before Karpenter can provision a node.
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 GPU_PREWARM_INSTANCE_TYPE=g7e.4xlarge infra/kubernetes/prewarm-gpu-node.sh
 SMOKE_SET_NGC_CREDENTIAL=true \
   SMOKE_SET_HF_CREDENTIAL=true \
@@ -25,9 +26,12 @@ infra/kubernetes/wait-gpu-node-cleanup.sh
 
 Use `g7e.4xlarge` for the validated path because the workflow requests `cpu: 8`, `memory: 64Gi`, and `gpu: 1`.
 
-For a longer quality-oriented run matching the upstream OpenPI step-count signal:
+For a longer quality-oriented run matching the upstream OpenPI step-count signal,
+submit directly after `huggingface_token` exists in OSMO:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g7e.4xlarge infra/kubernetes/prewarm-gpu-node.sh
 osmo workflow submit examples/policy-training/openpi-libero-lora/workflow.yaml \
   --pool default \
   -t json \
@@ -39,6 +43,13 @@ osmo workflow submit examples/policy-training/openpi-libero-lora/workflow.yaml \
   --set-string output_dataset=openpi-libero-lora-30k-artifacts \
   --set-string experiment_name=aws-osmo-libero-lora-30k \
   --set-string retain_checkpoint_arrays=true
+```
+
+After the submitted workflow reaches `COMPLETED`, clean up the G7e nodepool:
+
+```bash
+cd ai-infra/robotics-foundation-models-on-eks
+infra/kubernetes/wait-gpu-node-cleanup.sh
 ```
 
 The reference workflow is a single-GPU E2E validation path. It is not a full pi0.5 LIBERO benchmark reproduction.

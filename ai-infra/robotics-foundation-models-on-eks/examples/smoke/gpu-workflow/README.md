@@ -7,6 +7,7 @@ On a scale-to-zero cluster, prewarm is required for this GPU workflow; otherwise
 submission fails before Karpenter can provision a node.
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 GPU_PREWARM_INSTANCE_TYPE=g7e.2xlarge infra/kubernetes/prewarm-gpu-node.sh
 SMOKE_SET_NGC_CREDENTIAL=true \
   WORKFLOW_FILE=examples/smoke/gpu-workflow/workflow.yaml \

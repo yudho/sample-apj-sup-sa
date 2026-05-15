@@ -19,6 +19,9 @@ Prerequisites:
 - At least two EFA-capable G6e nodes can be provisioned. The EFA platform
   requests `vpc.amazonaws.com/efa: 1`, one GPU per pod, and distinct nodes for
   the two DDP ranks.
+- On a scale-to-zero cluster, prewarm is required before submission because OSMO
+  validates `g6e-l40s-efa` and `g6e-l40s` capacity before Karpenter can
+  provision a node.
 - If On-Demand G6e capacity is scarce and Spot is acceptable, redeploy
   Karpenter with
   `KARPENTER_CAPACITY_TYPES=on-demand,spot infra/kubernetes/deploy-karpenter.sh`.
@@ -29,13 +32,26 @@ Prerequisites:
 Run:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
+
 cd benchmarks/g6e-efa-ddp
 osmo workflow submit workflow.yaml --pool default
 ```
 
 For a short smoke run, reduce the gradient payload and measured steps:
 
+If no G6e EFA node is already visible to OSMO, run the same EFA prewarm first.
+
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
+
+cd benchmarks/g6e-efa-ddp
 osmo workflow submit workflow.yaml --pool default \
   --set param_mib=16 warmup_steps=1 steps=1 \
   --set-string workflow_name=aws-g6e-efa-ddp-smoke \
@@ -56,8 +72,19 @@ The runner executes two modes with the same PyTorch training script:
 Example socket comparison:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge infra/kubernetes/prewarm-gpu-node.sh
+
+cd benchmarks/g6e-efa-ddp
 osmo workflow submit workflow.yaml --pool default \
   --set-string mode=socket platform=g6e-l40s workflow_name=aws-g6e-ddp-socket
+```
+
+After each submitted workflow reaches `COMPLETED`, clean up the G6e nodepool:
+
+```bash
+cd ai-infra/robotics-foundation-models-on-eks
+KARPENTER_NODEPOOL_NAME=aws-osmo-g6e infra/kubernetes/wait-gpu-node-cleanup.sh
 ```
 
 Default workload:

@@ -45,6 +45,7 @@ changes:
 Run from the repository root:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 TF_OUTPUT_AWS_REGION=ap-northeast-2 \
 TF_OUTPUT_CLUSTER_NAME=example-osmo-eks \
 TF_OUTPUT_OSMO_NAMESPACE=osmo \

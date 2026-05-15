@@ -19,10 +19,18 @@ Prerequisites:
 - At least two EFA-capable G6e nodes can be provisioned. The benchmark requests
   `vpc.amazonaws.com/efa: 1`, one GPU per rank, and distinct nodes for the two
   ranks.
+- On a scale-to-zero cluster, prewarm is required before submission because OSMO
+  validates `g6e-l40s-efa` and `g6e-l40s` capacity before Karpenter can
+  provision a node.
 
 Run:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
+
 cd benchmarks/g6e-efa-nccl
 osmo workflow submit workflow.yaml --pool default
 ```
@@ -30,8 +38,19 @@ osmo workflow submit workflow.yaml --pool default
 For a Socket baseline on the same G6e pool:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge infra/kubernetes/prewarm-gpu-node.sh
+
+cd benchmarks/g6e-efa-nccl
 osmo workflow submit workflow.yaml --pool default \
   --set-string mode=socket platform=g6e-l40s workflow_name=aws-g6e-nccl-socket
+```
+
+After each submitted workflow reaches `COMPLETED`, clean up the G6e nodepool:
+
+```bash
+cd ai-infra/robotics-foundation-models-on-eks
+KARPENTER_NODEPOOL_NAME=aws-osmo-g6e infra/kubernetes/wait-gpu-node-cleanup.sh
 ```
 
 The master task writes `result.json`, `bandwidth.csv`, and `master.log` to the

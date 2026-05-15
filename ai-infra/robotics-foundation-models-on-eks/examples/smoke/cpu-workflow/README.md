@@ -7,6 +7,7 @@ No GPU prewarm is required.
 Run it through the repo wrapper:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 examples/run-workflow.sh
 ```
 

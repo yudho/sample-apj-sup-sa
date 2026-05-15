@@ -47,6 +47,7 @@ OSMO validates `g6e-l40s-efa` capacity before Karpenter can provision a node.
 The workflow still requests two distinct EFA nodes for the training ranks.
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
   GPU_PREWARM_EFA=true \
   infra/kubernetes/prewarm-gpu-node.sh
@@ -55,8 +56,13 @@ GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
   cd examples/policy-training/gr00t-so100-efa-multinode-finetune
   osmo workflow submit workflow.yaml --pool default
 )
+```
 
-infra/kubernetes/wait-gpu-node-cleanup.sh
+After the submitted workflow reaches `COMPLETED`, clean up the G6e nodepool:
+
+```bash
+cd ai-infra/robotics-foundation-models-on-eks
+KARPENTER_NODEPOOL_NAME=aws-osmo-g6e infra/kubernetes/wait-gpu-node-cleanup.sh
 ```
 
 The workflow injects [entry.sh](entry.sh) and the local Isaac-GR00T
@@ -127,9 +133,18 @@ the missing backend branch. Set `GR00T_VIDEO_BACKEND=torchcodec`,
 Useful overrides:
 
 ```bash
-osmo workflow submit workflow.yaml --pool default \
+cd ai-infra/robotics-foundation-models-on-eks
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
+
+osmo workflow submit examples/policy-training/gr00t-so100-efa-multinode-finetune/workflow.yaml \
+  --pool default \
   --set max_steps=100 save_steps=100 global_batch_size=2 \
   --set-string output_dataset=gr00t-efa-multinode-100-step-artifacts
 ```
+
+Use the same G6e cleanup command above after the override workflow reaches
+`COMPLETED`.
 
 Sample run results are summarized in the contribution pull request.

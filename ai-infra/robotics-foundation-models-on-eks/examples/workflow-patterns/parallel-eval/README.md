@@ -7,6 +7,7 @@ No GPU prewarm is required.
 Run it through the repo wrapper:
 
 ```bash
+cd ai-infra/robotics-foundation-models-on-eks
 WORKFLOW_FILE=examples/workflow-patterns/parallel-eval/workflow.yaml \
   SMOKE_TIMEOUT_ATTEMPTS=120 \
   examples/run-workflow.sh

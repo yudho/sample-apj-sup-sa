@@ -22,7 +22,9 @@ ordered workflow YAMLs under `workflows/`. Keep `run.sh` only where an existing
 example needs a compatibility wrapper for parameter handling, multi-step
 submission, waiting, cleanup, or artifact collection.
 
-Example-specific run notes stay next to the example. Selected examples keep a
+Example-specific run notes stay next to the example. Each example README should
+include a complete run sequence from the repository root, including any required
+prewarm, credentials, submission, and cleanup notes. Selected examples keep a
 small `artifacts/` directory with representative output; detailed sample run
 results are summarized in the contribution pull request.
 
