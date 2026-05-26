@@ -1,72 +1,56 @@
 # agentic-payments-mpp-workshop
 
-Reference implementation for the **AI Engineer Conference Singapore 2026**
-workshop (90 minutes, hands-on) on building **machine-to-machine paid
-agents** with Amazon Bedrock and Stripe MPP.
-
-## Production-ready workshop branches
-
-Two branches hold the production-ready workshop content. The `main` branch
-is an older baseline and should **not** be used to build or deploy the
-workshop. Pick one of the two variants below depending on which Stripe MPP
-payment method you want to teach:
-
-| Branch | Payment method | What participants pay with | Best for |
-|---|---|---|---|
-| [`mpp-spt-option`](../../tree/mpp-spt-option) | **Fiat via Shared Payment Tokens (SPT)** | A shared sandbox buyer key (announced by instructors) mints a one-time SPT per call, scoped to each participant's own Stripe Profile. Each `/generate` call charges $1.00 USD against the participant's profile via card + link. | Default path for the 2026 workshop — no crypto knowledge required, participants just need a Stripe sandbox with Agentic Commerce enabled. |
-| [`mpp-crypto-option`](../../tree/mpp-crypto-option) | **Crypto stablecoin on Tempo testnet** | Each participant gets an auto-generated, faucet-funded Tempo wallet. `/generate` charges ~$0.01 USDC on-chain before LLM runs. | Alternative path when you want to teach the stablecoin / on-chain side of MPP. |
-
-Both branches deploy through the same Workshop Studio workflow
-(`bash infrastructure/scripts/package_for_workshop.sh` + S3 sync + git
-push to `mainline` on the WS repo). See
-[`docs/workshop-owner-runbook.md`](docs/workshop-owner-runbook.md) on the
-SPT branch for owner-side setup specific to that variant.
-
-**The rest of this README describes the crypto flow** and will be
-refreshed as the branches diverge further. For the authoritative overview
-of either variant, check its branch's `workshop/content/introduction/index.en.md`.
-
----
+Reference implementation for a 90-minute hands-on workshop on building
+**machine-to-machine paid agents** with Stripe's [Machine Payments
+Protocol](https://mpp.dev/) (MPP) and Amazon Bedrock AgentCore.
 
 Two agents talk over HTTP and **pay each other per call**:
 
 - **Samurai** — a user-facing assistant that gathers product details from a
-  human and orchestrates payments.
-- **ListingBot** — a paid marketplace-listing generator. Each call to its
-  `/generate` endpoint costs ~$0.01 USDC on the Tempo testnet, gated by
-  Stripe's [Machine Payments Protocol (MPP)](https://docs.stripe.com/payments/machine/mpp).
+  human and orchestrates payments. Strands TypeScript agent on AgentCore
+  Runtime + AgentCore Memory.
+- **ListingBot** — a paid marketplace-listing generator (Amazon, Etsy,
+  Shopify, Lazada, Generic). Each call to `/generate` costs **$1.00 USD**
+  via Stripe **Shared Payment Tokens (SPT)**, gated by `mppx/server`
+  before the Lambda invokes Bedrock Converse.
 
-The step-by-step participant tutorial lives in [`workshop/content/`](workshop/content/).
-This README covers how the moving parts fit together so you can navigate
-the code and the CloudFormation templates.
+The participant tutorial lives in [`workshop/content/`](workshop/content/).
+This README orients you in the code so you can navigate the repo.
 
-## What gets deployed
+> **AWS-run events only.** This workshop is delivered through Workshop
+> Studio. The platform-side CloudFormation (Cognito, Code Editor EC2,
+> Stripe secret stores, MPP logs DynamoDB, S3 + CloudFront for the SPA,
+> ListingBot Lambda + API Gateway) is provisioned by Workshop Studio at
+> event start and reclaimed at event end. Those templates are **not** in
+> this repo — only the participant-deployed CFN is (see below).
 
-### Workshop CloudFormation (already deployed for participants)
-
-```
-infrastructure/stacks/main-stack.yaml            (root)
-├── secrets-stack.yaml                           Stripe PLACEHOLDER + auto-generated Tempo wallet + MPP secret
-├── mpp-logs-stack.yaml                          DynamoDB table for MPP protocol event log (per session)
-├── samurai-spa-stack.yaml                         S3 + CloudFront for the SPA (empty bucket on create)
-├── cognito-stack.yaml                           User Pool + Identity Pool + pre-created "participant" test user
-├── listing-bot-lambda-stack.yaml                API Gateway REST + Lambda + listings DynamoDB
-└── code-editor-stack.yaml                       EC2 VS Code with config.env wired to every stack output
-```
-
-### Participant CloudFormation (deployed by the participant during chapter 6)
+## Repo layout
 
 ```
-workshop/overlay/workshop/code/participant/samurai-agentcore.yaml
-└── Samurai AgentCore Runtime + AgentCore Memory (from a container the participant builds + pushes to ECR)
-```
+app/
+├── listing-bot-lambda/        Node 20 Lambda (ESM). Three routes:
+│                                GET  /openapi.json  — free service discovery
+│                                POST /validate      — free input check
+│                                POST /generate      — paid via MPP, then Bedrock
+├── samurai-agentcore/         Strands TS container for AgentCore Runtime
+│                                (linux/arm64). Three tools: discover_service,
+│                                check_completeness, generate_listing.
+└── samurai-spa/               React 19 + Vite SPA. Amplify Auth →
+                                 Cognito Identity Pool → SigV4 →
+                                 bedrock-agentcore:InvokeAgentRuntime, in-browser.
 
-### Application code
-
-```
-app/listing-bot-lambda/          API Gateway Lambda (MPP gate + Bedrock Converse) — participant-editable
-app/samurai-agentcore/             Strands TS container for the Samurai AgentCore Runtime — participant-editable
-app/samurai-spa/                   React + Vite + Amplify SPA
+workshop/
+├── content/                   Hugo workshop chapters (introduction, 01–06,
+│                                summary, troubleshooting).
+├── overlay/                   TODO-stubbed versions of the files participants
+│   ├── app/                     edit during the workshop. Workshop Studio's
+│   │   ├── listing-bot-lambda/  packaging step swaps these in over `app/` so
+│   │   └── samurai-agentcore/   participants start from the "incomplete" state.
+│   └── workshop/code/participant/
+│       ├── samurai-agentcore.yaml   Participant CFN (Runtime + Memory + IAM)
+│       └── participant-deploy.sh    Build → push to ECR → deploy CFN → patch
+│                                     SPA /config.json with the runtime ARN
+└── static/images/             Architecture diagrams used by the chapters.
 ```
 
 ## How Samurai and ListingBot fit together
@@ -79,117 +63,131 @@ Browser  ──► CloudFront / S3 (SPA)
    │  bedrock-agentcore:InvokeAgentRuntime (SigV4, signed in-browser)
    │
    ▼
-Samurai AgentCore Runtime   ── Strands TS agent with 3 tools:
- (participant-deployed)       1. discover_service   → GET /openapi.json   (free)
-                              2. check_completeness → POST /validate      (free)
-                              3. generate_listing   → POST /generate      (paid via mppx/client)
-                            + AgentCore Memory (short-term session)
-                            + writes protocol events to DynamoDB
+Samurai AgentCore Runtime   ── Strands TS agent with three tools:
+ (participant-deployed)        1. discover_service   → GET /openapi.json   (free)
+                               2. check_completeness → POST /validate      (free)
+                               3. generate_listing   → POST /generate      (paid)
+                             + AgentCore Memory (per-session conversation state)
+                             + writes MPP protocol events to DynamoDB
    │
-   │  (mppx/client handles: 402 challenge → sign USDC transfer on Tempo
-   │   → retry with Authorization: Payment <credential>)
+   │  generate_listing uses mppx/client:
+   │    • on 402, parses the challenge to read the seller's profile_test_*
+   │    • POSTs Stripe /v1/shared_payment/issued_tokens with the buyer's
+   │      sk_test_ to mint a fresh SPT scoped to that profile + amount
+   │    • retries with `Authorization: Payment spt=spt_test_…`
    │
    ▼
 ListingBot API Gateway (REST)
    │
    ▼
-ListingBot Lambda
+ListingBot Lambda (Node 20, ESM)
    ├─ GET  /openapi.json  → publishes per-platform input schemas + x-payment-info
    ├─ POST /validate      → deterministic rule-based check, free
    └─ POST /generate      → tiered response:
          400  malformed JSON
          422  invalid input (RFC 7807 problem, NO payment taken)
-         402  MPP challenge (Stripe mints a Tempo deposit address)
-         200  Bedrock Converse (Sonnet 4.6) → listing JSON
-   │
-   ├──► Stripe API: paymentIntents.create (crypto / Tempo deposit)
-   ├──► Tempo RPC: mppx/server verifies the on-chain Transfer log
-   └──► Bedrock Converse (global.anthropic.claude-sonnet-4-6)
+         402  MPP challenge (mppx/server builds the WWW-Authenticate header)
+         200  Bedrock Converse (global.anthropic.claude-sonnet-4-6) → listing JSON
 ```
 
-Key property: the payment primitive is **orthogonal to validation**. The
-Lambda validates input BEFORE minting a PaymentIntent, so a buggy caller
-never gets charged for a 422.
+**Validation runs before payment.** A buggy caller never gets charged for
+a 422 — that's the MPP-compliant shape: payment only fires for requests
+that would actually do work.
 
-### Payment verification (what `mppx/server` actually does)
+## The MPP handshake (1 paragraph)
 
-When Samurai sends the retry with `Authorization: Payment <credential>`:
+The buyer agent sends a normal HTTP request. If payment is required, the
+seller responds **402** with a `WWW-Authenticate: Payment …` header
+containing the price, currency, and the seller's Stripe Profile id. The
+buyer agent calls `POST /v1/shared_payment/issued_tokens` on Stripe
+(authenticated with its own `sk_test_…`) to mint a one-time **Shared
+Payment Token** scoped to that profile and capped at the challenge
+amount. It retries the request with `Authorization: Payment spt=…`. The
+seller hands the SPT to `mppx/server`, which creates a Stripe
+PaymentIntent against the seller's profile. On success the seller returns
+**200 OK** with the response body and a `Payment-Receipt` header.
 
-1. `mppx/server` parses the credential (pull-mode: signed transaction;
-   push-mode: transaction hash).
-2. It calls **Tempo RPC directly** (not Stripe) — broadcasts the signed tx
-   or fetches the receipt, and verifies the `Transfer` event log matches
-   the expected amount + recipient + currency.
-3. If valid, the handler continues; otherwise a fresh 402 is returned.
+## What participants build (5 TODOs)
 
-Stripe's webhook fires asynchronously for reconciliation. It is NOT the
-real-time gate. On testnet, the Lambda also calls Stripe's
-`simulate_crypto_deposit` test helper so the PaymentIntent appears as
-captured in the Stripe Dashboard — again, this is cosmetic, not the gate.
+| #   | Module                  | What you do                                                                                                                  |
+| --- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | ListingBot              | Paste three values into Secrets Manager: shared buyer `sk_test_` (announced at the event) plus your own seller `sk_test_` and `profile_test_`. |
+| 2   | ListingBot              | Fill in the `methods: [...]` argument to `Mppx.create` with `stripe.charge({ networkId, paymentMethodTypes: ['card','link'], secretKey })`. |
+| 3   | ListingBot              | Fill in `bedrock.send(new ConverseCommand({ modelId, system, messages, inferenceConfig }))` inside `bedrock.mjs`.            |
+| 4   | Samurai                 | Finish Samurai's system prompt — when to call each tool, how to behave on 422, when to ask the human for missing fields.     |
+| 5   | Samurai                 | Deploy the AgentCore Runtime, demo the no-Memory failure, then wire AgentCore Memory in three places: `MEMORY_ID` env var in CFN, the IAM grant for `bedrock-agentcore:CreateEvent` / `ListEvents` / `GetEvent`, and the agent code that calls `loadHistory()` / `saveTurn()`. |
 
-## Auth and data-flow details
+You never write the 402-challenge construction, the SPT signing, or the
+SigV4 plumbing — `mppx/{server,client}` and AgentCore handle those. You
+own the merchant business logic.
 
-| Actor                    | How it gets permission                                                                 |
-|--------------------------|----------------------------------------------------------------------------------------|
-| Human → SPA              | Amplify Auth (USER_SRP_AUTH) against the Cognito User Pool                             |
-| SPA → AgentCore Runtime  | Identity Pool exchanges the Cognito ID token for temporary AWS creds. The authenticated role holds `bedrock-agentcore:InvokeAgentRuntime` scoped to this region's runtimes. |
-| SPA → DynamoDB (MPP logs)| Same Identity Pool creds. The authenticated role holds `dynamodb:Query` on the MPP logs table only. |
-| Samurai Runtime → Stripe secret / Tempo wallet | The runtime's execution role holds `secretsmanager:GetSecretValue` on exactly two secrets. |
-| Samurai Runtime → ListingBot| Plain HTTPS to the API Gateway URL. No IAM; MPP is the only gate.                     |
-| ListingBot Lambda → Stripe| Lambda execution role reads the Stripe secret from Secrets Manager on each invoke (30 s cache). |
-| ListingBot Lambda → Bedrock| Lambda execution role holds `bedrock:Converse` on the Sonnet 4.6 inference profile.   |
+## Mock mode (no Stripe keys yet)
 
-**No private keys ever live in the browser.** The Tempo wallet private key
-is a Secrets Manager entry; it is loaded once at AgentCore container
-startup and held in module-level closure. The LLM never sees it, and no
-tool takes it as a parameter.
+When the seller secrets are still the literal string `PLACEHOLDER` (the
+default state at event start, before TODO 1), the Lambda short-circuits
+the whole MPP gate:
 
-## The three endpoints — why the listing service needs all of them
+- First pass returns a real, HMAC-bound MPP `Challenge` object built by
+  `mppx` — no Stripe call.
+- Retry pass (any `Authorization: Payment …`) skips verify and returns
+  200 with the listing.
 
-- **`GET /openapi.json`** — free. Samurai calls this at startup (cached) to
-  learn what fields each marketplace needs. New platforms can be added by
-  editing `rules.json` only — Samurai discovers them automatically.
-- **`POST /validate`** — free. Samurai calls this before paying to confirm
-  input shape is acceptable. Same rules the paid gate uses.
-- **`POST /generate`** — paid. Tiered: 400 → 422 → 402 → 200. Bedrock is
-  invoked ONLY after payment verifies.
+This keeps the workshop demoable end-to-end before participants set up
+their Stripe sandbox accounts. See `app/listing-bot-lambda/stripe-mock.mjs`.
 
-This three-tier shape is MPP-compliant: payment only happens for requests
-that would actually do work. Malformed or invalid requests never charge
-the caller.
+## Auth and IAM at a glance
 
-## Workshop CLI artifacts
+| Actor                              | How it gets permission                                                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Human → SPA                        | Amplify Auth (USER_SRP_AUTH) against the Cognito User Pool.                                                                                  |
+| SPA → AgentCore Runtime            | Identity Pool exchanges the Cognito ID token for temporary AWS creds. The authenticated role holds `bedrock-agentcore:InvokeAgentRuntime` scoped to this region. |
+| SPA → DynamoDB (MPP logs)          | Same Identity Pool creds. The authenticated role holds `dynamodb:Query` on the MPP logs table only.                                          |
+| Samurai Runtime → Stripe (mint SPT)| Reads `BUYER_STRIPE_SECRET_ARN` from Secrets Manager, calls Stripe `/v1/shared_payment/issued_tokens` directly.                              |
+| Samurai Runtime → ListingBot       | Plain HTTPS to the API Gateway URL. No IAM; MPP is the only gate.                                                                            |
+| ListingBot Lambda → Stripe         | Lambda execution role reads the seller secrets from Secrets Manager (30 s TTL cache) and lets `mppx/server` call Stripe.                     |
+| ListingBot Lambda → Bedrock        | Lambda execution role holds `bedrock:Converse` on the Sonnet 4.6 inference profile.                                                          |
 
-- `infrastructure/scripts/package_for_workshop.sh` — packages CFN
-  templates + Lambda zips + a repo zip with a TODO overlay.
-- `infrastructure/scripts/deploy_to_workshop.sh` — pushes packaged content
-  to a Workshop Studio repo and syncs assets to S3.
-- `infrastructure/scripts/build-and-upload-spa.sh` — post-stack: builds
-  the Vite SPA with Cognito IDs injected, uploads `dist/` to the SPA
-  bucket, seeds `/config.json`, invalidates CloudFront.
-- `workshop/overlay/workshop/code/participant/participant-deploy.sh`
-  — participant-side: builds Samurai container for linux/arm64, pushes to
-  ECR, deploys the participant CFN, writes the runtime ARN into the SPA's
-  `/config.json`.
+**No private keys ever live in the browser.** The buyer's `sk_test_` is a
+Secrets Manager entry loaded at AgentCore container startup and held in
+module-level closure. The LLM never sees it, and no tool takes it as a
+parameter.
+
+## Local code references
+
+- `app/listing-bot-lambda/index.mjs` — REST router with CORS.
+- `app/listing-bot-lambda/generate.mjs` — three-tier response, mppx wiring.
+- `app/listing-bot-lambda/openapi-spec.mjs` — service discovery doc with `x-payment-info`.
+- `app/listing-bot-lambda/rules.json` — per-platform validation + guidance rules.
+- `app/listing-bot-lambda/bedrock.mjs` — Sonnet 4.6 Converse call.
+- `app/samurai-agentcore/src/agent.ts` — Strands `Agent` + system prompt + 3 tools.
+- `app/samurai-agentcore/src/tools/generate-listing.ts` — `mppx/client` + Stripe SPT mint.
+- `app/samurai-agentcore/src/memory.ts` — AgentCore Memory load/save (no-op when `MEMORY_ID` unset).
+- `app/samurai-spa/src/agentcore-client.js` — direct in-browser AgentCore invocation.
+- `workshop/overlay/workshop/code/participant/samurai-agentcore.yaml` — participant CFN.
 
 ## Assumptions and limits
 
-- Stripe is **test mode only** (`sk_test_...`). Crypto/deposit mode
-  requires API version `2026-03-04.preview`.
-- Tempo is testnet. The workshop's `LISTING_PRICE` is hard-coded to
-  `0.01`. Samurai's wallet is auto-generated at stack creation; fund it via
-  the Stripe/Tempo testnet faucet if you want real on-chain transfers.
-- The MPP logs table is session-scoped with a 24 h TTL. The SPA queries
-  only the signed-in user's session rows.
-- The CFN assumes `us-east-1` by default (parameterized; Bedrock Sonnet
-  4.6 is reachable globally via the inference profile).
+- Stripe is **test mode only** (`sk_test_…`). The Stripe API version
+  pinned by Samurai for the SPT mint is `2026-04-22.preview`
+  (`app/samurai-agentcore/src/tools/generate-listing.ts`).
+- Default Bedrock model is `global.anthropic.claude-sonnet-4-6` (override
+  via `BEDROCK_MODEL_ID` env var on both Lambda and AgentCore Runtime).
+- AgentCore Runtime requires **linux/arm64** images. The Dockerfile uses
+  `node:20-slim` and `participant-deploy.sh` builds with `docker buildx`
+  on a `docker-container` builder.
+- AgentCore Memory `EventExpiryDuration` is **30 days** in the participant
+  CFN; `actorId` is hard-coded to `participant` and history is capped at
+  20 turns per session in `memory.ts`.
+- The MPP logs DynamoDB table is session-scoped with TTL. The SPA queries
+  only the signed-in user's session rows (provisioned by the Workshop
+  Studio platform stack — not in this repo).
 
 ## Where to learn more
 
 - Participant tutorial (chapters 1–6): [`workshop/content/`](workshop/content/)
 - Stripe MPP docs: https://docs.stripe.com/payments/machine/mpp
-- Tempo MPP server guide: https://docs.tempo.xyz/guide/machine-payments/server
+- Stripe SPT concepts: https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens
 - Bedrock AgentCore Runtime: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime.html
+- Bedrock AgentCore Memory: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html
 - Strands Agents SDK (TS): https://github.com/strands-agents/sdk-typescript
-- Earlier FIAT variant (Cognito + Checkout SAM stack):
-  `archive/fiat-reference/` — kept for historical context; not deployed.
+- MPP protocol overview: https://mpp.dev/
