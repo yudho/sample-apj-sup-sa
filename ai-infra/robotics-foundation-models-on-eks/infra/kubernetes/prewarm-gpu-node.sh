@@ -10,6 +10,10 @@ require_cmds kubectl jq terraform
 GPU_PREWARM_NAME="${GPU_PREWARM_NAME:-aws-osmo-gpu-prewarm}"
 GPU_PREWARM_INSTANCE_TYPE="${GPU_PREWARM_INSTANCE_TYPE:-g7e.2xlarge}"
 GPU_PREWARM_TIMEOUT="${GPU_PREWARM_TIMEOUT:-45m}"
+# Self-destruct timer so a leaked prewarm pod cannot hold a GPU node indefinitely
+# if wait-gpu-node-cleanup.sh never runs. Must exceed GPU_PREWARM_TIMEOUT plus the
+# handoff window for the real OSMO workflow to be scheduled onto the warmed node.
+GPU_PREWARM_MAX_LIFETIME_SECONDS="${GPU_PREWARM_MAX_LIFETIME_SECONDS:-3600}"
 GPU_PREWARM_EFA="${GPU_PREWARM_EFA:-false}"
 GPU_PREWARM_EFA_RESOURCE_NAME="${GPU_PREWARM_EFA_RESOURCE_NAME:-vpc.amazonaws.com/efa}"
 
@@ -24,6 +28,11 @@ configure_kubectl
 OSMO_WORKLOAD_NAMESPACE="$(terraform_output osmo_workload_namespace)"
 
 kubectl create namespace "${OSMO_WORKLOAD_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+if kubectl -n "${OSMO_WORKLOAD_NAMESPACE}" get pod "${GPU_PREWARM_NAME}" >/dev/null 2>&1; then
+  log "deleting existing GPU prewarm pod ${GPU_PREWARM_NAME}"
+  kubectl -n "${OSMO_WORKLOAD_NAMESPACE}" delete pod "${GPU_PREWARM_NAME}" --wait=true >/dev/null
+fi
 
 EFA_TOLERATION_YAML=""
 EFA_REQUEST_YAML=""
@@ -46,7 +55,8 @@ metadata:
     app.kubernetes.io/name: aws-osmo-gpu-prewarm
     app.kubernetes.io/part-of: aws-osmo-reference
 spec:
-  restartPolicy: Always
+  restartPolicy: Never
+  activeDeadlineSeconds: ${GPU_PREWARM_MAX_LIFETIME_SECONDS}
   terminationGracePeriodSeconds: 0
   nodeSelector:
     karpenter.sh/nodepool: ${KARPENTER_NODEPOOL_NAME}
