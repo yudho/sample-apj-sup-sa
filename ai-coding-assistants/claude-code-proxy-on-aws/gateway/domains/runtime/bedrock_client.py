@@ -45,12 +45,14 @@ class BedrockClient:
         self._settings = settings
         # connect_timeout is short so a blocked/unreachable Bedrock endpoint
         # fails fast into 1P fallback instead of hanging on the default 60s x
-        # retries (~4min observed). read_timeout stays long to accommodate slow
-        # LLM generation. TCP connect latency is unrelated to model latency.
+        # retries (~4min observed). read_timeout is the max silence BETWEEN
+        # stream chunks, not total response time; it must stay high enough to
+        # cover long thinking/tool gaps (e.g. Opus high/xhigh) or ConverseStream
+        # is severed mid-response. 600s aligns with the ALB idle_timeout.
         self._config = Config(
             retries={"max_attempts": 1, "mode": "standard"},
             connect_timeout=20,
-            read_timeout=120,
+            read_timeout=600,
         )
         self._clients: dict[str, Any] = {}
 
