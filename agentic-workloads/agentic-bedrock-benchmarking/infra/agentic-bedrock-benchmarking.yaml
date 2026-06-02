@@ -7,7 +7,7 @@ Description: |
 Parameters:
   AppName:
     Type: String
-    Default: sample-bedrock-model-benchmarking
+    Default: agentic-bedrock-benchmarking
   Region:
     Type: String
     Default: ap-south-1

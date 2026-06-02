@@ -96,7 +96,7 @@ All parameters have defaults. Override them with `--parameter-overrides` in the 
 
 The app uses two distinct IAM principals:
 
-- **`Bedrock Model BenchmarkingRuntimeRole`** — assumed by the ECS task at runtime. Scoped to `bedrock:*`, `dynamodb:GetItem/UpdateItem` (quota table), `cognito-idp:InitiateAuth/SignUp`, `pricing:GetProducts`, and `sts:GetCallerIdentity`. This is the only identity that touches Bedrock.
+- **`${AppName}-runtime`** — assumed by the ECS task at runtime. Scoped to `bedrock:*`, `dynamodb:GetItem/UpdateItem` (quota table), `cognito-idp:InitiateAuth/SignUp`, `pricing:GetProducts`, and `sts:GetCallerIdentity`. This is the only identity that touches Bedrock.
 - **Your deploy profile** — used only by the deploy script to build infra and push images. Never embedded in the container.
 
 ### Updating the app
@@ -131,6 +131,7 @@ These are injected automatically by the CloudFormation stack. Set them manually 
 | `COGNITO_USER_POOL_ID` | — | Cognito user pool for login |
 | `COGNITO_CLIENT_ID` | — | Cognito app client ID |
 | `COGNITO_REGION` | `ap-south-1` | Region of the Cognito user pool |
+| `LOCKED_REGION` | — | When set, restricts all Bedrock calls to this region |
 | `MODEL_ALLOWLIST` | _(empty)_ | Comma-separated model ID substrings to show (empty = all models) |
 
 ## Architecture
