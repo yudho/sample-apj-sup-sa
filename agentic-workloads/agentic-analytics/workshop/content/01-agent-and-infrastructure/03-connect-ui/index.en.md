@@ -44,9 +44,9 @@ REGION="us-east-1"
 AGENT_ARN=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeArn'].OutputValue" --output text)
 
-# Identity Pool id is published by the base Cognito stack as a CloudFormation export
-IDENTITY_POOL_ID=$(aws cloudformation list-exports --region "$REGION" \
-  --query "Exports[?Name=='agentic-analytics-IdentityPoolId'].Value" --output text)
+# Identity Pool id is a main-stack output
+IDENTITY_POOL_ID=$(aws cloudformation describe-stacks --stack-name main-stack --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='IdentityPoolId'].OutputValue" --output text)
 
 cat > .env << EOF
 REACT_APP_AWS_REGION=$REGION

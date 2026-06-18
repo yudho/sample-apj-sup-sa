@@ -30,6 +30,8 @@ Observability (Step 9) tells you *what happened*. Evaluation tells you *how well
 
 On-demand evaluation scores traces that already exist in CloudWatch (from your invocations in Step 9), copy here any session ID from what you get in Step 9:
 
+::alert[**Give traces time to index.** Evaluation reads spans from CloudWatch Transaction Search, which indexes a few minutes *after* an invocation. If you see `No spans found for session …`, wait 3–5 minutes after generating the session's traffic and retry. Use a session id you actually exercised in the chat UI (the GenAI dashboard's **Sessions** tab lists them), and pass it explicitly with `-s`.]{type="warning"}
+
 ```bash
 agentcore eval run \
   -s "<session-Id-in-Step-9>" \
