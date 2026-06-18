@@ -96,6 +96,8 @@ For example it will be https://xxxxxxxxxxxxxx.cloudfront.net/app
 
 ::alert[The `/app` path is pre-configured in the Code Editor's Nginx proxy to forward requests to the React dev server on port 3001. No port forwarding setup is needed.]{type="info"}
 
+::alert[**If Login returns `redirect_mismatch`:** Cognito only accepts redirect URIs that are pre-registered on the app client. The client ships with `http://localhost:3001/app` and the CloudFront `/app` URL registered. If you reach the UI by a different host/path, add that exact `…/app` URL to the user pool client's **Allowed callback URLs** (Cognito console → User pool → App client → Hosted UI), or access the UI via one of the registered URLs. The redirect the app sends is simply `window.location.origin + /app`.]{type="warning"}
+
 You should see the Timely-Unicorn Analytics dashboard with:
 - A chat panel on the left with suggested queries
 - A dashboard on the right showing business stats (2 businesses, 100 unicorns, ~500 customers)
