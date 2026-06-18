@@ -88,7 +88,7 @@ Beyond text chat, the agent can **speak** and **draw**:
 
 ### Workshop Deployment
 
-The workshop uses CloudFormation to pre-provision infrastructure (Aurora, Glue, Bedrock KB, Cognito, EC2 Code Editor). Participants then build the agent layer progressively using code overlays with TODO placeholders. See [`workshop/contentspec.yaml`](workshop/contentspec.yaml) for the Workshop Studio configuration.
+The workshop uses CloudFormation to pre-provision base infrastructure (Aurora, Glue, Bedrock KB, Cognito, EC2 Code Editor). Participants then deploy a single **AgentCore top-up CloudFormation stack** and build the agent layer step-by-step — each lab step uncomments one fenced section of the template (or flips one value) and redeploys with `make deploy`. There's no `agentcore` CLI in the runtime lifecycle; the container image is built by CloudFormation via CodeBuild. See [`workshop/contentspec.yaml`](workshop/contentspec.yaml) for the Workshop Studio configuration.
 
 ## Demo Deployment (Full Automation)
 

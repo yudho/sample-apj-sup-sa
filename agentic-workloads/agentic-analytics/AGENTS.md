@@ -14,7 +14,7 @@ Both paths invoke the same Strands agent with the same per-user JWT, so RBAC/RLS
 
 ## Two Deployment Modes
 
-- **Workshop mode** (primary): Deploys infrastructure only (Aurora, Cognito, Glue, Bedrock KB, EC2 Code Editor). Participants deploy AgentCore components manually. CFN `DeployMode=workshop`.
+- **Workshop mode** (primary): Deploys base infrastructure only (Aurora, Cognito, Glue, Bedrock KB, EC2 Code Editor) via CFN `DeployMode=workshop`. Participants then deploy ONE **AgentCore top-up stack** (`infrastructure/stacks/agentcore-topup-stack.yaml`, shipped to the EC2 box via the `workshop/code/` overlay) and build the agent layer step-by-step by uncommenting one fenced section per lab step and running `make deploy` — no `agentcore` CLI, no `deploy_*.py` scripts (those are demo-mode only). The participant-facing copy is commented down to a Step-2 baseline; `make build` rebuilds the agent image after code edits. Documented script exceptions: the optional Cube lab and `agentcore eval` (Step 10).
 - **Demo mode** (under construction): Deploys everything including AgentCore Gateway + Amplify UI. CFN `DeployMode=demo`.
 
 ## Architecture
@@ -45,7 +45,8 @@ The agent renders charts in an AgentCore **Code Interpreter** sandbox (matplotli
 | Main agent | `app/agentcore_strands/unicorn_rental_agent.py` |
 | SOP (one file, mode-conditional) | `app/agentcore_strands/unicorn_rental_analytics.sop.md` |
 | Lambda tools | `app/agentcore_strands/tools/*.py` |
-| Deploy scripts | `app/agentcore_strands/infra/deploy_*.py` |
+| Deploy scripts (demo mode) | `app/agentcore_strands/infra/deploy_*.py` |
+| Workshop AgentCore top-up | `infrastructure/stacks/agentcore-topup-stack.yaml` (canonical) + `workshop/code/app/agentcore_strands/{agentcore-topup-stack.yaml,Makefile}` (fenced participant copy) |
 | CFN stacks | `infrastructure/stacks/*.yaml` |
 | React UI | `app/ui/` |
 | Voice bot (Pipecat) | `app/voice/bot.py`, `app/voice/analytics_processor.py`, `app/voice/auth.py` |

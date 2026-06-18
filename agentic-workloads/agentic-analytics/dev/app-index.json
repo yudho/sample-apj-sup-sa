@@ -60,6 +60,26 @@
       "summary": "CloudFormation stack for AgentCore Gateway deployment with custom resource Lambda. Supports workshop mode with CognitoUserPoolId/CognitoClientId params to use existing Cognito"
     },
     {
+      "path": "infrastructure/stacks/agentcore-topup-stack.yaml",
+      "summary": "Workshop AgentCore top-up stack (canonical, all-live answer key). Standalone version of agentcore-stack.yaml using Fn::ImportValue for base inputs; resources ordered so each toolset Lambda+target is one uncomment fence; EnforceRls condition for the Step 7.2 RLS switch; workshop-simplified wildcard GatewayRole; container build chain replaces the agentcore CLI. KEEP IN SYNC with agentcore-stack.yaml."
+    },
+    {
+      "path": "workshop/code/app/agentcore_strands/agentcore-topup-stack.yaml",
+      "summary": "Participant-facing copy of the AgentCore top-up, commented down to the Step-2 baseline. Each lab step uncomments one fenced section. Ships via the workshop/code overlay."
+    },
+    {
+      "path": "workshop/code/app/agentcore_strands/Makefile",
+      "summary": "Thin workshop wrapper: make deploy (cloudformation deploy of the top-up), make build (rebuild agent image + roll runtime via the replace-trap), make outputs/status, make voice-deploy. Reads coordinates from config.env."
+    },
+    {
+      "path": "workshop/code/app/agentcore_strands/voice-agentcore-stack.yaml",
+      "summary": "Participant copy of the voice stack (verbatim of infrastructure/stacks/voice-agentcore-stack.yaml) for the optional Voice lab; deployed via make voice-deploy."
+    },
+    {
+      "path": "workshop/content/05-voice/index.en.md",
+      "summary": "Optional workshop page (weight 78, after Cube): deploy a voice front-end for the same analytics agent via make voice-deploy + a config.js edit. Separate AgentCore Runtime (Pipecat, WebRTC+KVS TURN) reusing the Step-2 agent."
+    },
+    {
       "path": "infrastructure/stacks/observability-stack.yaml",
       "summary": "CloudFormation stack to enable CloudWatch Transaction Search via custom resource Lambda (logs:PutResourcePolicy + xray:UpdateTraceSegmentDestination + xray:UpdateIndexingRule)"
     },
