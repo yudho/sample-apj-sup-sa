@@ -14,6 +14,10 @@ resource "aws_lambda_function" "create_user" {
   source_code_hash = data.archive_file.create_user.output_base64sha256
   timeout          = 10
 
+  # Demo guard: the API is public and unauthenticated, so cap concurrency to
+  # bound runaway cost and abuse. Not a production setting.
+  reserved_concurrent_executions = 1
+
   tracing_config {
     mode = "Active"
   }
@@ -46,6 +50,10 @@ resource "aws_lambda_function" "get_users" {
   filename         = data.archive_file.get_users.output_path
   source_code_hash = data.archive_file.get_users.output_base64sha256
   timeout          = 10
+
+  # Demo guard: the API is public and unauthenticated, so cap concurrency to
+  # bound runaway cost and abuse. Not a production setting.
+  reserved_concurrent_executions = 1
 
   tracing_config {
     mode = "Active"
@@ -80,6 +88,10 @@ resource "aws_lambda_function" "get_user" {
   source_code_hash = data.archive_file.get_user.output_base64sha256
   timeout          = 10
 
+  # Demo guard: the API is public and unauthenticated, so cap concurrency to
+  # bound runaway cost and abuse. Not a production setting.
+  reserved_concurrent_executions = 1
+
   tracing_config {
     mode = "Active"
   }
@@ -113,6 +125,10 @@ resource "aws_lambda_function" "delete_user" {
   source_code_hash = data.archive_file.delete_user.output_base64sha256
   timeout          = 10
 
+  # Demo guard: the API is public and unauthenticated, so cap concurrency to
+  # bound runaway cost and abuse. Not a production setting.
+  reserved_concurrent_executions = 1
+
   tracing_config {
     mode = "Active"
   }
@@ -145,6 +161,10 @@ resource "aws_lambda_function" "get_stats" {
   filename         = data.archive_file.get_stats.output_path
   source_code_hash = data.archive_file.get_stats.output_base64sha256
   timeout          = 10
+
+  # Demo guard: the API is public and unauthenticated, so cap concurrency to
+  # bound runaway cost and abuse. Not a production setting.
+  reserved_concurrent_executions = 1
 
   tracing_config {
     mode = "Active"

@@ -81,6 +81,8 @@ Invoke the endpoints to generate some failing requests, then run `Voice` and des
 
 Run `terraform destroy` when you are done.
 
+> **Security note:** this sample is a deliberately broken demo, not production code. The HTTP API is **public and unauthenticated**, including the writable `POST` and `DELETE` routes, so anyone with the URL can read, create, and delete items in the table. Deploy it only in a non-production account, use the seeded fake data, and run `terraform destroy` as soon as you are done. As a small guard, each Lambda is capped at `reserved_concurrent_executions = 1` to bound runaway cost and abuse; that is a demo setting, not a production one. If you adapt this for anything real, add an authorizer (IAM, JWT, or an API key) to the routes first.
+
 ## Running against existing infrastructure
 
 `Voice` works against any account, but two of its tools depend on telemetry being switched on in the target infrastructure/account. The local file tools and `describe_lambda_function` work with no setup. `query_cloudwatch_logs` and `get_xray_trace_summaries` only return data if logging and tracing are enabled.
@@ -140,6 +142,7 @@ All configuration is via environment variables, loaded from `.env`. See [.env.ex
 - `Voice` is strictly read-only. It calls describe and query APIs, reads local files within the working directory, and never mutates AWS resources or your code.
 - The local file tools are sandboxed to the current working directory and reject paths that resolve outside it.
 - Use a least-privilege, read-only IAM identity as shown above.
+- The `sample-app/` stack is a deliberately broken demo with a public, unauthenticated API. Deploy it only in a non-production account and destroy it when done. See the security note in the sample-app section above.
 
 ## Licence
 
