@@ -227,7 +227,7 @@ Resources:
       Description: AgentCore Gateway for Agentic Analytics
 
   # ===== UNCOMMENT FROM HERE (Step 4: Prebaked SQL toolset (Lambda + Gateway target)) ======
-#
+
 #   #============================================================================
 #   # DataFoundation Lambda (27 analytics tools)
 #   #============================================================================
@@ -259,7 +259,7 @@ Resources:
 #                   - bedrock:InvokeModel
 #                   - bedrock-agent-runtime:Retrieve
 #                 Resource: '*'
-#
+
 #   DataFoundationLambda:
 #     Type: AWS::Lambda::Function
 #     Properties:
@@ -295,7 +295,7 @@ Resources:
 #           AURORA_USERNAME: postgres
 #           KNOWLEDGE_BASE_ID:
 #             Fn::ImportValue: !Sub '${EnvironmentName}-KnowledgeBaseId'
-#
+
 #   # Lambda permission for Gateway to invoke
 #   DataFoundationLambdaPermission:
 #     Type: AWS::Lambda::Permission
@@ -303,7 +303,7 @@ Resources:
 #       FunctionName: !Ref DataFoundationLambda
 #       Action: lambda:InvokeFunction
 #       Principal: bedrock-agentcore.amazonaws.com
-#
+
 #   # psycopg2 layer (created only if not provided)
 #   Psycopg2Layer:
 #     Type: AWS::Lambda::LayerVersion
@@ -316,7 +316,7 @@ Resources:
 #         S3Key: !Sub ${ArtifactsPrefix}layers/psycopg2-py312.zip
 #       CompatibleRuntimes:
 #         - python3.12
-#
+
 #   #============================================================================
 #   # Gateway Target — DataTools (29 analytics tools)
 #   #============================================================================
@@ -477,7 +477,7 @@ Resources:
   # ===== UNCOMMENT TO HERE (Step 4) ======
 
   # ===== UNCOMMENT FROM HERE (Step 5: API integration toolset (create_booking)) ======
-#
+
 #   #============================================================================
 #   # APIInteg Lambda (create_booking write tool)
 #   #============================================================================
@@ -504,7 +504,7 @@ Resources:
 #                 Resource:
 #                   - Fn::ImportValue: !Sub '${EnvironmentName}-DatabaseSecretArn'
 #                   - Fn::ImportValue: !Sub '${EnvironmentName}-AppDatabaseSecretArn'
-#
+
 #   ApiIntegLambda:
 #     Type: AWS::Lambda::Function
 #     Properties:
@@ -537,14 +537,14 @@ Resources:
 #             - Fn::ImportValue: !Sub '${EnvironmentName}-AppDatabaseSecretArn'
 #             - Fn::ImportValue: !Sub '${EnvironmentName}-DatabaseSecretArn'
 #           AURORA_DATABASE: timely_unicorn
-#
+
 #   ApiIntegLambdaPermission:
 #     Type: AWS::Lambda::Permission
 #     Properties:
 #       FunctionName: !Ref ApiIntegLambda
 #       Action: lambda:InvokeFunction
 #       Principal: bedrock-agentcore.amazonaws.com
-#
+
 #   #============================================================================
 #   # Gateway Target — APIInteg (create_booking write tool)
 #   #============================================================================
@@ -581,7 +581,7 @@ Resources:
   # ===== UNCOMMENT TO HERE (Step 5) ======
 
   # ===== UNCOMMENT FROM HERE (Step 6: Custom SQL toolset (text-to-SQL + Glue + KB RAG)) ======
-#
+
 #   #============================================================================
 #   # CustomSQL Lambda (text-to-SQL with Glue schema + Bedrock KB RAG)
 #   #============================================================================
@@ -620,7 +620,7 @@ Resources:
 #                   - bedrock:InvokeModel
 #                   - bedrock-agent-runtime:Retrieve
 #                 Resource: '*'
-#
+
 #   CustomSqlLambda:
 #     Type: AWS::Lambda::Function
 #     Properties:
@@ -657,14 +657,14 @@ Resources:
 #             Fn::ImportValue: !Sub '${EnvironmentName}-GlueDatabaseName'
 #           BEDROCK_KB_ID:
 #             Fn::ImportValue: !Sub '${EnvironmentName}-KnowledgeBaseId'
-#
+
 #   CustomSqlLambdaPermission:
 #     Type: AWS::Lambda::Permission
 #     Properties:
 #       FunctionName: !Ref CustomSqlLambda
 #       Action: lambda:InvokeFunction
 #       Principal: bedrock-agentcore.amazonaws.com
-#
+
 #   #============================================================================
 #   # Gateway Target — CustomSQL (text-to-SQL with human approval)
 #   #============================================================================
@@ -711,10 +711,10 @@ Resources:
   # ===== UNCOMMENT TO HERE (Step 6) ======
 
   # ===== UNCOMMENT FROM HERE (Step 7a: Cedar policy engine + RBAC policies) ======
-#
+
 #   # (The Cube SemanticLayer Gateway target lives only in the demo stack; the
 #   # workshop's semantic-layer lab uses its own parallel stack — see the note above.)
-#
+
 #   #============================================================================
 #   # Policy Engine + Cedar Policies
 #   #============================================================================
@@ -723,7 +723,7 @@ Resources:
 #     Properties:
 #       Name: AgenticAnalyticsPolicyEngine
 #       Description: Cedar policy engine for Agentic Analytics RBAC
-#
+
 #   AllowAllToolsPolicy:
 #     Type: AWS::BedrockAgentCore::Policy
 #     DependsOn: PolicyEngine
@@ -740,7 +740,7 @@ Resources:
 #               action,
 #               resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
 #             );
-#
+
 #   # Cedar action names use triple underscore: TargetName___tool_name.
 #   # These two policies enforce role-based access on top of allow_all_tools.
 #   # Take effect when the Gateway's PolicyMode is ENFORCE; logged-only when LOG_ONLY.
@@ -766,7 +766,7 @@ Resources:
 #               principal.hasTag("custom:role") &&
 #               principal.getTag("custom:role") == "analyst"
 #             };
-#
+
 #   ForbidCustomSqlStaffPolicy:
 #     Type: AWS::BedrockAgentCore::Policy
 #     DependsOn:
@@ -1060,7 +1060,7 @@ Resources:
       EventExpiryDuration: 7
 
   # ===== UNCOMMENT FROM HERE (Step 8: Bedrock Guardrail) ======
-#
+
 #   #============================================================================
 #   # Bedrock Guardrail (optional — controlled by EnableGuardrail param)
 #   # Wires into the agent at runtime via GUARDRAIL_ID + GUARDRAIL_VERSION env
