@@ -444,8 +444,9 @@ Resources:
           AWS_DEFAULT_REGION=${AWS::Region}
           AURORA_ENDPOINT=${AuroraEndpoint}
           AURORA_SECRET_ARN=${DatabaseSecretArn}
-          # APP_AURORA_SECRET_ARN=${AppDatabaseSecretArn}
-          # ^ TODO 7.2: Uncomment in Step 7 to switch from postgres (bypasses RLS) to app_user (RLS enforced)
+          # ^ postgres secret — used by the local Step-1 exercise. RLS for the
+          #   DEPLOYED agent is controlled in the top-up CFN (Step 7.2 EnforceRls),
+          #   not here.
           DATABASE_NAME=${DatabaseName}
           KNOWLEDGE_BASE_ID=${KnowledgeBaseId}
           GLUE_DATABASE=${GlueDatabaseName}

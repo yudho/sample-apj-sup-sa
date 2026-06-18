@@ -113,7 +113,6 @@ zip -r "$ASSETS_DIR/repo/agentic-analytics.zip" . \
     -x "*node_modules*" \
     -x "*app/ui/build*" \
     -x "*.hypothesis*" \
-    -x "*sean_prompt*" \
     -x "*changes.md" \
     -x "*lambda_tests*" \
     -x "*.pytest_cache*" \
