@@ -1,4 +1,4 @@
-"""Vox: voice pair debugger for AWS.
+"""Voice: voice pair debugger for AWS.
 
 Run: uv run bot.py
 Then open http://localhost:7860/client in your browser.
@@ -21,7 +21,7 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.transports.base_transport import TransportParams
 
-from vox.pipeline import run_bot
+from voice.pipeline import run_bot
 
 transport_params = {
     "webrtc": lambda: TransportParams(

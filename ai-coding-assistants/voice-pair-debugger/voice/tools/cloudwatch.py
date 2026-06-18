@@ -1,13 +1,13 @@
 import time
 
-from vox.config import get_boto3_session
+from voice.config import get_boto3_session
 
 
 async def query_cloudwatch_logs(params, log_group_name: str, filter_pattern: str = "", minutes_back: int = 30):
     """Query recent CloudWatch logs for a log group.
 
     Args:
-        log_group_name: The CloudWatch log group to search (e.g. /aws/lambda/vox-demo-get-users).
+        log_group_name: The CloudWatch log group to search (e.g. /aws/lambda/voice-demo-get-users).
         filter_pattern: CloudWatch filter pattern (e.g. "ERROR" or "{ $.level = \"ERROR\" }").
         minutes_back: How many minutes of history to search. Default 30.
     """

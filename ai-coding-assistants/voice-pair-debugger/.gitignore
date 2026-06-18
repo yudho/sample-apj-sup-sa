@@ -1,0 +1,7 @@
+.env
+
+sample-app/.terraform/
+sample-app/terraform.tfstate*
+sample-app/.build/
+
+__pycache__/

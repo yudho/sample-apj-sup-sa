@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from vox.config import get_boto3_session
+from voice.config import get_boto3_session
 
 
 async def get_xray_trace_summaries(

@@ -1,13 +1,13 @@
 import json
 
-from vox.config import get_boto3_session
+from voice.config import get_boto3_session
 
 
 async def describe_lambda_function(params, function_name: str):
     """Describe a Lambda function's configuration.
 
     Args:
-        function_name: The Lambda function name (e.g. vox-demo-get-users).
+        function_name: The Lambda function name (e.g. voice-demo-get-users).
     """
     try:
         session = get_boto3_session()

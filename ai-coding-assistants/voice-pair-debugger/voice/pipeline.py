@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.frames.frames import TTSSpeakFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -13,14 +16,15 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.workers.runner import WorkerRunner
 
-from vox.config import (
+from voice.config import (
     AWS_REGION,
     BEDROCK_MODEL_ID,
     DEEPGRAM_API_KEY,
     DEEPGRAM_TTS_VOICE,
 )
-from vox.prompts import SYSTEM_PROMPT
-from vox.tools import get_tools_schema, register_tools
+from voice.tools import get_tools_schema, register_tools
+
+SYSTEM_PROMPT = (Path(__file__).parent / "prompt.md").read_text(encoding="utf-8")
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
@@ -69,9 +73,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
 
     agent = PipelineWorker(
         pipeline,
-        name="vox",
+        name="voice",
         params=PipelineParams(enable_metrics=True),
     )
+
+    @transport.event_handler("on_client_connected")
+    async def on_client_connected(transport, client):
+        # Greet first so the developer is not met with silence.
+        await agent.queue_frame(
+            TTSSpeakFrame(text="What are you seeing?", append_to_context=True)
+        )
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
