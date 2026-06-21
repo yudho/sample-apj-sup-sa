@@ -143,6 +143,8 @@ make deploy
 
 This runs `aws cloudformation deploy` on `agentcore-topup-stack.yaml`. The **first** deploy does a lot: it creates the Gateway, Interceptor, Memory, Runtime, and observability, and the container build chain **builds and pushes your agent image automatically** (the build trigger runs during the deploy — no `agentcore` CLI). Expect this first run to take several minutes while the image builds.
 
+::alert[**Model access is handled for you.** The template includes a small `ModelSubscription` resource that accepts the Bedrock model's access agreement at deploy time, so your Runtime can invoke the model immediately — no manual "request model access" step in the Bedrock console. The `AgentRuntime` depends on it, so the subscription is in place before the agent ever runs.]{type="info"}
+
 When it finishes, check the outputs:
 
 ```bash
