@@ -49,17 +49,37 @@ CLIENT_ID="$(aws cloudformation describe-stacks --stack-name "$COG_STACK" --regi
 AMPLIFY_APP_ID="${AMPLIFY_APP_ID:-$(aws amplify list-apps --region "$REGION" --query "apps[?name=='${ENV_NAME}-ui' || contains(name,'agentic-analytics')].appId | [0]" --output text)}"
 AMPLIFY_ORIGIN="https://main.${AMPLIFY_APP_ID}.amplifyapp.com"
 
+# The PCC bot calls the analytics AgentCore Runtime by ARN (Bearer JWT, not SigV4).
+# Pull the CURRENT analytics runtime ARN from the main stack's AgentCore nested stack
+# so the bot always targets the live runtime (not a stale value baked into the secret).
+AGENTCORE_STACK="$(aws cloudformation list-stack-resources --stack-name "$MAIN_STACK" --region "$REGION" \
+  --query "StackResourceSummaries[?ResourceType=='AWS::CloudFormation::Stack' && contains(LogicalResourceId,'AgentCoreStack')].PhysicalResourceId" --output text)"
+AGENT_ARN="$(aws cloudformation describe-stacks --stack-name "$AGENTCORE_STACK" --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeArn'].OutputValue" --output text 2>/dev/null)"
+# Fallback: derive from the runtime id output if the ARN output isn't present.
+if [ -z "$AGENT_ARN" ] || [ "$AGENT_ARN" = "None" ]; then
+  AGENT_RT_ID="$(aws cloudformation describe-stacks --stack-name "$AGENTCORE_STACK" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeId'].OutputValue" --output text 2>/dev/null)"
+  [ -n "$AGENT_RT_ID" ] && [ "$AGENT_RT_ID" != "None" ] && \
+    AGENT_ARN="$(aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id "$AGENT_RT_ID" --region "$REGION" --query 'agentRuntimeArn' --output text 2>/dev/null)"
+fi
+[ -n "$AGENT_ARN" ] && [ "$AGENT_ARN" != "None" ] || { echo "ERROR: could not resolve analytics AgentRuntimeArn from $MAIN_STACK"; exit 1; }
+
 echo "==> 1/5 PCC secret set (Deepgram/Daily keys on Pipecat's side)"
 # The Pipecat Cloud CLI ships as the 'cloud' extension of the 'pipecat' CLI
 # (pipecat-ai-cli); invoke it as `pipecat cloud …` (the older standalone
 # `pipecatcloud` command no longer exists). The venv must have the 'pipecat' bin.
+# AWS_AGENT_ARN/QUALIFIER point the bot at the live analytics runtime (so a
+# rebuilt/renamed runtime doesn't leave the bot calling a dead ARN).
 PATH="$ROOT/app/voice/.venv/bin:$PATH" PIPECAT_TOKEN="$PCC_PAT" \
   pipecat cloud secrets set voice-analytics-secrets --skip \
     DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" DAILY_API_KEY="$DAILY_API_KEY" \
     DEEPGRAM_VOICE_ID="${DEEPGRAM_VOICE_ID:-aura-2-apollo-en}" \
     AWS_REGION="$REGION" COGNITO_CLIENT_ID="$CLIENT_ID" \
+    AWS_AGENT_ARN="$AGENT_ARN" \
+    AWS_AGENT_QUALIFIER="${AGENT_QUALIFIER:-agentic_analytics_endpoint}" \
     CHART_BUCKET="$ARTIFACTS_BUCKET" >/dev/null
-echo "    secret set ready"
+echo "    secret set ready (analytics runtime: $AGENT_ARN)"
 
 echo "==> 2/5 PCC agent (CFN custom resource → PCC REST API)"
 # The /v1/agents + /v1/builds API only accepts the PRIVATE key (sk_…); the PAT and
