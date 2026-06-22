@@ -457,10 +457,62 @@ def deploy_runtime(gateway_url):
     if runtime_arn:
         save_semantic_config(SEMANTIC_RUNTIME_ARN=runtime_arn)
         print(f"[OK] Runtime ARN: {runtime_arn}")
+        # `agentcore configure/deploy` creates the runtime with the DEFAULT
+        # (IAM/SigV4) inbound auth — it has no flag for a JWT authorizer. The UI
+        # calls the runtime with a Cognito Bearer token, so without this the
+        # invoke fails 403 "Authorization method mismatch". Attach the same
+        # CustomJWTAuthorizer the analytics runtime uses, and allowlist the
+        # Authorization header so the agent receives the JWT for RBAC/RLS.
+        _attach_jwt_authorizer(runtime_arn.rsplit('/', 1)[-1])
     else:
         print("⚠️  Could not determine runtime ARN — UI may not connect to agent")
 
     return runtime_arn
+
+
+def _attach_jwt_authorizer(runtime_id):
+    """Switch the voice/semantic runtime from default IAM auth to CustomJWT.
+
+    update-agent-runtime REPLACES the whole config, so we re-send the runtime's
+    existing artifact/network/protocol/role unchanged and add the authorizer +
+    request-header allowlist (the same replace-trap the analytics `make build`
+    handles). Idempotent and safe to re-run.
+    """
+    pool_id = os.getenv('COGNITO_USER_POOL_ID')
+    client_id = os.getenv('COGNITO_USER_LOGIN_CLIENT_ID')
+    if not pool_id or not client_id:
+        print("⚠️  COGNITO_USER_POOL_ID / COGNITO_USER_LOGIN_CLIENT_ID missing — "
+              "skipping JWT authorizer attach (UI invoke would 403)")
+        return
+    discovery_url = (
+        f"https://cognito-idp.{REGION}.amazonaws.com/{pool_id}"
+        f"/.well-known/openid-configuration"
+    )
+    try:
+        agentcore = boto3.client('bedrock-agentcore-control', region_name=REGION)
+        rt = agentcore.get_agent_runtime(agentRuntimeId=runtime_id)
+        if rt.get('authorizerConfiguration', {}).get('customJWTAuthorizer'):
+            print("[OK] JWT authorizer already attached to runtime")
+            return
+        print(f"[voice/semantic] attaching CustomJWTAuthorizer to runtime {runtime_id}")
+        agentcore.update_agent_runtime(
+            agentRuntimeId=runtime_id,
+            roleArn=rt['roleArn'],
+            networkConfiguration=rt['networkConfiguration'],
+            protocolConfiguration=rt.get('protocolConfiguration', {'serverProtocol': 'HTTP'}),
+            agentRuntimeArtifact=rt['agentRuntimeArtifact'],
+            authorizerConfiguration={
+                'customJWTAuthorizer': {
+                    'discoveryUrl': discovery_url,
+                    'allowedClients': [client_id],
+                }
+            },
+            requestHeaderConfiguration={'requestHeaderAllowlist': ['Authorization']},
+        )
+        print("[OK] JWT authorizer + Authorization header allowlist attached")
+    except Exception as e:
+        print(f"⚠️  Could not attach JWT authorizer ({e}) — the UI invoke may 403; "
+              f"re-run this step or attach via update-agent-runtime")
 
 
 def _get_runtime_arn():
