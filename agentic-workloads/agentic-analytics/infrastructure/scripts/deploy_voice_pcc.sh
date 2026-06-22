@@ -33,9 +33,13 @@ ARTIFACTS_BUCKET="${ARTIFACTS_BUCKET:-agentic-analytics-artifacts}"
 AGENT_NAME="${PCC_AGENT:-voice-analytics-agent}"
 PROXY_STACK="${PROXY_STACK:-${ENV_NAME}-voice-proxy}"
 
-for v in PCC_PAT PCC_PUBLIC_KEY DEEPGRAM_API_KEY DAILY_API_KEY; do
+for v in PCC_PAT PCC_PUBLIC_KEY PCC_PRIVATE_KEY DEEPGRAM_API_KEY DAILY_API_KEY; do
   [ -n "${!v:-}" ] || { echo "ERROR: $v is required"; exit 1; }
 done
+# Three distinct Pipecat Cloud credentials are needed:
+#   PCC_PAT         (pcc_pat_…) — CLI auth for the secret set (step 1)
+#   PCC_PRIVATE_KEY (sk_…)      — deploy the agent via /v1/agents + /v1/builds (step 2)
+#   PCC_PUBLIC_KEY  (pk_…)      — the JWT proxy's runtime /start call (steps 3–4)
 
 # Pull backend-derived values from the deployed main stack's nested stacks.
 COG_STACK="$(aws cloudformation list-stack-resources --stack-name "$MAIN_STACK" --region "$REGION" \
@@ -46,8 +50,11 @@ AMPLIFY_APP_ID="${AMPLIFY_APP_ID:-$(aws amplify list-apps --region "$REGION" --q
 AMPLIFY_ORIGIN="https://main.${AMPLIFY_APP_ID}.amplifyapp.com"
 
 echo "==> 1/5 PCC secret set (Deepgram/Daily keys on Pipecat's side)"
+# The Pipecat Cloud CLI ships as the 'cloud' extension of the 'pipecat' CLI
+# (pipecat-ai-cli); invoke it as `pipecat cloud …` (the older standalone
+# `pipecatcloud` command no longer exists). The venv must have the 'pipecat' bin.
 PATH="$ROOT/app/voice/.venv/bin:$PATH" PIPECAT_TOKEN="$PCC_PAT" \
-  pipecatcloud secrets set voice-analytics-secrets --skip \
+  pipecat cloud secrets set voice-analytics-secrets --skip \
     DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" DAILY_API_KEY="$DAILY_API_KEY" \
     DEEPGRAM_VOICE_ID="${DEEPGRAM_VOICE_ID:-aura-2-apollo-en}" \
     AWS_REGION="$REGION" COGNITO_CLIENT_ID="$CLIENT_ID" \
@@ -55,7 +62,9 @@ PATH="$ROOT/app/voice/.venv/bin:$PATH" PIPECAT_TOKEN="$PCC_PAT" \
 echo "    secret set ready"
 
 echo "==> 2/5 PCC agent (CFN custom resource → PCC REST API)"
-PCC_API_KEY="$PCC_PUBLIC_KEY" MIN_AGENTS="${MIN_AGENTS:-0}" AWS_REGION="$REGION" \
+# The /v1/agents + /v1/builds API only accepts the PRIVATE key (sk_…); the PAT and
+# public key both 401 there. Pass PCC_PRIVATE_KEY (not the public key).
+PCC_API_KEY="$PCC_PRIVATE_KEY" MIN_AGENTS="${MIN_AGENTS:-0}" AWS_REGION="$REGION" \
   ENV_NAME="$ENV_NAME" AGENT_NAME="$AGENT_NAME" \
   bash "$ROOT/infrastructure/voice-pcc-cr/deploy.sh"
 

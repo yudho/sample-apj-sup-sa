@@ -32,9 +32,13 @@ try:
 except Exception:
     cfg = {}
 cfg["VOICE_START_URL"] = voice_url
+# Switching INTO pipecat-cloud mode: drop any AgentCore signaling URL so the
+# client doesn't keep using SmallWebRTC (voiceClient.js gives VOICE_SIGNALING_URL
+# precedence when both are present). This makes the UI flip a true mode-switch.
+cfg.pop("VOICE_SIGNALING_URL", None)
 with open(out_path, "w") as f:
     f.write("window.__APP_CONFIG__ = " + json.dumps(cfg) + ";\n")
-print("    config.js VOICE_START_URL =", voice_url)
+print("    config.js VOICE_START_URL =", voice_url, "(removed VOICE_SIGNALING_URL)")
 PY
 
 ZIP="$(mktemp -d)/ui.zip"
