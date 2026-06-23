@@ -102,6 +102,14 @@ if [ "$AGENT_ONLY" = true ]; then
   aws s3 cp "$AGENT_ZIP" "s3://${BUCKET}/agent/agent_code.zip" --region "$REGION"
   rm -f "$AGENT_ZIP"
 
+  # The runtime loads its SOP from s3://${BUCKET}/sops/ (SOP_S3_BUCKET is set, and
+  # load_system_prompt() prefers S3 over the bundled copy). The agent_code.zip carries
+  # a local SOP, but the running container never reads it — so a SOP edit is invisible
+  # unless we ALSO push it to S3 here. (Full deploys do this in package_and_upload.sh.)
+  log "[agent-only] Uploading SOP -> s3://${BUCKET}/sops/unicorn_rental_analytics.sop.md"
+  aws s3 cp "$AGENT_SRC/unicorn_rental_analytics.sop.md" \
+    "s3://${BUCKET}/sops/unicorn_rental_analytics.sop.md" --region "$REGION"
+
   log "[agent-only] Triggering CodeBuild project ${ENV_NAME}-agent-build"
   BUILD_ID="$(aws codebuild start-build \
     --project-name "${ENV_NAME}-agent-build" \
