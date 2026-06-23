@@ -68,13 +68,15 @@ COGNITO_DOMAIN=agentic-analytics-xxxxxxxxxxxx.auth.us-east-1.amazoncognito.com
 
 ## Set Up the Python Environment
 
-The Python virtual environment is pre-installed on the EC2 instance. Activate it:
+The Python virtual environment is pre-installed on the EC2 instance at `/workshop/.venv`. Activate it:
 
 ```bash
-cd /workshop/agentic-analytics
+cd /workshop
 source .venv/bin/activate
 export AWS_DEFAULT_REGION=us-east-1
 ```
+
+::alert[Keep this terminal's virtual environment activated for the Step 1 exercise. `make` in Step 2 onward does **not** need the venv (it only uses the AWS CLI), but the local `basic_agent.py` exercise does.]{type="info"}
 
 ::alert[`AWS_DEFAULT_REGION` is set so the AWS CLI (used by `make`) targets the right region. You do **not** need the `agentcore` CLI in this workshop — the agent's container image is built and deployed by CloudFormation (you'll see this in Step 2).]{type="info"}
 
@@ -109,7 +111,7 @@ Open `unicorn_rental_agent.py` too. You'll notice several `# TODO` comments — 
 ## Troubleshooting
 
 **No venv available**
-- Run `python3 -m venv .venv` before `source .venv/bin/activate`
+- The venv lives at `/workshop/.venv`. Activate it with `cd /workshop && source .venv/bin/activate`. If it's genuinely missing, recreate it: `python3 -m venv /workshop/.venv && source /workshop/.venv/bin/activate && pip install -r /workshop/agentic-analytics/app/agentcore_strands/requirements.txt`.
 
 **Code Editor URL returns 403 or blank page**
 - The CloudFront distribution may still be deploying. Wait 2-3 minutes and refresh.

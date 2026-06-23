@@ -397,6 +397,13 @@ Resources:
         DEEPGRAM_VOICE_ID: !Ref DeepgramVoiceId
         CHART_BUCKET: !Ref ChartBucket
         KVS_CHANNEL_NAME: !Ref KvsChannelName
+        # Bind the runtime to the bot code version so a new (content-hashed) code key
+        # forces a NEW runtime version on `make voice-deploy` — the image is pushed to
+        # the mutable :latest tag, which alone would NOT change this resource, so CFN
+        # would skip the update and the endpoint would keep serving stale code. This
+        # env var changes with the code, so the Runtime (and the endpoint that tracks
+        # its version) roll forward to the freshly-built image. (Voice stale-deploy fix.)
+        VOICE_CODE_VERSION: !Ref VoiceAgentCodeS3Key
 
   VoiceAgentRuntimeEndpoint:
     Type: AWS::BedrockAgentCore::RuntimeEndpoint
@@ -433,6 +440,19 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        # GET /api/ice hands the browser the SAME Amazon KVS managed-TURN servers the
+        # runtime uses, so the browser can gather relay candidates and traverse NAT.
+        - PolicyName: KvsTurnRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesisvideo:DescribeSignalingChannel
+                  - kinesisvideo:GetSignalingChannelEndpoint
+                  - kinesisvideo:GetIceServerConfig
+                Resource: !Sub arn:aws:kinesisvideo:${AWS::Region}:${AWS::AccountId}:channel/${KvsChannelName}/*
 
   SignalingProxyFunction:
     Type: AWS::Lambda::Function
@@ -449,17 +469,51 @@ Resources:
           VOICE_RUNTIME_QUALIFIER: agentic_analytics_voice_endpoint
           AWS_REGION_NAME: !Ref AWS::Region
           ALLOWED_ORIGIN: !Ref AllowedOrigin
+          KVS_CHANNEL_NAME: !Ref KvsChannelName
       Code:
         ZipFile: |
           import json, os, urllib.request, urllib.error
           from urllib.parse import quote
+          import boto3
 
           def _cors():
               return {
                   "Access-Control-Allow-Origin": os.environ.get("ALLOWED_ORIGIN", "*"),
                   "Access-Control-Allow-Headers": "authorization,content-type",
-                  "Access-Control-Allow-Methods": "POST,PATCH,OPTIONS",
+                  "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
               }
+
+          # Cache the KVS TURN servers briefly (creds have a 300s TTL); shared across
+          # invocations on a warm Lambda so /api/ice is cheap.
+          _ICE_CACHE = {"servers": None, "fetched_at": 0}
+
+          def _kvs_ice_servers():
+              """Fetch the browser-formatted KVS managed-TURN servers ({urls,username,
+              credential}) so the browser gathers RELAY candidates and can traverse NAT
+              to the VPC runtime (which has no public IP). Without this the browser only
+              has host candidates and ICE never connects."""
+              import time
+              now = time.time()
+              if _ICE_CACHE["servers"] and now - _ICE_CACHE["fetched_at"] < 240:
+                  return _ICE_CACHE["servers"]
+              region = os.environ["AWS_REGION_NAME"]
+              channel = os.environ["KVS_CHANNEL_NAME"]
+              kvs = boto3.client("kinesisvideo", region_name=region)
+              arn = kvs.describe_signaling_channel(ChannelName=channel)["ChannelInfo"]["ChannelARN"]
+              ep = kvs.get_signaling_channel_endpoint(
+                  ChannelARN=arn,
+                  SingleMasterChannelEndpointConfiguration={"Protocols": ["HTTPS"], "Role": "MASTER"})
+              https = next(e["ResourceEndpoint"] for e in ep["ResourceEndpointList"]
+                           if e["Protocol"] == "HTTPS")
+              sig = boto3.client("kinesis-video-signaling", region_name=region, endpoint_url=https)
+              cfg = sig.get_ice_server_config(ChannelARN=arn, Service="TURN")
+              servers = [{"urls": s.get("Uris", []), "username": s.get("Username"),
+                          "credential": s.get("Password")}
+                         for s in cfg.get("IceServerList", []) if s.get("Uris")]
+              # A public STUN helps the browser learn its srflx address too.
+              servers.append({"urls": ["stun:stun.l.google.com:19302"]})
+              _ICE_CACHE.update(servers=servers, fetched_at=now)
+              return servers
 
           def _resp(status, body):
               return {"statusCode": status,
@@ -520,6 +574,15 @@ Resources:
               token = _bearer(event)
               if not token:
                   return _resp(401, {"error": "missing bearer token"})
+              # GET /api/ice — hand the browser the KVS managed-TURN servers so it can
+              # gather relay candidates (NAT traversal to the VPC-only runtime).
+              raw_path = (event.get("requestContext", {}).get("http", {}).get("path", "")
+                          or event.get("rawPath", ""))
+              if method == "GET" or raw_path.endswith("/api/ice"):
+                  try:
+                      return _resp(200, {"iceServers": _kvs_ice_servers()})
+                  except Exception as e:  # noqa: BLE001
+                      return _resp(502, {"error": f"ice fetch failed: {e}"})
               session_id = _session_id(event)
               try:
                   body = json.loads(event.get("body") or "{}")
@@ -558,7 +621,7 @@ Resources:
       ProtocolType: HTTP
       CorsConfiguration:
         AllowOrigins: [!Ref AllowedOrigin]
-        AllowMethods: [POST, PATCH, OPTIONS]
+        AllowMethods: [GET, POST, PATCH, OPTIONS]
         AllowHeaders: [authorization, content-type, x-amzn-bedrock-agentcore-runtime-session-id]
         MaxAge: 600
 
@@ -599,6 +662,17 @@ Resources:
     Properties:
       ApiId: !Ref SignalingHttpApi
       RouteKey: 'PATCH /api/offer'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref SignalingJwtAuthorizer
+      Target: !Sub integrations/${SignalingIntegration}
+
+  # GET /api/ice — returns the KVS managed-TURN servers so the browser can gather
+  # relay candidates (NAT traversal to the VPC-only voice runtime). JWT-gated.
+  SignalingIceServersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SignalingHttpApi
+      RouteKey: 'GET /api/ice'
       AuthorizationType: JWT
       AuthorizerId: !Ref SignalingJwtAuthorizer
       Target: !Sub integrations/${SignalingIntegration}

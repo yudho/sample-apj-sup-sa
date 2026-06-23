@@ -62,11 +62,26 @@ class _FakeHandler:
         self.patches.append(request)
 
 
+def _strict_from_dict(d):
+    """Mimic the REAL SmallWebRTCRequest.from_dict, which only accepts the SDP fields
+    and raises TypeError on any unexpected key (sdp/type/pc_id/restart_pc). This is
+    what catches the runtimeSessionId/gateway_token leak regression."""
+    allowed = {"sdp", "type", "pc_id", "restart_pc"}
+    extra = set(d) - allowed
+    if extra:
+        raise TypeError(
+            f"SmallWebRTCRequest.__init__() got an unexpected keyword argument "
+            f"{sorted(extra)[0]!r}")
+    return d
+
+
 def _install_common_stubs(monkeypatch):
     """Stub KVS fetch, the request handler, the request parser, and the pipeline run."""
     monkeypatch.setattr(bot, "get_kvs_ice_servers", lambda: [])
+    # Use a STRICT from_dict so a stray runtimeSessionId in the offer data fails the
+    # test (it would 502 the live signaling proxy with a TypeError otherwise).
     monkeypatch.setattr(bot, "SmallWebRTCRequest", type(
-        "FakeReq", (), {"from_dict": staticmethod(lambda d: d)}
+        "FakeReq", (), {"from_dict": staticmethod(_strict_from_dict)}
     ))
     # Capture what reaches the pipeline.
     captured = {}
@@ -83,13 +98,60 @@ def test_offer_yields_sse_answer_sentinels(monkeypatch):
     _install_common_stubs(monkeypatch)
     monkeypatch.setattr(bot, "SmallWebRTCRequestHandler", _FakeHandler)
 
+    # The offer data carries the shared runtimeSessionId (the proxy adds it). The
+    # entrypoint MUST strip it before SmallWebRTCRequest.from_dict — otherwise the
+    # strict parser raises TypeError and the live signaling proxy returns 502.
     payload = {"type": "offer", "data": {"sdp": "off", "type": "offer",
-                                         "gateway_token": "tok", "runtimeSessionId": "sess-123"}}
+                                         "runtimeSessionId": "sess-123"}}
     out = asyncio.run(_drain(bot.agentcore_entrypoint(payload, None)))
 
     assert out[0] == {"status": "ANSWER:START"}
     assert "answer" in out[1] and out[1]["answer"]["type"] == "answer"
     assert out[-1] == {"status": "ANSWER:END"}
+
+
+def test_offer_returns_answer_without_blocking_on_pipeline(monkeypatch):
+    """Regression: the SDP answer MUST be yielded even if the pipeline session never
+    finishes. SmallWebRTCRequestHandler awaits the connection callback BEFORE it
+    returns the answer, so the callback must launch the pipeline in the BACKGROUND.
+    If it awaited the (here: never-ending) session, the answer would never reach the
+    browser, ICE would time out, and the offer would 502 (the live bug)."""
+    _install_common_stubs(monkeypatch)
+    monkeypatch.setattr(bot, "SmallWebRTCRequestHandler", _FakeHandler)
+
+    # A pipeline session that never returns — the offer must still answer promptly.
+    async def _never_ending(connection, user_token, runtime_session_id):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(bot, "_run_webrtc_session", _never_ending)
+
+    async def _run():
+        payload = {"type": "offer", "data": {"sdp": "v=0", "type": "offer",
+                                             "runtimeSessionId": "s"}}
+        # Bound the whole drain so a regression (blocking callback) fails fast.
+        return await asyncio.wait_for(_drain(bot.agentcore_entrypoint(payload, None)), timeout=5)
+
+    out = asyncio.run(_run())
+    assert out[0] == {"status": "ANSWER:START"}
+    assert "answer" in out[1]
+    assert out[-1] == {"status": "ANSWER:END"}
+
+
+def test_offer_strips_runtime_session_id_before_webrtc_parse(monkeypatch):
+    """Regression: runtimeSessionId in the offer data must NOT reach
+    SmallWebRTCRequest.from_dict (it only accepts sdp/type/pc_id/restart_pc). The
+    live bug was a 502 'no answer from runtime' caused by
+    'SmallWebRTCRequest.__init__() got an unexpected keyword argument runtimeSessionId'."""
+    captured = _install_common_stubs(monkeypatch)
+    monkeypatch.setattr(bot, "SmallWebRTCRequestHandler", _FakeHandler)
+
+    payload = {"type": "offer", "data": {"sdp": "v=0", "type": "offer",
+                                         "runtimeSessionId": "shared-sess-xyz"}}
+    # Must NOT raise; must yield the answer sentinels and still propagate the session id.
+    out = asyncio.run(_drain(bot.agentcore_entrypoint(payload, None)))
+    assert out[0] == {"status": "ANSWER:START"}
+    assert out[-1] == {"status": "ANSWER:END"}
+    assert captured["runtime_session_id"] == "shared-sess-xyz"
 
 
 class _FakeContext:

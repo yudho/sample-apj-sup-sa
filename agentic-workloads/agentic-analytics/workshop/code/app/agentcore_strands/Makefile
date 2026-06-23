@@ -187,8 +187,10 @@ voice-deploy:
 	echo "==> [voice] zipping voice bot from $(VOICE_DIR)"; \
 	ZIP=$$(mktemp).zip; \
 	(cd $(VOICE_DIR) && zip -r "$$ZIP" bot.py analytics_processor.py auth.py pyproject.toml uv.lock -x '*.pyc' '*__pycache__*' '*tests*' >/dev/null); \
-	echo "==> [voice] uploading -> s3://$(CFN_BUCKET)/$(VOICE_CODE_KEY)"; \
-	aws s3 cp "$$ZIP" "s3://$(CFN_BUCKET)/$(VOICE_CODE_KEY)" --region $(REGION); \
+	HASH=$$(shasum -a 256 "$$ZIP" 2>/dev/null | cut -c1-12 || sha256sum "$$ZIP" | cut -c1-12); \
+	CODE_KEY="voice/voice_agent_code-$$HASH.zip"; \
+	echo "==> [voice] uploading -> s3://$(CFN_BUCKET)/$$CODE_KEY"; \
+	aws s3 cp "$$ZIP" "s3://$(CFN_BUCKET)/$$CODE_KEY" --region $(REGION); \
 	rm -f "$$ZIP"; \
 	echo "==> [voice] deploying $(VOICE_STACK)"; \
 	aws cloudformation deploy \
@@ -199,7 +201,7 @@ voice-deploy:
 	      EnvironmentName=$(ENV_NAME) \
 	      ArtifactsBucket=$(CFN_BUCKET) \
 	      ArtifactsPrefix= \
-	      VoiceAgentCodeS3Key=$(VOICE_CODE_KEY) \
+	      VoiceAgentCodeS3Key=$$CODE_KEY \
 	      CognitoUserPoolId=$(COGNITO_POOL) \
 	      CognitoClientId=$(COGNITO_CLIENT) \
 	      StrandsAgentRuntimeArn=$$STRANDS_ARN \

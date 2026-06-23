@@ -119,11 +119,49 @@ export async function startVoiceSession(opts) {
   const mode = voiceMode();
   if (!mode) throw new Error('Voice is not configured (no VOICE_SIGNALING_URL or VOICE_START_URL).');
 
+  // The user's Cognito access token is the identity the bot forwards to the analytics
+  // runtime (per-user RBAC/RLS). Resolve it FIRST — the AgentCore TURN fetch below
+  // needs it, and we refresh it right before connect so a long-idle tab doesn't open
+  // with an expired one.
+  let userToken = null;
+  try {
+    userToken = await fetchAccessToken();
+  } catch (e) {
+    // proxy will reject with 401 if the token is absent/expired
+  }
+  // Shared session id so voice + text chat share one AgentCore Memory thread.
+  const sharedSessionId = sessionId ? getRuntimeSessionId(sessionId) : '';
+
+  // For AgentCore, the browser must use the SAME Amazon KVS managed-TURN servers the
+  // runtime uses — otherwise the browser only gathers `host` candidates (LAN IPs) and,
+  // since the runtime lives in a VPC with no public IP, ICE can never find a route
+  // through NAT (the connection just times out). Fetch the TURN creds from the
+  // signaling proxy (GET /api/ice, JWT-gated) and hand them to the transport so it
+  // generates relay candidates. waitForICEGathering avoids a trickle race with the
+  // stateless runtime (ICE candidates can otherwise land before the peer registers).
+  let iceServers;
+  if (mode === 'agentcore' && VOICE_SIGNALING_URL && userToken) {
+    try {
+      const iceResp = await fetch(`${VOICE_SIGNALING_URL}/api/ice`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      if (iceResp.ok) {
+        const data = await iceResp.json();
+        if (Array.isArray(data.iceServers) && data.iceServers.length) {
+          iceServers = data.iceServers;
+        }
+      }
+    } catch (e) {
+      console.warn('[voice] could not fetch TURN ICE servers; falling back to host-only', e);
+    }
+  }
+
   // Pick the transport for the deploy mode. SmallWebRTC for AgentCore (the browser
   // does the SDP/ICE handshake against the signaling proxy); Daily for Pipecat Cloud
   // (the browser joins a Daily room minted by the start proxy).
   const transport = mode === 'agentcore'
-    ? new SmallWebRTCTransport()
+    ? new SmallWebRTCTransport(
+        iceServers ? { iceServers, waitForICEGathering: true } : { waitForICEGathering: true })
     : new DailyTransport();
   const client = new PipecatClient({
     transport,
@@ -191,17 +229,7 @@ export async function startVoiceSession(opts) {
   client.on(RTVIEvent.Error, (e) => onError && onError(e));
   client.on(RTVIEvent.Disconnected, () => { detachBotAudio(); if (onDisconnected) onDisconnected(); });
 
-  // The user's Cognito access token is the identity the bot forwards to the
-  // analytics runtime (per-user RBAC/RLS). Refresh it right before connect so a
-  // long-idle tab doesn't open with an expired one.
-  let userToken = null;
-  try {
-    userToken = await fetchAccessToken();
-  } catch (e) {
-    // proxy will reject with 401 if the token is absent/expired
-  }
-  // Shared session id so voice + text chat share one AgentCore Memory thread.
-  const sharedSessionId = sessionId ? getRuntimeSessionId(sessionId) : '';
+  // (userToken + sharedSessionId were resolved above, before the TURN fetch.)
 
   // Watchdog: if neither BotReady nor bot audio arrives within the bound, stop
   // hanging on "enabling voice…" — tear down and report an error the UI can show.

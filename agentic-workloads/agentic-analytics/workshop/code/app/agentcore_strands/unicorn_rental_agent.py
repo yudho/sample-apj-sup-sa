@@ -31,6 +31,11 @@ from strands.models import BedrockModel
 from strands.tools.mcp.mcp_client import MCPClient
 from strands.hooks import HookProvider, HookRegistry, AgentInitializedEvent, MessageAddedEvent
 from mcp.client.streamable_http import streamablehttp_client
+try:
+    from strands_tools.code_interpreter import AgentCoreCodeInterpreter
+    _CODE_INTERPRETER_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _CODE_INTERPRETER_AVAILABLE = False
 from datetime import datetime, timezone
 
 # AgentCore imports
@@ -64,6 +69,67 @@ def load_system_prompt():
 # Replace the basic prompt below with: SYSTEM_PROMPT = load_system_prompt()
 # ============================================================================
 SYSTEM_PROMPT = "You are a helpful unicorn rental analytics assistant. Help users query their business data."
+
+# ── Chart rendering support ───────────────────────────────────────────────────
+# When the agent draws a chart, the code-interpreter sandbox renders a PNG, uploads
+# it to s3://CHART_BUCKET/charts/, and prints only the tiny S3 key. The model emits
+# a short <chart s3key="charts/..."> tag; here we presign that key into a viewable
+# URL in the outbound stream (the UI renders it as an <img>). See SOP Step 4b.
+import re as _re_chart
+
+_CHART_TAG_RE = _re_chart.compile(r'<chart\b([^>]*?)/?>(?:\s*</chart>)?', _re_chart.IGNORECASE | _re_chart.DOTALL)
+_S3KEY_ATTR_RE = _re_chart.compile(r'\bs3key\s*=\s*"([^"]+)"', _re_chart.IGNORECASE)
+_CHART_TAG_MAX = 4096
+_s3_presign_client = None
+
+
+def _presign_chart_key(s3key):
+    """Presign an S3 chart key into a short-lived GET URL (the agent role has s3:GetObject)."""
+    bucket = os.getenv("CHART_BUCKET") or os.getenv("SOP_S3_BUCKET")
+    if not bucket or not s3key:
+        return None
+    key = s3key.replace("s3://%s/" % bucket, "").lstrip("/")
+    global _s3_presign_client
+    try:
+        if _s3_presign_client is None:
+            _s3_presign_client = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        return _s3_presign_client.generate_presigned_url(
+            "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600
+        )
+    except Exception as e:  # pragma: no cover
+        print("[CHART] presign failed for %s: %s" % (s3key, e))
+        return None
+
+
+def _rewrite_chart_tags(text):
+    """Replace every <chart ... s3key="..."> with <chart ... url="<presigned>">."""
+    def _sub(m):
+        attrs = m.group(1)
+        key_m = _S3KEY_ATTR_RE.search(attrs)
+        if not key_m:
+            return m.group(0)
+        url = _presign_chart_key(key_m.group(1).strip())
+        if not url:
+            return m.group(0)
+        new_attrs = _S3KEY_ATTR_RE.sub('url="%s"' % url, attrs, count=1)
+        return "<chart%s/>" % new_attrs
+    return _CHART_TAG_RE.sub(_sub, text)
+
+
+def _chart_split_flushable(buf):
+    """Hold back from the last '<' that could begin an incomplete <chart ...> tag."""
+    lt = buf.rfind("<")
+    if lt == -1:
+        return buf, ""
+    tail = buf[lt:]
+    if ">" in tail:
+        return buf, ""
+    if len(tail) <= len("<chart") and not "<chart".startswith(tail.lower()):
+        return buf, ""
+    if len(tail) > _CHART_TAG_MAX:
+        return buf, ""
+    return buf[:lt], tail
+# ──────────────────────────────────────────────────────────────────────────────
 
 # Gateway configuration
 GATEWAY_URL = os.getenv("GATEWAY_URL", "")
@@ -241,13 +307,38 @@ async def agent_invocation(payload, context):
             return streamablehttp_client(GATEWAY_URL, headers={"Authorization": f"Bearer {access_token}"})
         
         mcp_client = MCPClient(create_transport)
-        
+
+        # Chart tool (optional): when the top-up stack enables charts
+        # (ENABLE_CHART_TOOL=true + a custom CHART_CI_ID code interpreter that can
+        # write to S3), expose the code-interpreter tool so the agent can render and
+        # upload chart PNGs. Built here so the Agent's tools list can include it.
+        chart_tools = []
+        chart_prompt = SYSTEM_PROMPT
+        if _CODE_INTERPRETER_AVAILABLE and os.getenv("ENABLE_CHART_TOOL", "false").lower() == "true":
+            try:
+                ci_kwargs = {"region": os.getenv("AWS_REGION", "us-east-1")}
+                if os.getenv("CHART_CI_ID"):
+                    ci_kwargs["identifier"] = os.getenv("CHART_CI_ID")
+                _ci = AgentCoreCodeInterpreter(**ci_kwargs)
+                chart_tools = [_ci.code_interpreter]
+                _cb = os.getenv("CHART_BUCKET") or os.getenv("SOP_S3_BUCKET", "")
+                if _cb:
+                    # The sandbox does NOT inherit env vars — give it literal values.
+                    chart_prompt = SYSTEM_PROMPT + (
+                        "\n\n## CHART UPLOAD TARGET\n"
+                        "When generating a chart (Step 4b), use these LITERAL values in the sandbox code:\n"
+                        "  __CHART_BUCKET__ = %s\n"
+                        "  __CHART_REGION__ = %s\n" % (_cb, os.getenv("AWS_REGION", "us-east-1"))
+                    )
+            except Exception as e:
+                print("[CHART] Code interpreter unavailable: %s" % e)
+
         # ====================================================================
         # TODO 2.3.2 (Step 2): Create the Strands Agent.
         #   Replace `None` below with an Agent that wires the pieces together:
         #     Agent(model=bedrock_model,
-        #           system_prompt=SYSTEM_PROMPT,
-        #           tools=[mcp_client, current_datetime],  # mcp_client = the Gateway's tools
+        #           system_prompt=chart_prompt,
+        #           tools=[mcp_client, current_datetime, *chart_tools],  # Gateway + chart tools
         #           hooks=[],                               # <-- you'll change this in TODO 2.8
         #           callback_handler=None,
         #           state={"actor_id": actor_id, "session_id": runtime_session_id})
@@ -256,9 +347,28 @@ async def agent_invocation(payload, context):
         #   (memory_hooks is already built for you near the top of this file.)
         # ====================================================================
         request_agent = None  # TODO 2.3.2: replace with Agent(...)
-        
+
+        # Stream events, presigning any <chart s3key="..."> tag into a viewable URL.
+        # A small tail is held back so a tag spanning delta boundaries is never split.
+        pending = ""
         async for event in request_agent.stream_async(enhanced_prompt):
-            yield event
+            ev = event.get("event") if isinstance(event, dict) else None
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("contentBlockDelta", {}).get("delta", {}).get("text") is not None:
+                pending += ev["contentBlockDelta"]["delta"]["text"]
+                flush, pending = _chart_split_flushable(pending)
+                if flush:
+                    yield {"event": {"contentBlockDelta": {"delta": {"text": _rewrite_chart_tags(flush)}}}}
+                continue
+            tool_use = ev.get("contentBlockStart", {}).get("start", {}).get("toolUse")
+            if isinstance(tool_use, dict) and tool_use.get("name"):
+                yield {"event": {"contentBlockStart": {"start": {"toolUse": {
+                    "name": tool_use["name"],
+                    "toolUseId": tool_use.get("toolUseId", ""),
+                }}}}}
+        if pending:
+            yield {"event": {"contentBlockDelta": {"delta": {"text": _rewrite_chart_tags(pending)}}}}
                 
     except Exception as e:
         print(f"❌ Request failed: {str(e)}")

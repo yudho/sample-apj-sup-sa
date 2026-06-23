@@ -256,6 +256,8 @@ async def bot(runner_args: RunnerArguments):
 _VOICE_RUNTIME_MODE = os.getenv("VOICE_RUNTIME_MODE", "").lower()
 
 if _VOICE_RUNTIME_MODE == "agentcore":
+    import asyncio
+
     import boto3
     from bedrock_agentcore.runtime import BedrockAgentCoreApp
     from pipecat.runner.types import SmallWebRTCRunnerArguments
@@ -273,6 +275,9 @@ if _VOICE_RUNTIME_MODE == "agentcore":
     # One handler per container; it tracks the live SmallWebRTCConnection so trickled
     # ICE candidates (separate /invocations POSTs) reach the right peer connection.
     _request_handler: "SmallWebRTCRequestHandler | None" = None
+    # Strong refs to the in-flight pipeline tasks so they aren't garbage-collected
+    # while running in the background (the offer handler returns before they finish).
+    _pipeline_tasks: set = set()
 
     def get_kvs_ice_servers() -> list:
         """Fetch TURN credentials from Amazon Kinesis Video Streams (managed TURN).
@@ -383,6 +388,13 @@ if _VOICE_RUNTIME_MODE == "agentcore":
             # runtime's JWT authorizer, passed through via the header allowlist) — the
             # same single identity channel the Strands analytics agent uses.
             user_token = _bearer_from_headers(context)
+            # Pull our own out-of-band fields OUT of the offer data before building the
+            # SmallWebRTCRequest — it only accepts the SDP fields (sdp/type/pc_id/
+            # restart_pc) and raises TypeError on any extra key (e.g. runtimeSessionId,
+            # which the signaling proxy adds so voice+text share one Memory thread; and
+            # a legacy gateway_token that an older proxy might still send).
+            _OOB_KEYS = {"runtimeSessionId", "gateway_token"}
+            sdp_data = {k: v for k, v in data.items() if k not in _OOB_KEYS}
             runtime_session_id = data.get("runtimeSessionId")
             if runtime_session_id:
                 logger.info(f"[voice] offer for session {runtime_session_id[:24]}...")
@@ -390,9 +402,21 @@ if _VOICE_RUNTIME_MODE == "agentcore":
             _request_handler = SmallWebRTCRequestHandler(ice_servers=ice_servers)
 
             async def _on_connection(connection):
-                await _run_webrtc_session(connection, user_token, runtime_session_id)
+                # Launch the pipeline in the BACKGROUND and return immediately. The
+                # SmallWebRTCRequestHandler awaits this callback BEFORE it returns the
+                # SDP answer (request_handler.py: `await webrtc_connection_callback`
+                # then `get_answer()`), so if we awaited the full pipeline here the
+                # answer would never reach the browser until the session ended ~30s
+                # later — ICE would time out and the offer POST would 502. Scheduling
+                # the pipeline as a task lets the answer flush right away so ICE can
+                # negotiate; we keep a reference so the task isn't GC'd mid-run.
+                task = asyncio.create_task(
+                    _run_webrtc_session(connection, user_token, runtime_session_id)
+                )
+                _pipeline_tasks.add(task)
+                task.add_done_callback(_pipeline_tasks.discard)
 
-            request = SmallWebRTCRequest.from_dict(data)
+            request = SmallWebRTCRequest.from_dict(sdp_data)
             answer = await _request_handler.handle_web_request(
                 request=request, webrtc_connection_callback=_on_connection
             )
@@ -403,8 +427,11 @@ if _VOICE_RUNTIME_MODE == "agentcore":
             if _request_handler is None:
                 yield {"error": "no active connection for ice-candidates"}
                 return
-            data["candidates"] = [IceCandidate(**c) for c in data.get("candidates", [])]
-            await _request_handler.handle_patch_request(SmallWebRTCPatchRequest(**data))
+            # Strip any out-of-band key (runtimeSessionId / gateway_token) —
+            # SmallWebRTCPatchRequest is as strict as SmallWebRTCRequest about kwargs.
+            patch = {k: v for k, v in data.items() if k not in ("runtimeSessionId", "gateway_token")}
+            patch["candidates"] = [IceCandidate(**c) for c in patch.get("candidates", [])]
+            await _request_handler.handle_patch_request(SmallWebRTCPatchRequest(**patch))
             yield {"status": "ok"}
         else:
             yield {"error": f"unknown request type: {rtype}"}
