@@ -14,7 +14,7 @@ Usage: python3 build_experiment.py
 """
 import json, os
 
-GT_PATH = os.path.join(os.path.dirname(__file__), "../../../dataset/validation/ground_truth.json")
+GT_PATH = os.path.join(os.path.dirname(__file__), "../../dataset/validation/ground_truth.json")
 with open(GT_PATH) as f:
     GT = json.load(f)
 
@@ -554,7 +554,7 @@ add("policy-admin-all-tools", "What tools do you have available?",
 
 # ---- Save ----
 experiment = {"cases": cases}
-out_path = os.path.join(os.path.dirname(__file__), "../../../dataset/validation/experiment.json")
+out_path = os.path.join(os.path.dirname(__file__), "../../dataset/validation/experiment.json")
 with open(out_path, "w") as f:
     json.dump(experiment, f, indent=2)
 

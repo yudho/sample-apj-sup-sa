@@ -34,8 +34,10 @@ from strands_evals.evaluators import OutputEvaluator
 
 # ---- Config ----
 EVAL_DIR = Path(__file__).resolve().parent
-EXPERIMENT_PATH = EVAL_DIR / "../../../dataset/validation/experiment.json"
-RESULTS_DIR = EVAL_DIR / "../../../dataset/validation/results"
+# NOTE: moved from app/agentcore_strands/evaluation/ to dev/evaluation/ (one level
+# shallower), so the dataset hop is ../../ not ../../../.
+EXPERIMENT_PATH = EVAL_DIR / "../../dataset/validation/experiment.json"
+RESULTS_DIR = EVAL_DIR / "../../dataset/validation/results"
 
 # Persona → Cognito credentials (from deploy_policy.py test users)
 PERSONAS = {
@@ -64,7 +66,7 @@ PERSONAS = {
 
 # Gateway config (loaded from .env or gateway_config.json)
 def load_gateway_config():
-    config_path = EVAL_DIR / "../gateway_config.json"
+    config_path = EVAL_DIR / "../../app/agentcore_strands/gateway_config.json"
     if config_path.exists():
         with open(config_path) as f:
             return json.load(f)
