@@ -196,9 +196,13 @@ Resources:
       ManageMasterUserPassword: true
       AllocatedStorage: "20"
       StorageType: gp3
-      StorageEncrypted: true                 # RDS_STORAGE_ENCRYPTED / CKV_AWS_16 (default RDS key, no cost)
-      AutoMinorVersionUpgrade: true          # RDS_AUTOMATIC_MINOR_VERSION_UPGRADE_ENABLED
-      EnableIAMDatabaseAuthentication: true  # CKV_AWS_161 (coexists with the Secrets-Manager password)
+      # RDS_STORAGE_ENCRYPTED / CKV_AWS_16: StorageEncrypted is an IMMUTABLE property — enabling it
+      # on an EXISTING unencrypted instance forces a REPLACEMENT, and with DeletionPolicy: Delete that
+      # destroys the POC DB's data. So it is intentionally LEFT OFF here (reported, not suppressed —
+      # see SECURITY-SCAN-NOTES.md). For a FRESH deploy that wants at-rest encryption, set
+      # `StorageEncrypted: true` (default RDS key, no cost) BEFORE the first create.
+      AutoMinorVersionUpgrade: true          # RDS_AUTOMATIC_MINOR_VERSION_UPGRADE_ENABLED (in-place, no replace)
+      EnableIAMDatabaseAuthentication: true  # CKV_AWS_161 (in-place; coexists with the Secrets-Manager password)
       # PubliclyAccessible + single-AZ are intentional for this POC (the laptop harness reaches the DB
       # over its public endpoint; demo scale). Reported, not suppressed — see SECURITY-SCAN-NOTES.md.
       PubliclyAccessible: true

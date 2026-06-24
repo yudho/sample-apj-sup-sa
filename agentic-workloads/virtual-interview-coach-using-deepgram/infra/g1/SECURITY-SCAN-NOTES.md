@@ -8,8 +8,8 @@ Baseline from Holmes scan `c4b6b927` (2026-06-22): **191 findings, 93 HIGH**
 | Scanner | HIGH before | HIGH after | Disposition of the rest |
 |---|---|---|---|
 | Bandit | 0 | **0** | already clean |
-| cfn-guard (wa rule names) | 65 | 29 rule-failures | 36 cleared (fixed or KMS-suppressed); 29 are intentional-design / false-positive — see §C |
-| Checkov (Holmes HIGH IDs) | 24 | 7 cleared (2 fixed, 5 suppressed) | remainder intentional-design — see §C |
+| cfn-guard (wa rule names) | 65 | 30 rule-failures | 35 cleared (fixed or KMS-suppressed); 30 are intentional-design / false-positive — see §C |
+| Checkov (Holmes HIGH IDs) | 24 | 6 cleared (1 fixed, 5 suppressed) | remainder intentional-design — see §C |
 | Semgrep raw-SQL | 2 | 2 (false positive) | §D — reported, not silenced |
 
 `cfn-lint` is **clean (0)** on all three templates after the edits — every change is
@@ -20,7 +20,8 @@ property that breaks deploy under modern S3 Object Ownership — see §C `S3_BUC
 public WebRTC/ALB ingress (load-bearing), HTTP-only ALB behind CloudFront TLS, default
 CloudFront cert, S3 access-logging + Object Lock (need a dedicated log bucket / fight teardown),
 versioning-off on PII buckets (bounded-blast-radius delete), single-AZ + public RDS (POC),
-disabled secret rotation (documented), and scoped inline IAM policies.
+RDS storage-encryption (immutable — can't enable without replacing the live DB; set on a fresh
+deploy), disabled secret rotation (documented), and scoped inline IAM policies.
 
 Local toolchain used to reproduce + verify (no Holmes upload needed for the loop):
 
@@ -50,8 +51,7 @@ names Holmes reports), compiled to a single guard file.
 
 | Finding(s) | Resource | Fix |
 |---|---|---|
-| RDS_STORAGE_ENCRYPTED, CKV_AWS_16 | LatencyDB | `StorageEncrypted: true` (default RDS key, no cost) |
-| RDS_AUTOMATIC_MINOR_VERSION_UPGRADE_ENABLED | LatencyDB | `AutoMinorVersionUpgrade: true` |
+| RDS_AUTOMATIC_MINOR_VERSION_UPGRADE_ENABLED | LatencyDB | `AutoMinorVersionUpgrade: true` (in-place update, no replacement) |
 | CKV_AWS_161 | LatencyDB | `EnableIAMDatabaseAuthentication: true` (coexists with Secrets-Manager password auth) |
 | CKV_AWS_27 | ReportQueue | `SqsManagedSseEnabled: true` (SSE-SQS, AWS-managed, free) |
 | S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED | SpaBucket, SourceBucket | `BucketEncryption` SSE-S3 (AES256) |
@@ -83,6 +83,7 @@ names Holmes reports), compiled to a single guard file.
 | S3_BUCKET_DEFAULT_LOCK_ENABLED | all buckets | Object Lock would block the `DeletionPolicy: Delete` teardown the demo relies on. |
 | S3_BUCKET_VERSIONING_ENABLED | ResumeBucket, AudioBucket | Versioning intentionally OFF on PII buckets — overwrite/delete must leave NO recoverable version (bounded-blast-radius delete, Constitution III). |
 | S3_BUCKET_NO_PUBLIC_RW_ACL | all buckets | False positive — every bucket sets `PublicAccessBlockConfiguration` (all four flags true), which blocks ALL public access. The rule only PASSes if a non-`PublicReadWrite` `AccessControl` is set, but `AccessControl` is a **legacy property** (cfn-lint W3045) that fails deploy on buckets with the modern default Object Ownership = BucketOwnerEnforced, so it is deliberately NOT set. |
+| RDS_STORAGE_ENCRYPTED, CKV_AWS_16 | LatencyDB | `StorageEncrypted` is IMMUTABLE — enabling it on the already-deployed instance forces a REPLACEMENT, and with `DeletionPolicy: Delete` that destroys the POC DB's data. Left off (a fresh deploy can set it before first create; documented inline). |
 | RDS_INSTANCE_PUBLIC_ACCESS_CHECK, CKV_AWS_17 | LatencyDB | POC: the laptop harness reaches the DB over its public endpoint; `HarnessIngressCidr` is documented "RESTRICT before real use". |
 | RDS_MULTI_AZ_SUPPORT | LatencyDB | Single-AZ by design (demo scale / cost). |
 | RDS_MASTER_USER_PASSWORD_USES_SECURE_PARAMETER | LatencyDB | False positive — `ManageMasterUserPassword: true` (RDS-managed secret, no plaintext password). |
