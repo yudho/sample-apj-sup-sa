@@ -747,11 +747,21 @@ def cells() -> list[dict]:
         )),
         code(dedent(
             """\
+            def _first_message_text(resp):
+                # Defensive: any level (response, choices, the first choice,
+                # message) may be missing or None on errored records. Some
+                # models (e.g. gpt-oss) put text in reasoning_content rather
+                # than content, so fall back to that before giving up.
+                choices = (resp or {}).get("choices") or []
+                msg = (choices[0] or {}).get("message") if choices else None
+                msg = msg or {}
+                return msg.get("content") or msg.get("reasoning_content") or ""
+
             samples = sample_outputs(report, n=3, region=REGION)
             for s in samples:
                 print("---", s.get("id", "?"))
                 print("error:  ", s.get("error"))
-                print("output: ", (s.get("response") or {}).get("choices", [{}])[0].get("message", {}).get("content", "")[:200])
+                print("output: ", _first_message_text(s.get("response"))[:200])
             """
         )),
 
