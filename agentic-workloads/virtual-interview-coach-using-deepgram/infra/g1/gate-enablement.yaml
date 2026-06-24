@@ -196,11 +196,14 @@ Resources:
       ManageMasterUserPassword: true
       AllocatedStorage: "20"
       StorageType: gp3
-      # RDS_STORAGE_ENCRYPTED / CKV_AWS_16: StorageEncrypted is an IMMUTABLE property — enabling it
-      # on an EXISTING unencrypted instance forces a REPLACEMENT, and with DeletionPolicy: Delete that
-      # destroys the POC DB's data. So it is intentionally LEFT OFF here (reported, not suppressed —
-      # see SECURITY-SCAN-NOTES.md). For a FRESH deploy that wants at-rest encryption, set
-      # `StorageEncrypted: true` (default RDS key, no cost) BEFORE the first create.
+      # RDS_STORAGE_ENCRYPTED / CKV_AWS_16: at-rest encryption with the default RDS key (no cost).
+      # WARNING — StorageEncrypted is an IMMUTABLE property. This is correct ONLY on a FRESH deploy
+      # (set before the first create). Applying it to an ALREADY-DEPLOYED unencrypted LatencyDB forces
+      # a REPLACEMENT, and with DeletionPolicy: Delete that DESTROYS the POC DB's data (sessions,
+      # question bank, guidance). Do NOT `cloudformation deploy` this change onto an existing stack
+      # without a data-preserving migration (snapshot -> encrypted-copy -> restore). See
+      # SECURITY-SCAN-NOTES.md.
+      StorageEncrypted: true
       AutoMinorVersionUpgrade: true          # RDS_AUTOMATIC_MINOR_VERSION_UPGRADE_ENABLED (in-place, no replace)
       EnableIAMDatabaseAuthentication: true  # CKV_AWS_161 (in-place; coexists with the Secrets-Manager password)
       # PubliclyAccessible + single-AZ are intentional for this POC (the laptop harness reaches the DB
