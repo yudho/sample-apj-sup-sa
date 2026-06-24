@@ -57,6 +57,7 @@ names Holmes reports), compiled to a single guard file.
 | CKV_AWS_27 | ReportQueue | `SqsManagedSseEnabled: true` (SSE-SQS, AWS-managed, free) |
 | S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED | SpaBucket, SourceBucket | `BucketEncryption` SSE-S3 (AES256) |
 | S3_BUCKET_SSL_REQUESTS_ONLY | SpaBucket | bucket policy deny when `aws:SecureTransport=false` |
+| IAM and Authorization (IAM1a, `kms:*` to root) | ResumeKmsKey, AudioKmsKey | Replaced the default `kms:*`-to-root key policy with two scoped statements: `EnableIAMDelegation` (the data actions the task roles use — Encrypt/Decrypt/ReEncrypt*/GenerateDataKey*/DescribeKey + grant ops) and `AllowKeyAdministration` (partial-wildcard key-admin set kms:Create*/Put*/Delete*/ScheduleKeyDeletion/… for root, so no lockout). No full `kms:*` wildcard remains. cfn-lint clean on all three templates. |
 
 ## B. KMS-CMK findings — SUPPRESSED with justification
 
@@ -91,6 +92,18 @@ names Holmes reports), compiled to a single guard file.
 | IAM_NO_INLINE_POLICY_CHECK | task/build roles | Inline policies are scoped to single-purpose roles and deleted with them — appropriate + self-contained for a sample. |
 | CKV_AWS_107 | CodeBuildRole | Build role needs `ecr:GetAuthorizationToken` / `sts:GetServiceBearerToken` to push images; scoped to the three repos. |
 
+### C.1 Holmes CSR-rubric-only HIGH/MEDIUM (scan `bb358010`, 2026-06-24) — LEFT + reported
+
+These are AI-rubric findings from the Holmes CSR scan only (not in the Checkov/cfn-guard/Bandit
+3-tool loop above). Counts vary run-to-run by AI evaluation variance — Holmes itself advises
+focusing on HIGH trends, not exact counts. The KMS `kms:*`-to-root HIGH (IAM1a) flagged on the
+first scan (`c34f7f76`) was FIXED — see §A — and no longer appears.
+
+| Finding | Sev | Resource | Rationale (sample-scope) |
+|---|---|---|---|
+| GenAI and Responsible AI Compliance (no Bedrock Guardrails / output validation) | HIGH | `voice-worker/src/reply/bedrock_direct.py` (`converse_stream`, lines 83-88; raw deltas `yield`ed at line 110), `backend/src/jd_scrape.py`, `backend/src/prep/blueprint.py` | **Load-bearing latency trade-off (Constitution I).** The live reply path streams model deltas token-by-token to keep the response_gap under the SC-001 gate (p50<1000/p95<1500). An inline Bedrock Guardrail on the streaming critical path adds per-turn latency that would regress the proven gate. For a non-production sample this is out of scope; a production deployment SHOULD enable Bedrock Guardrails (and add a "coaching feedback is not authoritative" disclaimer). Documented here rather than silenced. |
+| IAM and Authorization (Bedrock ARN region wildcard `arn:aws:bedrock:*::foundation-model/*`) | MEDIUM | `deploy.yaml` (Backend/ReportWorker task roles), `gate-enablement.yaml` (InterviewAgent) | Intentional. The region wildcard is required because cross-region inference profiles (`us.*`) route to the underlying foundation-model ARNs in multiple regions (inline comment, deploy.yaml lines 357-360). Action is already scoped to the model FAMILIES actually invoked (Haiku 4.5 + Titan embed v2) in deploy.yaml; the gate-enablement harness agent keeps `foundation-model/*` ("Broad for POC", line 113). Restrict before production use. |
+
 ## D. Semgrep raw-SQL (bank/embed.py, bank/load_fixture.py) — reported, NOT silenced
 
 False positive, LEFT in place per the "fix-only, don't silence non-KMS" policy:
@@ -107,3 +120,17 @@ False positive, LEFT in place per the "fix-only, don't silence non-KMS" policy:
 If a clean Holmes Semgrep pass is required, add a targeted `# nosemgrep:
 python.sqlalchemy.security.sqlalchemy-execute-raw-query` on the two `conn.execute(f"""CREATE
 INDEX ...""")` lines. Not applied here to honor "report, don't silence" for non-KMS findings.
+
+## E. Bandit B608 raw-SQL (backend/src/prep/retrieval.py) — reported, NOT silenced
+
+False positive, LEFT in place per the same "report, don't silence non-KMS" policy:
+- `retrieve_ranked` builds its query with an f-string, but the ONLY interpolated value is the
+  module-level constant `_SELECT_COLS` (a hardcoded column list — no user input). Every dynamic
+  value (`jd_embedding`, `difficulty`, `role_family`, `industry`, `limit`) is passed as a bound
+  asyncpg parameter `$1`–`$6`. There is no injection vector.
+- Bandit ranks B608 as MEDIUM, so the local `--severity-level high` loop reports it as 0; Holmes
+  maps it to HIGH in its own severity scheme. Same finding, not a regression.
+- The companion `count_domain_matches` query is a plain string literal (no interpolation at all).
+- Holmes-only scanners (CSR rubric scan, 2026-06-24, scan `c34f7f76`) also flag the two §D
+  Semgrep files and three test fixtures (B105/B106 fake secrets, B608 in test SQL) — all noise,
+  not silenced.

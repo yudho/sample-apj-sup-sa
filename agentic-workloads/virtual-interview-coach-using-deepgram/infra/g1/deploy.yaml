@@ -1199,12 +1199,46 @@ Resources:
       EnableKeyRotation: true
       KeyPolicy:
         Version: "2012-10-17"
+        # Least-privilege replacement for the default 'kms:*'-to-root policy (Holmes IAM1a).
+        # Runtime data access is granted by the scoped IAM task-role policies above; this key
+        # policy enables that IAM delegation (the data actions those roles use must also be
+        # allowed here) plus explicit key administration for root so the account never loses
+        # control of the key (no lockout). Only partial wildcards (kms:Create*, etc.) — the
+        # AWS-canonical key-admin set — are used; no full 'kms:*' wildcard.
         Statement:
-          - Sid: RootAccountAdmin
+          - Sid: EnableIAMDelegation
             Effect: Allow
             Principal:
               AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
-            Action: kms:*
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: "*"
+          - Sid: AllowKeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
             Resource: "*"
       Tags:
         - Key: project
@@ -1258,12 +1292,46 @@ Resources:
       EnableKeyRotation: true
       KeyPolicy:
         Version: "2012-10-17"
+        # Least-privilege replacement for the default 'kms:*'-to-root policy (Holmes IAM1a).
+        # Runtime data access is granted by the scoped IAM task-role policies above; this key
+        # policy enables that IAM delegation (the data actions those roles use must also be
+        # allowed here) plus explicit key administration for root so the account never loses
+        # control of the key (no lockout). Only partial wildcards (kms:Create*, etc.) — the
+        # AWS-canonical key-admin set — are used; no full 'kms:*' wildcard.
         Statement:
-          - Sid: RootAccountAdmin
+          - Sid: EnableIAMDelegation
             Effect: Allow
             Principal:
               AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
-            Action: kms:*
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: "*"
+          - Sid: AllowKeyAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - kms:Create*
+              - kms:Describe*
+              - kms:Enable*
+              - kms:List*
+              - kms:Put*
+              - kms:Update*
+              - kms:Revoke*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:TagResource
+              - kms:UntagResource
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
             Resource: "*"
       Tags:
         - Key: project

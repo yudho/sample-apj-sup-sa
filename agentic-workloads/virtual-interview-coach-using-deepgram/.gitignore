@@ -61,3 +61,5 @@ Thumbs.db
 # Security-scan working dir (cloned guard rulesets + scan output; reproduce locally, never commit)
 .scan-logs/
 .codex-review-logs/
+# Holmes MCP local project/scan linkage (project + scan IDs; regenerated per scan, never commit)
+.holmes/
