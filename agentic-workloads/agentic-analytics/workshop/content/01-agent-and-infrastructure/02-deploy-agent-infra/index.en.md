@@ -86,14 +86,14 @@ SYSTEM_PROMPT = load_system_prompt()
 
 #### TODO 2.3.2: Create the Agent
 
-Wire the components together. Find `TODO 2.3.2` — replace `None` with an :link[Agent]{href="https://strandsagents.com/latest/user-guide/concepts/agents/agent-loop/" external=true} constructor. Notice how `mcp_client` is included in the tools list alongside `current_datetime` — this is what connects the agent to the Gateway's MCP tools. The Gateway has no toolsets yet (you'll add them in later steps), but the wiring is in place. The `*chart_tools` entry (built just above) adds the chart code-interpreter tool when charts are enabled, and `chart_prompt` is the system prompt with the chart-upload hint. Leave `hooks=[]` for now — you'll switch it on in the next TODO.
+Wire the components together. Find `TODO 2.3.2` — replace `None` with an :link[Agent]{href="https://strandsagents.com/latest/user-guide/concepts/agents/agent-loop/" external=true} constructor. Pass it `system_prompt` (the SOP you loaded in TODO 2.3.1) and `agent_tools` — both assembled for you just above. `agent_tools` includes the `mcp_client`, which is what connects the agent to the Gateway's MCP tools; the Gateway has no toolsets yet (you'll add them in later steps), but the wiring is in place. Leave `hooks=[]` for now — you'll switch it on in the next TODO.
 
 ::::expand{header="💡 Need help with TODO 2.3.2? Click to see the solution"}
 :::code{language=python showCopyAction=true}
 request_agent = Agent(
     model=bedrock_model,
-    system_prompt=chart_prompt,
-    tools=[mcp_client, current_datetime, *chart_tools],
+    system_prompt=system_prompt,
+    tools=agent_tools,
     hooks=[],
     callback_handler=None,
     state={"actor_id": actor_id, "session_id": runtime_session_id},

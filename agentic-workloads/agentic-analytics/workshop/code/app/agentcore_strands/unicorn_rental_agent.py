@@ -308,23 +308,26 @@ async def agent_invocation(payload, context):
         
         mcp_client = MCPClient(create_transport)
 
-        # Chart tool (optional): when the top-up stack enables charts
-        # (ENABLE_CHART_TOOL=true + a custom CHART_CI_ID code interpreter that can
-        # write to S3), expose the code-interpreter tool so the agent can render and
-        # upload chart PNGs. Built here so the Agent's tools list can include it.
-        chart_tools = []
-        chart_prompt = SYSTEM_PROMPT
+        # The agent's tools and system prompt are assembled here for you, ready to
+        # pass to the Agent() in TODO 2.3.2. `agent_tools` always includes the Gateway
+        # MCP client + current_datetime; `system_prompt` starts from the SOP you loaded
+        # in TODO 2.3.1. The optional chart code-interpreter tool (and its upload hint)
+        # are added below only when the top-up stack enables charts (ENABLE_CHART_TOOL=
+        # true + a custom CHART_CI_ID interpreter that can write PNGs to S3) — you don't
+        # need to touch this for Step 2; it just works once charts are turned on later.
+        agent_tools = [mcp_client, current_datetime]
+        system_prompt = SYSTEM_PROMPT
         if _CODE_INTERPRETER_AVAILABLE and os.getenv("ENABLE_CHART_TOOL", "false").lower() == "true":
             try:
                 ci_kwargs = {"region": os.getenv("AWS_REGION", "us-east-1")}
                 if os.getenv("CHART_CI_ID"):
                     ci_kwargs["identifier"] = os.getenv("CHART_CI_ID")
                 _ci = AgentCoreCodeInterpreter(**ci_kwargs)
-                chart_tools = [_ci.code_interpreter]
+                agent_tools.append(_ci.code_interpreter)
                 _cb = os.getenv("CHART_BUCKET") or os.getenv("SOP_S3_BUCKET", "")
                 if _cb:
                     # The sandbox does NOT inherit env vars — give it literal values.
-                    chart_prompt = SYSTEM_PROMPT + (
+                    system_prompt = SYSTEM_PROMPT + (
                         "\n\n## CHART UPLOAD TARGET\n"
                         "When generating a chart (Step 4b), use these LITERAL values in the sandbox code:\n"
                         "  __CHART_BUCKET__ = %s\n"
@@ -337,8 +340,8 @@ async def agent_invocation(payload, context):
         # TODO 2.3.2 (Step 2): Create the Strands Agent.
         #   Replace `None` below with an Agent that wires the pieces together:
         #     Agent(model=bedrock_model,
-        #           system_prompt=chart_prompt,
-        #           tools=[mcp_client, current_datetime, *chart_tools],  # Gateway + chart tools
+        #           system_prompt=system_prompt,            # the SOP you loaded in TODO 2.3.1
+        #           tools=agent_tools,                      # Gateway MCP client + current_datetime
         #           hooks=[],                               # <-- you'll change this in TODO 2.8
         #           callback_handler=None,
         #           state={"actor_id": actor_id, "session_id": runtime_session_id})
