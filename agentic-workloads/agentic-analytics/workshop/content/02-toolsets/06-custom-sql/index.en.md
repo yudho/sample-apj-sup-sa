@@ -93,7 +93,11 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 # ===== UNCOMMENT TO HERE (Step 6) =====
 ```
 
-Uncomment everything between the markers (this brings up `CustomSqlLambda`, its role + permission, and the `CustomSqlTarget` with its three tools: `text_to_sql_tool`, `get_schema_context_tool`, `execute_sql_tool`). The Lambda already imports the Glue database name and the Bedrock Knowledge Base id from the base stack's exports — no values to wire by hand. Then deploy:
+Uncomment everything between the markers (this brings up `CustomSqlLambda`, its role + permission, and the `CustomSqlTarget` with its three tools: `text_to_sql_tool`, `get_schema_context_tool`, `execute_sql_tool`). The Lambda already imports the Glue database name and the Bedrock Knowledge Base id from the base stack's exports — no values to wire by hand.
+
+::alert[**Tip — uncomment the whole block at once.** Don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the fence, then **Shift+click** the last line inside it to select the whole block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Select only the lines **between** the two `UNCOMMENT` markers — not the marker lines themselves.]{type="info"}
+
+Then deploy:
 
 ```bash
 cd /workshop/agentic-analytics/app/agentcore_strands

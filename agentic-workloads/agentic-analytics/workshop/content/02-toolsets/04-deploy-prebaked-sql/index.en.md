@@ -30,7 +30,11 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 # ===== UNCOMMENT TO HERE (Step 4) =====
 ```
 
-Delete the leading `# ` on every line **between** the two marker lines (this brings the `DataFoundationLambda`, its role + permission, the psycopg2 layer, and the `DataToolsTarget` to life). Then deploy:
+Delete the leading `# ` on every line **between** the two marker lines (this brings the `DataFoundationLambda`, its role + permission, the psycopg2 layer, and the `DataToolsTarget` to life).
+
+::alert[**Tip — uncomment the whole block at once.** This block is large, so don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the fence, then **Shift+click** the last line inside it to select the whole block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Select only the lines **between** the two `UNCOMMENT` markers — not the marker lines themselves.]{type="info"}
+
+Then deploy:
 
 ```bash
 cd /workshop/agentic-analytics/app/agentcore_strands

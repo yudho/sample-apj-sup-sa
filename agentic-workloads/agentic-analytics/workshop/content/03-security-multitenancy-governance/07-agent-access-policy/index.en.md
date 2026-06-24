@@ -75,6 +75,8 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 1. The **Policy Engine + Cedar policies** block (the `PolicyEngine` resource and the three `AWS::BedrockAgentCore::Policy` resources).
 2. The **3-line `PolicyEngineConfiguration` block on the Gateway** (this wires the Gateway to the policy engine — they must come live together, or the Gateway would reference a policy engine that doesn't exist).
 
+::alert[**Tip — uncomment each block at once.** Don't delete each `#` by hand, especially for the larger policy-engine block. The Code Editor is VS Code: click the first line *inside* a fence, then **Shift+click** the last line inside it to select the block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Do this for **both** Step-7a fences. Select only the lines **between** the markers — not the marker lines themselves.]{type="info"}
+
 ::::expand{header="💡 Need help with TODO 7.1? Click to see exactly what to uncomment"}
 Uncomment **both** Step-7a fences:
 - The `# ===== UNCOMMENT FROM HERE (Step 7a: Cedar policy engine ...)` fence — the `PolicyEngine`, `AllowAllToolsPolicy`, `ForbidWriteAnalystPolicy`, and `ForbidCustomSqlStaffPolicy` resources.

@@ -38,7 +38,11 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 # ===== UNCOMMENT TO HERE (Step 5) =====
 ```
 
-Uncomment everything between the markers (this brings up `ApiIntegLambda`, its role + permission, and the `ApiIntegTarget`). Then deploy:
+Uncomment everything between the markers (this brings up `ApiIntegLambda`, its role + permission, and the `ApiIntegTarget`).
+
+::alert[**Tip — uncomment the whole block at once.** Don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the fence, then **Shift+click** the last line inside it to select the whole block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Select only the lines **between** the two `UNCOMMENT` markers — not the marker lines themselves.]{type="info"}
+
+Then deploy:
 
 ```bash
 cd /workshop/agentic-analytics/app/agentcore_strands

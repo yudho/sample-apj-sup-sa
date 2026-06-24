@@ -38,6 +38,8 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 1. **Uncomment the `Step 8` fence** — the `Guardrail` resource (a `AWS::Bedrock::Guardrail` with the denied topic, content filters, and PII filters already written). The denied topic is **DangerousAdvice** — it blocks medical, legal, and financial advice that requires licensed expertise.
 2. **Flip the two Runtime env lines** — find `GUARDRAIL_ID` and `GUARDRAIL_VERSION` in the `AgentRuntime` `EnvironmentVariables` (they ship as empty strings) and point them at the guardrail you just uncommented.
 
+::alert[**Tip — uncomment the block at once.** For edit #1, don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the `Step 8` fence, then **Shift+click** the last line inside it to select the whole `Guardrail` block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off in one go. Select only the lines **between** the two `UNCOMMENT` markers. (Edit #2 is just a two-line value change — do that by hand.)]{type="info"}
+
 ::::expand{header="💡 Need help with TODO 8.1? Click to see the solution"}
 - Uncomment the `# ===== UNCOMMENT FROM HERE (Step 8: Bedrock Guardrail) =====` fence (the whole `Guardrail:` resource).
 - In `AgentRuntime` → `EnvironmentVariables`, change:
