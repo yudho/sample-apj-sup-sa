@@ -167,22 +167,6 @@ MODEL_CONFIGS: dict[str, BatchModelConfig] = {
         concurrency_default=64,
         primary_instance="g6e.12xlarge",
     ),
-    "qwen3_vl_30b_a3b": BatchModelConfig(
-        package="qwen3_vl_30b_a3b",
-        var_name="QWEN3_VL_30B_A3B",
-        nb_filename="qwen3_vl_30b_a3b_batch.ipynb",
-        display_name="Qwen3-VL 30B-A3B Instruct",
-        hf_repo="Qwen/Qwen3-VL-30B-A3B-Instruct",
-        domain="vision",
-        sample_data_file="01-charts.jsonl",
-        weight_gib=62.0,
-        weight_note="VLM 30B/3B-A MoE + ViT. ~62 GiB BF16. Always TP-only — pipeline parallel breaks VLMs in vLLM. Caps image-token KV explosion via --limit-mm-per-prompt + --max-num-seqs.",
-        gated=False,
-        plans=["g6e_12xlarge_spot_single_queue", "g6e_2xlarge_spot_single_queue"],
-        default_plan="g6e_12xlarge_spot_single_queue",
-        concurrency_default=32,
-        primary_instance="g6e.12xlarge",
-    ),
 }
 
 
