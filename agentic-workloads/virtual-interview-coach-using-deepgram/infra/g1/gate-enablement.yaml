@@ -65,7 +65,7 @@ Parameters:
 
   DBEngineVersion:
     Type: String
-    Default: "16.4"
+    Default: "16.9"
     Description: Postgres major.minor version. Adjust if not offered in your region.
 
   DBInstanceClass:

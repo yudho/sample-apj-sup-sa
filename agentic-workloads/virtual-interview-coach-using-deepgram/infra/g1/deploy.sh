@@ -20,6 +20,14 @@ GATE_STACK="interviewcoach-g1"
 DEMO_STACK="interviewcoach-g1-demo"
 IMAGE_TAG="${1:-c1}"
 
+# DEPLOY_PHASE controls which legs run, so the CodeBuild image path (build-images.sh) slots in
+# cleanly without a Ctrl-C dance:
+#   all    (default) — pass-1 + local docker build/push of all three images + pass-2 + SPA
+#   pass1            — pass-1 only (create stack + ECR repos at desired=0) + populate Deepgram
+#                      secret, then stop. Run build-images.sh next, then DEPLOY_PHASE=finish.
+#   finish           — assume images already pushed: pass-2 (scale to 1) + force-new-deploy + SPA
+DEPLOY_PHASE="${DEPLOY_PHASE:-all}"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -88,34 +96,51 @@ deploy_stack() {
 }
 
 # ---- pass 1: create the stack + ECR repos with services at 0 (stabilizes immediately) --
-deploy_stack 0
+if [[ "$DEPLOY_PHASE" == "all" || "$DEPLOY_PHASE" == "pass1" ]]; then
+  deploy_stack 0
 
-WORKER_REPO="$(demo_out WorkerRepoUri)"
-BACKEND_REPO="$(demo_out BackendRepoUri)"
-echo "WorkerRepo=$WORKER_REPO  BackendRepo=$BACKEND_REPO"
+  WORKER_REPO="$(demo_out WorkerRepoUri)"
+  BACKEND_REPO="$(demo_out BackendRepoUri)"
+  REPORT_REPO="$(demo_out ReportWorkerRepoUri)"
+  echo "WorkerRepo=$WORKER_REPO  BackendRepo=$BACKEND_REPO  ReportRepo=$REPORT_REPO"
 
-# ---- build + push images (linux/amd64; Fargate is x86_64) ------------------------------
-log "ECR login"
-aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  # ---- populate the Deepgram secret from .env (never committed) ------------------------
+  log "Populating Deepgram secret from voice-worker/.env"
+  DEEPGRAM_KEY="$(grep -E '^DEEPGRAM_API_KEY=' voice-worker/.env | head -1 | cut -d= -f2-)"
+  if [[ -z "$DEEPGRAM_KEY" ]]; then
+    echo "WARNING: DEEPGRAM_API_KEY not found in voice-worker/.env — worker STT/TTS will fail." >&2
+  else
+    aws secretsmanager put-secret-value --region "$REGION" \
+      --secret-id "$DEEPGRAM_SECRET_ARN" \
+      --secret-string "{\"DEEPGRAM_API_KEY\":\"${DEEPGRAM_KEY}\"}" >/dev/null
+    echo "Deepgram secret updated."
+  fi
+fi
 
-log "Build + push voice-worker"
-docker build --platform linux/amd64 -t "${WORKER_REPO}:${IMAGE_TAG}" voice-worker/
-docker push "${WORKER_REPO}:${IMAGE_TAG}"
+# ---- build + push images (linux/amd64; Fargate is x86_64). Only in DEPLOY_PHASE=all; on an
+#      arm64 host (or no local Docker) use DEPLOY_PHASE=pass1, then build-images.sh, then
+#      DEPLOY_PHASE=finish instead. ------------------------------------------------------
+if [[ "$DEPLOY_PHASE" == "all" ]]; then
+  log "ECR login"
+  aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
-log "Build + push backend"
-docker build --platform linux/amd64 -t "${BACKEND_REPO}:${IMAGE_TAG}" backend/
-docker push "${BACKEND_REPO}:${IMAGE_TAG}"
+  log "Build + push voice-worker"
+  docker build --platform linux/amd64 -t "${WORKER_REPO}:${IMAGE_TAG}" voice-worker/
+  docker push "${WORKER_REPO}:${IMAGE_TAG}"
 
-# ---- populate the Deepgram secret from .env (never committed) --------------------------
-log "Populating Deepgram secret from voice-worker/.env"
-DEEPGRAM_KEY="$(grep -E '^DEEPGRAM_API_KEY=' voice-worker/.env | head -1 | cut -d= -f2-)"
-if [[ -z "$DEEPGRAM_KEY" ]]; then
-  echo "WARNING: DEEPGRAM_API_KEY not found in voice-worker/.env — worker STT/TTS will fail." >&2
-else
-  aws secretsmanager put-secret-value --region "$REGION" \
-    --secret-id "$DEEPGRAM_SECRET_ARN" \
-    --secret-string "{\"DEEPGRAM_API_KEY\":\"${DEEPGRAM_KEY}\"}" >/dev/null
-  echo "Deepgram secret updated."
+  log "Build + push backend"
+  docker build --platform linux/amd64 -t "${BACKEND_REPO}:${IMAGE_TAG}" backend/
+  docker push "${BACKEND_REPO}:${IMAGE_TAG}"
+
+  log "Build + push report-worker"
+  docker build --platform linux/amd64 -t "${REPORT_REPO}:${IMAGE_TAG}" report-worker/
+  docker push "${REPORT_REPO}:${IMAGE_TAG}"
+fi
+
+if [[ "$DEPLOY_PHASE" == "pass1" ]]; then
+  log "DEPLOY_PHASE=pass1 done — ECR repos created + Deepgram secret set."
+  echo "Next:  infra/g1/build-images.sh ${IMAGE_TAG}   then   DEPLOY_PHASE=finish infra/g1/deploy.sh ${IMAGE_TAG}"
+  exit 0
 fi
 
 # ---- pass 2: scale services to 1 now that images exist (CFN waits for steady state) ----
@@ -125,6 +150,8 @@ aws ecs update-service --region "$REGION" --cluster "$DEMO_STACK" \
   --service "${DEMO_STACK}-voice-worker" --force-new-deployment >/dev/null
 aws ecs update-service --region "$REGION" --cluster "$DEMO_STACK" \
   --service "${DEMO_STACK}-backend" --force-new-deployment >/dev/null
+aws ecs update-service --region "$REGION" --cluster "$DEMO_STACK" \
+  --service "${DEMO_STACK}-report-worker" --force-new-deployment >/dev/null
 
 # ---- SPA: write runtime config, build, upload, invalidate ------------------------------
 USER_POOL_ID="$(demo_out UserPoolId)"
