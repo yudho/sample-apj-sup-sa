@@ -324,11 +324,12 @@ def cells() -> list[dict]:
             """\
             ## 0.5 Persistent run logging (survives Jupyter freezes)
 
-            All Python `logging` output + stdout/stderr from this notebook
-            get mirrored to `outputs/_runs/<timestamp>/run.log` on disk.
-            Key results (section 8.5 through 8.9) are also saved as JSON +
-            CSV via the `persist()` helper so you can reconstruct the run
-            without needing the Jupyter kernel alive.
+            All Python `logging` output from this notebook is mirrored to
+            `outputs/_runs/<timestamp>/run.log` on disk, and the key results
+            (sections 8.5 through 8.9) are saved as JSON + CSV via the
+            `persist()` helper — so you can reconstruct the run without needing
+            the Jupyter kernel alive. Cell `print()` output still renders
+            normally in every cell (we don't redirect stdout).
 
             Safe to run multiple times — each invocation starts a new
             timestamped run dir; a symlink `outputs/_runs/latest` always
@@ -337,12 +338,12 @@ def cells() -> list[dict]:
         )),
         code(dedent(
             """\
-            # --- file logger + tee stdout ---
+            # --- file logger + persist() ---
             import logging
             from datetime import datetime
             _RUN_TS = datetime.now().strftime("%Y%m%dT%H%M%S")
             RUN_DIR = PROJECT_ROOT / "outputs" / "_runs" / _RUN_TS
-            RUN_DIR.mkdir(parents=True, exist_ok=True)
+            (RUN_DIR / "stats").mkdir(parents=True, exist_ok=True)
             _latest = PROJECT_ROOT / "outputs" / "_runs" / "latest"
             try:
                 if _latest.is_symlink() or _latest.exists():
@@ -351,54 +352,31 @@ def cells() -> list[dict]:
             except OSError:
                 pass
 
-            # Root logger: one FileHandler on top of whatever is there.
+            # Logging: one FileHandler (-> run.log, survives a Jupyter freeze)
+            # plus one StreamHandler so log lines also render in the cell.
+            #
+            # NOTE: we deliberately do NOT replace sys.stdout/sys.stderr. ipykernel
+            # hands each cell a fresh stdout that routes to that cell via iopub;
+            # capturing/replacing it in this setup cell freezes it on THIS cell's
+            # stream, so every later cell's print() (e.g. the cost numbers in
+            # 8.5-8.9) would vanish from the notebook. Leaving stdout alone means
+            # print() renders normally in every cell; run.log + persist() (below)
+            # provide the durable copy.
             _root = logging.getLogger()
             _root.setLevel(logging.INFO)
             _log_path = RUN_DIR / "run.log"
-            # Remove any previous handlers we added (re-run safety).
-            for _h in list(_root.handlers):
+            for _h in list(_root.handlers):          # re-run safety
                 if getattr(_h, "_persist_run", False):
                     _root.removeHandler(_h)
-            _fh = logging.FileHandler(_log_path)
-            _fh._persist_run = True
             _fmt = logging.Formatter(
                 "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                 datefmt="%Y-%m-%dT%H:%M:%S",
             )
+            _fh = logging.FileHandler(_log_path)
+            _fh._persist_run = True
             _fh.setFormatter(_fmt)
             _root.addHandler(_fh)
-
-            # Tee stdout/stderr so `print()` output is captured to a file too.
-            # IMPORTANT: wrap the *current* sys.stdout (in Jupyter this is
-            # ipykernel's OutStream, which routes to the cell via iopub) — NOT
-            # sys.__stdout__ (the raw kernel-process fd, which never reaches the
-            # cell). Wrapping __stdout__ was a bug: print() then showed in the
-            # kernel log + file but vanished from the notebook cell.
-            class _Tee:
-                def __init__(self, *streams):
-                    self._streams = streams
-                def write(self, s):
-                    for st in self._streams:
-                        st.write(s)
-                        st.flush()
-                def flush(self):
-                    for st in self._streams:
-                        st.flush()
-                def isatty(self):
-                    return False
-            if not getattr(sys.stdout, "_persist_run", False):
-                _stdout_file = open(RUN_DIR / "stdout.log", "a", buffering=1)
-                _stdout_tee = _Tee(sys.stdout, _stdout_file)
-                _stdout_tee._persist_run = True
-                sys.stdout = _stdout_tee
-                _stderr_tee = _Tee(sys.stderr, _stdout_file)
-                _stderr_tee._persist_run = True
-                sys.stderr = _stderr_tee
-
-            # StreamHandler so log messages also render in the Jupyter cell.
-            # Point it at the live sys.stdout (the Tee installed above), so logs
-            # reach both the cell and stdout.log exactly once.
-            _sh = logging.StreamHandler(sys.stdout)
+            _sh = logging.StreamHandler()            # live sys.stderr -> renders in-cell
             _sh._persist_run = True
             _sh.setFormatter(_fmt)
             _root.addHandler(_sh)
@@ -788,7 +766,7 @@ def cells() -> list[dict]:
             │       └── _summary.json         ← per-shard token counts + wall-clock
             │
             └── _runs/<timestamp>/            ← this run's LOGS + ANALYSIS (sections 0.5, 8.5-8.9)
-                ├── run.log, stdout.log
+                ├── run.log
                 └── stats/
                     ├── 8_8_cost_estimate.json        ← actual AWS bill (per-instance)
                     ├── 8_9_project_economics.json    ← $/1M tokens, total cost, real-world tok/s
