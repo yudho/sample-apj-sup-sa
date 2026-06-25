@@ -50,6 +50,7 @@ from pipecat.turns.user_start.min_words_user_turn_start_strategy import (
 from pipecat.turns.user_start.transcription_user_turn_start_strategy import (
     TranscriptionUserTurnStartStrategy,
 )
+from .turn_start_grace import GraceWindowMinWordsUserTurnStartStrategy
 from pipecat.turns.user_start.vad_user_turn_start_strategy import VADUserTurnStartStrategy
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
@@ -154,9 +155,14 @@ def _build_user_turn_strategies(config: Config) -> UserTurnStrategies:
     interrupt:
       - `VADUserTurnStartStrategy(enable_interruptions=False)`: VAD still detects speech-start for the
         NORMAL (coach-not-speaking) case, but does NOT raise an interruption frame on raw energy.
-      - `MinWordsUserTurnStartStrategy(min_words=N)`: a turn (and, mid-coach-speech, a barge-in) only
-        starts after N actually-transcribed words — silence/noise produce no transcript, so no false
-        barge-in. N is config-driven (`VOICE_BARGE_IN_MIN_WORDS`, default 3).
+      - `GraceWindowMinWordsUserTurnStartStrategy(min_words=N, grace_secs=G)`: a turn (and,
+        mid-coach-speech, a barge-in) only starts after N actually-transcribed words — silence/noise
+        produce no transcript, so no false barge-in. N is config-driven (`VOICE_BARGE_IN_MIN_WORDS`,
+        default 3). ADDITIONALLY, for G seconds after the coach starts speaking
+        (`VOICE_BARGE_IN_GRACE_SECS`, default 1.5) it ignores barge-in transcripts entirely, so a
+        LATE/stale transcript of the student's own just-finished turn (common when STT lags) cannot
+        cancel the coach's reply. A genuine barge-in (the student keeps talking past the window)
+        still interrupts.
     Push-to-talk button barge-in (TurnGateProcessor.on_control -> InterruptionFrame) is unaffected —
     only VOICE-triggered barge-in is gated. Stop strategies keep the Pipecat default (Issue 3 revisits
     the Smart-Turn end-of-turn latency separately).
@@ -164,7 +170,10 @@ def _build_user_turn_strategies(config: Config) -> UserTurnStrategies:
     return UserTurnStrategies(
         start=[
             VADUserTurnStartStrategy(enable_interruptions=False),
-            MinWordsUserTurnStartStrategy(min_words=config.voice_barge_in_min_words),
+            GraceWindowMinWordsUserTurnStartStrategy(
+                min_words=config.voice_barge_in_min_words,
+                grace_secs=config.voice_barge_in_grace_secs,
+            ),
             TranscriptionUserTurnStartStrategy(),
         ],
         stop=default_user_turn_stop_strategies(),

@@ -200,5 +200,17 @@ def test_voice_barge_in_gated_by_min_words_not_raw_vad():
     # raw-VAD start strategy is present but does NOT interrupt the coach
     assert "VADUserTurnStartStrategy" in by_type
     assert by_type["VADUserTurnStartStrategy"]._enable_interruptions is False
-    # a min-words strategy gates voice barge-in on real transcribed speech
+    # a min-words strategy gates voice barge-in on real transcribed speech (the grace-window
+    # subclass IS a MinWordsUserTurnStartStrategy, so existing behavior is preserved)
     assert any(isinstance(s, MinWordsUserTurnStartStrategy) for s in sts.start)
+
+
+def test_voice_barge_in_uses_grace_window_strategy():
+    """The false-barge-in fix: a grace-window subclass guards against stale/late transcripts."""
+    from src.pipecat_pipeline import _build_user_turn_strategies
+    from src.turn_start_grace import GraceWindowMinWordsUserTurnStartStrategy
+
+    sts = _build_user_turn_strategies(Config.load())
+    grace = [s for s in sts.start if isinstance(s, GraceWindowMinWordsUserTurnStartStrategy)]
+    assert len(grace) == 1, "exactly one grace-window min-words strategy should be wired in"
+    assert grace[0]._grace_secs == Config.load().voice_barge_in_grace_secs

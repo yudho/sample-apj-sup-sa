@@ -179,6 +179,11 @@ class Config:
     # the coach's reply. Raw VAD no longer interrupts (enable_interruptions=False). 0 would disable the
     # min-words gate; default 3.
     voice_barge_in_min_words: int
+    # ISSUE (false barge-in): suppress voice barge-in for this many seconds AFTER the coach starts
+    # speaking, so a LATE/stale transcript of the student's own just-finished turn (common when STT
+    # lags) cannot cancel the coach's reply. A genuine barge-in (student keeps talking past the
+    # window) still interrupts. 0 disables the grace window (pure min-words behavior). Default 1.5s.
+    voice_barge_in_grace_secs: float
 
     # Media / signaling
     # The HS256 secret the backend mints voice_token with; the worker verifies the media-join
@@ -262,6 +267,7 @@ class Config:
             vad_stop_secs=_get_float("VAD_STOP_SECS", 0.8),
             vad_confidence=_get_float("VAD_CONFIDENCE", 0.8),
             voice_barge_in_min_words=_get_int("VOICE_BARGE_IN_MIN_WORDS", 3),
+            voice_barge_in_grace_secs=_get_float("VOICE_BARGE_IN_GRACE_SECS", 1.5),
             voice_token_secret=_get("VOICE_TOKEN_SECRET"),
             server_host=_get("SERVER_HOST", "0.0.0.0") or "0.0.0.0",
             server_port=_get_int("SERVER_PORT", 8080),
