@@ -35,6 +35,11 @@ ENV_NAME    ?= agentic-analytics
 STACK       ?= agentic-analytics-agentcore
 TEMPLATE    ?= agentcore-topup-stack.yaml
 POLICY_MODE ?= LOG_ONLY
+# Container image tag the runtime points at. Left EMPTY on purpose: a bare
+# `make deploy` then omits the AgentImageTag override, so CloudFormation keeps
+# the stack's existing tag (and uses the template default 'latest' on first
+# deploy). `make build` sets this to a fresh build-<timestamp> to force a rebuild.
+AGENT_IMAGE_TAG ?=
 
 # CFN needs templates >51,200 bytes staged in S3. The workshop CodeEditor role has
 # s3:* on bedrock-agentcore-* buckets, so we stage there (created on first deploy).
@@ -89,6 +94,7 @@ deploy: stage-assets
 	      ArtifactsBucket=$(CFN_BUCKET) \
 	      ArtifactsPrefix= \
 	      PolicyMode=$(POLICY_MODE) \
+	      $(if $(strip $(AGENT_IMAGE_TAG)),AgentImageTag=$(AGENT_IMAGE_TAG),) \
 	  --capabilities CAPABILITY_NAMED_IAM \
 	  --region $(REGION)
 
@@ -114,60 +120,15 @@ status:
 	@aws cloudformation describe-stacks --stack-name $(STACK) --region $(REGION) \
 	  --query 'Stacks[0].StackStatus' --output text
 
-# ---- build: rebuild the agent image + roll the runtime ----------------------
-# Use after editing unicorn_rental_agent.py. `make deploy` does NOT rebuild the
-# image (the container URI is a fixed :latest tag), so a code change needs this.
-# It re-zips the agent code, triggers the CodeBuild project the stack created,
-# then calls update-agent-runtime RE-SENDING the JWT authorizer + Authorization
-# header allowlist + network config — these are NOT defaults, and update-agent-runtime
-# REPLACES the whole config, so omitting them would silently revert the runtime
-# to IAM auth and every Bearer request would 403.
+# ---- build: rebuild the agent image after a code edit -----------------------
+# Run this after editing unicorn_rental_agent.py or the SOP. `make deploy` only
+# applies template changes; it does NOT rebuild the image. The real work lives in
+# a plain bash script (scripts/rebuild-agent.sh) so it's easy to read: it zips +
+# uploads the code and runs `make deploy` with a fresh image tag, and then
+# CloudFormation rebuilds the image and rolls the runtime. Open the script to see
+# exactly what happens — there's no hidden magic.
 build:
-	@set -euo pipefail; \
-	echo "==> [build] zipping agent code"; \
-	ZIP=$$(mktemp).zip; \
-	zip -j "$$ZIP" unicorn_rental_agent.py unicorn_rental_analytics.sop.md requirements.txt config.env.sample -x '*.pyc' '*__pycache__*' >/dev/null; \
-	echo "==> [build] uploading -> s3://$(CFN_BUCKET)/$(AGENT_CODE_KEY)"; \
-	aws s3 cp "$$ZIP" "s3://$(CFN_BUCKET)/$(AGENT_CODE_KEY)" --region $(REGION); \
-	rm -f "$$ZIP"; \
-	echo "==> [build] triggering CodeBuild $(ENV_NAME)-agent-build"; \
-	BID=$$(aws codebuild start-build --project-name "$(ENV_NAME)-agent-build" --region $(REGION) --query 'build.id' --output text); \
-	echo "    build $$BID — waiting (~3 min)…"; \
-	while true; do sleep 15; \
-	  S=$$(aws codebuild batch-get-builds --ids "$$BID" --region $(REGION) --query 'builds[0].buildStatus' --output text); \
-	  echo "    build status: $$S"; \
-	  case "$$S" in SUCCEEDED) break;; FAILED|FAULT|STOPPED|TIMED_OUT) echo "build $$S" >&2; exit 1;; esac; \
-	done; \
-	echo "==> [build] reading current runtime config (to re-send unchanged)"; \
-	RID=$$(aws cloudformation describe-stacks --region $(REGION) --stack-name $(STACK) --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeId'].OutputValue" --output text); \
-	[ -n "$$RID" ] || { echo "AgentRuntimeId not in stack $(STACK) — run 'make deploy' first" >&2; exit 1; }; \
-	RT=$$(aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id "$$RID" --region $(REGION)); \
-	ROLE=$$(echo "$$RT" | jq -r '.roleArn'); \
-	URI=$$(echo "$$RT" | jq -r '.agentRuntimeArtifact.containerConfiguration.containerUri'); \
-	NET=$$(echo "$$RT" | jq -c '.networkConfiguration'); \
-	ENVV=$$(echo "$$RT" | jq -c '.environmentVariables // {}'); \
-	AUTHZ=$$(echo "$$RT" | jq -c '.authorizerConfiguration // empty'); \
-	HDR=$$(echo "$$RT" | jq -c '.requestHeaderConfiguration // empty'); \
-	EXTRA=(); \
-	[ -n "$$AUTHZ" ] && EXTRA+=(--authorizer-configuration "$$AUTHZ"); \
-	[ -n "$$HDR" ] && EXTRA+=(--request-header-configuration "$$HDR"); \
-	echo "==> [build] update-agent-runtime $$RID (re-pull :latest, preserve JWT auth)"; \
-	UPD=$$(aws bedrock-agentcore-control update-agent-runtime \
-	  --agent-runtime-id "$$RID" \
-	  --agent-runtime-artifact "{\"containerConfiguration\":{\"containerUri\":\"$$URI\"}}" \
-	  --role-arn "$$ROLE" \
-	  --network-configuration "$$NET" \
-	  --environment-variables "$$ENVV" \
-	  "$${EXTRA[@]}" \
-	  --region $(REGION)); \
-	VER=$$(echo "$$UPD" | jq -r '.agentRuntimeVersion'); \
-	echo "    new runtime version $$VER — waiting for READY…"; \
-	while true; do sleep 15; \
-	  S=$$(aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id "$$RID" --agent-runtime-version "$$VER" --region $(REGION) --query 'status' --output text); \
-	  echo "    runtime status: $$S"; \
-	  case "$$S" in READY) break;; FAILED) echo "runtime version $$VER FAILED" >&2; exit 1;; esac; \
-	done; \
-	echo "==> [build] done — runtime $$RID now serving version $$VER"
+	@bash scripts/rebuild-agent.sh
 
 # ---- voice-deploy: OPTIONAL voice step (after Cube) -------------------------
 # Deploys voice-agentcore-stack.yaml — a SEPARATE stack with its own AgentCore
