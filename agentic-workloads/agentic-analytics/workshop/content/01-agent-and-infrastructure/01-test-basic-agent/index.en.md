@@ -38,7 +38,7 @@ Open :code[exercises/basic_agent.py]{showCopyAction=true} in the Code Editor. Th
 
 ### Step 1.2: Configure the Bedrock Model (TODO 1.2)
 
-The agent needs a foundation model. Find `TODO 1.2` in `exercises/basic_agent.py` — replace `None` with a :link[BedrockModel]{href="https://strandsagents.com/latest/user-guide/concepts/model-providers/amazon-bedrock/" external=true} using the model ID and region already shown in the hint. `temperature=0.3` keeps responses factual (lower = less creative).
+The agent needs a foundation model. Find `TODO 1.2` in `exercises/basic_agent.py` — replace `None` with a :link[BedrockModel]{href="https://strandsagents.com/latest/user-guide/concepts/model-providers/amazon-bedrock/" external=true} using the model ID and region already shown in the hint.
 
 ::::expand{header="💡 Need help with TODO 1.2? Click to see the solution"}
 :::code{language=python showCopyAction=true}

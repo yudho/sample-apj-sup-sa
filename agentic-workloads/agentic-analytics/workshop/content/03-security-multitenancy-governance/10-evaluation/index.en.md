@@ -56,7 +56,26 @@ Each built-in evaluator scores a different dimension:
 | `Builtin.ToolSelectionAccuracy` | Did the agent pick the right tool for the question? | Per tool call |
 | `Builtin.GoalSuccessRate` | Did the agent complete the user's task? | Per session |
 
-### Step 10.3: View Results in CloudWatch
+
+### Step 10.3: Set Up Online (Continuous) Evaluation
+
+For production, you want every invocation scored automatically:
+
+```bash
+agentcore eval online create \
+  --name unicorn_eval \
+  --sampling-rate 100 \
+  --evaluator "Builtin.Helpfulness" \
+  --evaluator "Builtin.Correctness" \
+  --agent-id "<AgentRuntimeId-from-make-outputs>"
+```
+
+This creates a continuous evaluation that:
+- Samples 100% of invocations (reduce for cost in production — e.g., 10%)
+- Scores each one with Helpfulness and Correctness
+- Reports metrics to CloudWatch — you can set alarms when quality drops
+
+### Step 10.4: View Results in CloudWatch
 
 1. Open **CloudWatch** → **GenAI Observability** → **AgentCore**
 2. Navigate to your agent → **DEFAULT** endpoint
@@ -67,23 +86,6 @@ Each built-in evaluator scores a different dimension:
 - **Low ToolSelectionAccuracy** → your SOP tool mapping needs improvement (agent picks wrong tool)
 - **Low Correctness** → the prebaked SQL views may return unexpected data, or the LLM misinterprets results
 - **Low Helpfulness** → the response formatting in the SOP needs work (too verbose, missing insights)
-
-### Step 10.4: Set Up Online (Continuous) Evaluation
-
-For production, you want every invocation scored automatically:
-
-```bash
-agentcore eval online create \
-  --name unicorn_eval \
-  --sampling-rate 100 \
-  --evaluator "Builtin.Helpfulness" \
-  --evaluator "Builtin.Correctness"
-```
-
-This creates a continuous evaluation that:
-- Samples 100% of invocations (reduce for cost in production — e.g., 10%)
-- Scores each one with Helpfulness and Correctness
-- Reports metrics to CloudWatch — you can set alarms when quality drops
 
 ### Step 10.5: The Feedback Loop
 

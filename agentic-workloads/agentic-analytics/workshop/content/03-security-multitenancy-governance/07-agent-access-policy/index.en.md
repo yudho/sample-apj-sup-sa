@@ -222,11 +222,13 @@ All test users share the same password: :code[Unicorn123!]{showCopyAction=true}
 ::alert[**Start fresh:** It is best to clear the chatbot conversation from the previous step by clicking the small bin icon next to the chat input field or by refreshing the application demo browser tab.]{type="info"}
 
 **Test as Admin (Lyra):**
+
 1. Log in as Lyra, ask: **"Show me top 5 customers by revenue"**
 2. You should see customers.
 3. Ask: **"Create a booking for my top customer next Sunday 2:30 pm for 30 mins with unicorn Vega Sapphire"** — it should work
 
 **Test as Analyst (Orion):**
+
 4. Log out, log in as Orion
 5. Ask: **"Show me top 5 customers by revenue"** — same query, same tenant data
 6. Ask: **"Create a booking for my top customer next Sunday 2:30 pm for 30 mins with unicorn Vega Sapphire"** — the agent cannot do this. The `create_booking_tool` is **inaccessible** for the analyst.
@@ -236,15 +238,15 @@ All test users share the same password: :code[Unicorn123!]{showCopyAction=true}
 This is the most important test in the workshop. Log in as users from **different tenants** and confirm they see different data from the *same* question.
 
 **As Mythical Unicorns (Lyra):**
+
 1. Ask: **"Show me my top 3 customers by revenue"** — **write down the #1 customer's name.**
 
 **As Mythic Unicorns (Aria):**
+
 2. Log out, log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true}
 3. Ask the **exact same question** — **write down her #1 customer's name.**
 
-::alert[**What you should see — and why it's the whole point.** Lyra's and Aria's #1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL — but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT — isolation no application bug can undo. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data.
-
-**If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
+::alert[**What you should see — and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL — but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT — isolation no application bug can undo. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
 
 ### Step 7.8: The Invisibility Test — *Part A payoff*
 

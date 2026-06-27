@@ -132,9 +132,11 @@ In the `Agent(...)` constructor from TODO 2.3.2, change this one line:
 
 ::alert[AgentCore Memory also supports **long-term memory** (LTM) for extracting insights across sessions — user preferences, behavioral patterns. This workshop uses short-term memory only, but you can enable both on the same resource. See the :link[AgentCore Memory documentation]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html"}.]{type="info"}
 
+Do not forget the save the changes on the file.
+
 ### Step 2.5: Deploy with `make deploy`
 
-You've edited the agent code; now deploy the whole AgentCore layer. From the agent folder:
+You've edited and saved the agent code; now deploy the whole AgentCore layer. From the agent folder:
 
 ```bash
 cd /workshop/agentic-analytics/app/agentcore_strands
