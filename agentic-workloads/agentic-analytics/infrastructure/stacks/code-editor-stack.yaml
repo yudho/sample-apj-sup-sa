@@ -388,7 +388,8 @@ Resources:
                   - arn:aws:s3:::bedrock-agentcore-*
                   - arn:aws:s3:::bedrock-agentcore-*/*
 
-              # EC2 - For VPC config lookups
+              # EC2 - For VPC config lookups + resolving the Cube private IP by tag
+              # (cube-upstream.sh points the nginx /cube/ proxy + socat forwarder at Cube)
               - Effect: Allow
                 Action:
                   - ec2:DescribeVpcs
@@ -397,6 +398,7 @@ Resources:
                   - ec2:CreateNetworkInterface
                   - ec2:DeleteNetworkInterface
                   - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeInstances
                 Resource: '*'
 
   CodeEditorInstanceProfile:
@@ -518,7 +520,15 @@ Resources:
           chown "$CODE_EDITOR_USER:$CODE_EDITOR_USER" "/home/$CODE_EDITOR_USER/.code-editor-server/data/token"
           chmod 600 "/home/$CODE_EDITOR_USER/.code-editor-server/data/token"
 
-          # Nginx config
+          # Nginx config. The Cube Playground (private EC2) is reached two ways, both
+          # via this Code Editor box (the only host allowed inbound to Cube:4000):
+          #   1) /cube/  — reverse proxy through CloudFront (clickable link)
+          #   2) localhost:4000 — a socat forwarder for the code-server Ports panel
+          # Cube's private IP is discovered at runtime (it deploys after this box), so
+          # the /cube/ location block lives in an include file that cube-upstream.sh
+          # (re)writes with the literal IP. Until Cube is up, the include is empty.
+          mkdir -p /etc/nginx/cube
+          : > /etc/nginx/cube/cube-location.conf
           cat > /etc/nginx/conf.d/code-editor.conf << 'NGINXEOF'
           server {
               listen 80;
@@ -543,11 +553,46 @@ Resources:
               location /ports/3001/ {
                   return 301 /app;
               }
+              # Cube Core Playground (private EC2) — /cube/ location written at runtime
+              include /etc/nginx/cube/cube-location.conf;
           }
           NGINXEOF
           # Disable default server block that conflicts with our conf.d config
           sed -i '/^    server {/,/^    }/s/^/#/' /etc/nginx/nginx.conf
           nginx -t && systemctl enable nginx && systemctl start nginx
+
+          # --- Discover Cube private IP by tag, then point nginx /cube/ + a socat
+          #     forwarder (localhost:4000) at it. Cube deploys after this box, so a
+          #     systemd timer retries until it appears. ---
+          dnf install -y -q socat || true
+          # The discovery script is delivered base64-encoded so CloudFormation's Fn::Sub
+          # never parses its bash $-syntax. The two CFN values are passed as env vars to
+          # the decode step (again, no Fn::Sub inside the script body).
+          CUBE_DISCOVER_B64='IyEvYmluL2Jhc2gKIyBSZXNvbHZlIHRoZSBDdWJlIEVDMiBwcml2YXRlIElQIGJ5IE5hbWUgdGFnIGFuZCBwb2ludCBuZ2lueCAvY3ViZS8gKyBzb2NhdCBhdCBpdC4KUkVHSU9OPSIke0NVQkVfUkVHSU9OOi11cy1lYXN0LTF9IgpFTlZfTkFNRT0iJHtDVUJFX0VOVk5BTUU6LWFnZW50aWMtYW5hbHl0aWNzfSIKSVA9JChhd3MgZWMyIGRlc2NyaWJlLWluc3RhbmNlcyAtLXJlZ2lvbiAiJFJFR0lPTiIgLS1maWx0ZXJzICJOYW1lPXRhZzpOYW1lLFZhbHVlcz0kRU5WX05BTUUtY3ViZSIgIk5hbWU9aW5zdGFuY2Utc3RhdGUtbmFtZSxWYWx1ZXM9cnVubmluZyIgLS1xdWVyeSAnUmVzZXJ2YXRpb25zW10uSW5zdGFuY2VzW10uUHJpdmF0ZUlwQWRkcmVzcyB8IFswXScgLS1vdXRwdXQgdGV4dCAyPi9kZXYvbnVsbCkKaWYgWyAtbiAiJElQIiBdICYmIFsgIiRJUCIgIT0gIk5vbmUiIF07IHRoZW4KICB7CiAgICBlY2hvICJsb2NhdGlvbiAvY3ViZS8geyIKICAgIGVjaG8gIiAgICBwcm94eV9wYXNzIGh0dHA6Ly8kSVA6NDAwMC87IgogICAgZWNobyAiICAgIHByb3h5X2h0dHBfdmVyc2lvbiAxLjE7IgogICAgZWNobyAiICAgIHByb3h5X3NldF9oZWFkZXIgSG9zdCBcJGhvc3Q7IgogICAgZWNobyAiICAgIHByb3h5X3NldF9oZWFkZXIgVXBncmFkZSBcJGh0dHBfdXBncmFkZTsiCiAgICBlY2hvICIgICAgcHJveHlfc2V0X2hlYWRlciBDb25uZWN0aW9uIFwidXBncmFkZVwiOyIKICAgIGVjaG8gIiAgICBwcm94eV9zZXRfaGVhZGVyIFgtRm9yd2FyZGVkLUZvciBcJHByb3h5X2FkZF94X2ZvcndhcmRlZF9mb3I7IgogICAgZWNobyAiICAgIHByb3h5X3NldF9oZWFkZXIgWC1Gb3J3YXJkZWQtUHJvdG8gXCRzY2hlbWU7IgogICAgZWNobyAiICAgIHByb3h5X3JlYWRfdGltZW91dCA4NjQwMDsiCiAgICBlY2hvICJ9IgogIH0gPiAvZXRjL25naW54L2N1YmUvY3ViZS1sb2NhdGlvbi5jb25mCiAgbmdpbnggLXQgJiYgKG5naW54IC1zIHJlbG9hZCAyPi9kZXYvbnVsbCB8fCBzeXN0ZW1jdGwgcmVsb2FkIG5naW54IDI+L2Rldi9udWxsIHx8IHRydWUpCiAgcGtpbGwgLWYgInNvY2F0IC4qTElTVEVOOjQwMDAiIDI+L2Rldi9udWxsIHx8IHRydWUKICBub2h1cCBzb2NhdCBUQ1AtTElTVEVOOjQwMDAsZm9yayxyZXVzZWFkZHIgIlRDUDokSVA6NDAwMCIgPi92YXIvbG9nL2N1YmUtc29jYXQubG9nIDI+JjEgJgogIGVjaG8gImN1YmUtdXBzdHJlYW0gLT4gJElQOjQwMDAiCmVsc2UKICBlY2hvICJjdWJlIG5vdCBmb3VuZCB5ZXQiCmZpCg=='
+          echo "$CUBE_DISCOVER_B64" | base64 -d > /usr/local/bin/cube-upstream.sh
+          chmod +x /usr/local/bin/cube-upstream.sh
+          cat > /etc/systemd/system/cube-upstream.service << SVCEOF
+          [Unit]
+          Description=Point nginx /cube/ + socat at the private Cube EC2
+          After=network-online.target nginx.service
+          [Service]
+          Type=oneshot
+          Environment=CUBE_REGION=${AWS::Region}
+          Environment=CUBE_ENVNAME=${EnvironmentName}
+          ExecStart=/usr/local/bin/cube-upstream.sh
+          SVCEOF
+          cat > /etc/systemd/system/cube-upstream.timer << 'TMREOF'
+          [Unit]
+          Description=Refresh Cube upstream every 2 min (until Cube is up)
+          [Timer]
+          OnBootSec=60
+          OnUnitActiveSec=120
+          [Install]
+          WantedBy=timers.target
+          TMREOF
+          systemctl daemon-reload
+          systemctl enable --now cube-upstream.timer
+          systemctl start cube-upstream.service || true
 
           # Code Editor systemd service (use explicit user, not %i template)
           cat > /etc/systemd/system/code-editor.service << SVCEOF
@@ -789,3 +834,7 @@ Outputs:
   CloudFrontDomain:
     Description: CloudFront domain
     Value: !GetAtt CloudFrontDistribution.DomainName
+
+  CodeEditorSecurityGroupId:
+    Description: Code Editor SG (Cube allows inbound on 4000 from this so the nginx proxy can reach the private Cube)
+    Value: !Ref CodeEditorSecurityGroup

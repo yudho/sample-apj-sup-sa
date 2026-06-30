@@ -63,25 +63,27 @@ The Lambda handles multi-tenancy the same way as the other toolsets: it extracts
 
 ### Step 1: Access the Cube Core Playground UI
 
-Cube Core was deployed as part of the CloudFormation stack — it's running as a Docker container on an EC2 instance in your VPC. Cube ships with a browser-based **Playground UI** that lets you explore data models, build queries visually, and test them — all without writing code.
+Cube Core was deployed as part of the CloudFormation stack — it's running as a Docker container on an EC2 instance in a **private subnet** of your VPC (no public IP). Cube ships with a browser-based **Playground UI** that lets you explore data models, build queries visually, and test them — all without writing code.
 
-**1a. Find the Cube endpoint:**
+::alert[**The Cube EC2 is private and not reachable from the internet** — by design. Its security group accepts traffic on port 4000 from only two places: the semantic-layer **Lambda** (the agent's tool path) and the **Code Editor** (your workspace). You open the Playground *through* the Code Editor, which reverse-proxies it for you. This is the secure pattern: the database-facing Cube instance is never exposed publicly.]{type="info"}
 
-Open **AWS Console** → **CloudFormation** → **Stacks** → `main-stack` → **Outputs** tab. Find the `CubeEndpoint` output — it looks like `http://ec2-xx-xx-xx-xx.compute-1.amazonaws.com:4000`.
+**1a. Open the Playground via the Code Editor:**
 
-**1b. Open the Playground:**
+Take your Code Editor URL (the CloudFront `https://<your-cloudfront-domain>` you've used throughout the workshop) and append **`/cube/`**:
 
-Navigate to the `CubeEndpoint` URL in your browser (e.g., `http://ec2-xx-xx-xx-xx.compute-1.amazonaws.com:4000`).
+```
+https://<your-cloudfront-domain>/cube/
+```
 
-You should see the Cube Playground UI. It will show a mostly empty interface because no data models have been defined yet — that's expected.
+You should see the Cube Playground UI. It will show a mostly empty interface because no data models have been defined yet — that's expected. (The Code Editor's Nginx forwards `/cube/` to the private Cube instance on port 4000 — the same proxy pattern as the `/app` UI.)
 
-::alert[If the page doesn't load, verify you're using **http** (not https) on port **4000**. Also check that the Docker container is running — you can verify via SSM Session Manager on the Cube EC2 instance: `docker ps`.]{type="warning"}
+::alert[**If `/cube/` shows 404 or "cube not found yet":** the Code Editor discovers the Cube instance shortly after both boot; it retries every ~2 minutes. Wait a minute and refresh. You can also confirm Cube is running via **SSM Session Manager** on the Cube EC2 instance: `docker ps`. As an alternative, the Code Editor's **Ports** panel exposes the forwarded Cube port (4000) — open it from there.]{type="warning"}
 
-**1c. Set up database connectivity:**
+**1b. Set up database connectivity:**
 
-Navigate to the `/#/connection` path in the Cube Playground UI (e.g., `http://ec2-xx-xx-xx-xx.compute-1.amazonaws.com:4000/#/connection`) to configure the PostgreSQL connection. Enter your Aurora PostgreSQL credentials — you can retrieve these from AWS Secrets Manager (see the info box below). Once the connection is saved, Cube will use these credentials to query Aurora when you add data models in the next step.
+In the Playground, open the **`/cube/#/connection`** path to configure the PostgreSQL connection. Enter your Aurora PostgreSQL credentials (see the info box below). Once the connection is saved, Cube will use these credentials to query Aurora when you add data models in the next step.
 
-::alert[**Need the database credentials?** If you need to verify or troubleshoot the database connection, you can retrieve the Aurora credentials from **AWS Secrets Manager**. Open **AWS Console** → **Secrets Manager** → find the secret named `agentic-analytics/aurora/credentials`. Click **Retrieve secret value** to see the host, port, username, password, and database name that Cube uses to connect to Aurora PostgreSQL.]{type="info"}
+::alert[**Need the database credentials?** Retrieve the Aurora credentials from **AWS Console** → **Secrets Manager** → the secret named `agentic-analytics/aurora/credentials`. Click **Retrieve secret value** to see the host, port, username, password, and database name. **Note:** Cube connects to Aurora as the database **owner** (`postgres`), which is why tenant isolation for the semantic layer is enforced in the Lambda rather than by PostgreSQL RLS — see the Step 9 callout.]{type="info"}
 
 ### Step 2: Explore the Cube Data Models
 
