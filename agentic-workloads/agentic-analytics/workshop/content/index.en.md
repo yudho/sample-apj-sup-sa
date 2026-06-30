@@ -1,5 +1,5 @@
 ---
-title: "Self-Service Analytics with Agentic AI on AWS"
+title: "Agentic Analytics for Multi-tenant SaaS with AgentCore"
 weight: 0
 ---
 

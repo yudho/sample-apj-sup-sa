@@ -1,4 +1,4 @@
-# Agentic Analytics: Self-Service Analytics with Agentic AI on AWS
+# Agentic Analytics for Multi-tenant SaaS with AgentCore
 
 A reference implementation and [AWS Workshop Studio](https://workshops.aws/) deployable for building AI-powered self-service analytics on multi-tenant SaaS. Business users ask questions in plain English — by **text or by voice** — the AI agent selects the right query, enforces security policies, and returns formatted insights, including **generated charts**.
 
