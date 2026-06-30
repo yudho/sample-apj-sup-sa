@@ -22,6 +22,10 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Code Editor SG - allowed inbound on 4000 so the Code Editor nginx can proxy the Cube Playground
 
+  VPCEndpointSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: VPC Endpoint SG - Cube (now private) reaches Secrets Manager via the interface endpoint, so it needs inbound 443 here
+
   AuroraSecurityGroupId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: Aurora SG - must allow inbound from Cube SG on port 5432
@@ -137,6 +141,22 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref CubeSecurityGroup
       Description: Allow PostgreSQL from Cube EC2
+
+  # Cube is in a PRIVATE subnet. The Secrets Manager interface endpoint has
+  # Private DNS enabled, so secretsmanager.<region>.amazonaws.com resolves to
+  # the endpoint's ENIs — not out via NAT. Cube reads its DB credentials (and
+  # the Cube API secret) at boot, so it must be allowed inbound 443 on the
+  # VPC-endpoint SG, or the get-secret-value call times out and Cube starts
+  # with empty DB credentials.
+  VPCEndpointIngressFromCube:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref VPCEndpointSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref CubeSecurityGroup
+      Description: Allow Cube EC2 to reach Secrets Manager via the interface VPC endpoint
 
   #============================================================================
   # IAM Role for Cube EC2

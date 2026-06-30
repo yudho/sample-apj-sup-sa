@@ -296,6 +296,7 @@ Resources:
         PrivateSubnet1Id: !GetAtt AuroraStack.Outputs.PrivateSubnet1Id
         LambdaSecurityGroupId: !GetAtt AuroraStack.Outputs.LambdaSecurityGroupId
         CodeEditorSecurityGroupId: !GetAtt CodeEditorStack.Outputs.CodeEditorSecurityGroupId
+        VPCEndpointSecurityGroupId: !GetAtt AuroraStack.Outputs.VPCEndpointSecurityGroupId
         AuroraSecurityGroupId: !GetAtt AuroraStack.Outputs.AuroraSecurityGroupId
         DatabaseSecretArn: !GetAtt AuroraStack.Outputs.DatabaseSecretArn
         AuroraEndpoint: !GetAtt AuroraStack.Outputs.AuroraClusterEndpoint
