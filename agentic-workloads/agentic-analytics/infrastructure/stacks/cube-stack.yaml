@@ -99,7 +99,7 @@ Resources:
           FromPort: 4000
           ToPort: 4000
           SourceSecurityGroupId: !Ref CodeEditorSecurityGroupId
-          Description: Allow Cube Playground only from the Code Editor (nginx reverse proxy) — no public access
+          Description: Allow Cube Playground only from the Code Editor (nginx reverse proxy) - no public access
 
       SecurityGroupEgress:
         - IpProtocol: tcp
@@ -294,7 +294,7 @@ Resources:
               ignoreErrors: true
 Outputs:
   CubeEndpoint:
-    Description: Cube Core API endpoint (private — reachable in-VPC by the Lambda and the Code Editor proxy)
+    Description: Cube Core API endpoint (private - reachable in-VPC by the Lambda and the Code Editor proxy)
     Value: !Sub "http://${CubeInstance.PrivateIp}:4000"
     Export:
       Name: !Sub ${EnvironmentName}-CubeEndpoint
