@@ -409,12 +409,49 @@ def deploy_runtime(gateway_url):
     # We temporarily set GATEWAY_URL in config.env, deploy, then restore.
     # A cleaner approach: set it as an env override via agentcore CLI.
 
-    # Clean up any previous agentcore config (may have stale container settings)
+    # The runtime build uses `uv` (the agentcore CLI resolves deps + builds the
+    # image context with it). If it's missing, `agentcore configure` silently
+    # produces an incomplete build config and the failure only surfaces minutes
+    # later as a cryptic CodeBuild "no Dockerfile" error. Fail fast with the fix.
+    import shutil as _shutil
+    if _shutil.which("uv") is None:
+        print("❌ `uv` is not installed, but the runtime build needs it.")
+        print("   Install it, then re-run this script:")
+        print("     curl -LsSf https://astral.sh/uv/install.sh | sh")
+        print('     export PATH="$HOME/.local/bin:$PATH"')
+        sys.exit(1)
+
+    # Clean up any previous agentcore config (may have stale container settings).
+    # Two places hold state: the per-agent dir AND the CLI's global
+    # .bedrock_agentcore.yaml. A failed/partial earlier run can leave the agent
+    # registered there as deployment_type=container, which blocks a retry with
+    # "Cannot change deployment type from 'container' to 'direct_code_deploy'".
+    # Remove BOTH so a re-run is always clean.
+    import shutil
     agentcore_config_dir = ROOT_DIR / '.bedrock_agentcore' / RUNTIME_AGENT_NAME
     if agentcore_config_dir.exists():
-        import shutil
         shutil.rmtree(agentcore_config_dir)
         print(f"[OK] Cleaned up old config: {agentcore_config_dir}")
+
+    agentcore_yaml = ROOT_DIR / '.bedrock_agentcore.yaml'
+    if agentcore_yaml.exists():
+        try:
+            import yaml as _yaml
+            state = _yaml.safe_load(agentcore_yaml.read_text()) or {}
+            agents = state.get('agents', {})
+            if RUNTIME_AGENT_NAME in agents:
+                agents.pop(RUNTIME_AGENT_NAME, None)
+                if state.get('default_agent') == RUNTIME_AGENT_NAME:
+                    state['default_agent'] = next(iter(agents), None)
+                if agents:
+                    agentcore_yaml.write_text(_yaml.safe_dump(state, sort_keys=False))
+                else:
+                    agentcore_yaml.unlink()
+                print(f"[OK] Removed stale '{RUNTIME_AGENT_NAME}' entry from .bedrock_agentcore.yaml")
+        except Exception as e:
+            # If we can't parse it, removing the file is safe — configure regenerates it.
+            print(f"Note: resetting .bedrock_agentcore.yaml ({type(e).__name__}: {e})")
+            agentcore_yaml.unlink()
 
     # Configure the runtime
     print("Configuring AgentCore Runtime...")
