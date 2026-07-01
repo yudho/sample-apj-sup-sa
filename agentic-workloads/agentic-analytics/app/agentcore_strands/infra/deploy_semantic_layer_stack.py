@@ -19,6 +19,7 @@ Steps:
 """
 
 import boto3
+from botocore.exceptions import ClientError
 import json
 import logging
 import os
@@ -345,7 +346,11 @@ def register_target(gateway_id):
     except Exception as e:
         print(f"Note: {e}")
 
-    response = agentcore.create_gateway_target(
+    # The Gateway execution role was just created; its trust policy can take a few
+    # seconds to propagate. Until it does, CreateGatewayTarget fails with a
+    # ValidationException ("Gateway service is not authorized to perform AssumeRole
+    # on Gateway role"). Retry with backoff instead of making the participant re-run.
+    create_target_kwargs = dict(
         gatewayIdentifier=gateway_id,
         name="SemanticLayer",
         targetConfiguration={
@@ -360,6 +365,22 @@ def register_target(gateway_id):
             {'credentialProviderType': 'GATEWAY_IAM_ROLE'}
         ]
     )
+    response = None
+    for attempt in range(1, 13):  # ~12 * 5s = up to 60s for IAM to propagate
+        try:
+            response = agentcore.create_gateway_target(**create_target_kwargs)
+            break
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code', '')
+            msg = e.response.get('Error', {}).get('Message', str(e))
+            if code == 'ValidationException' and 'AssumeRole' in msg and attempt < 12:
+                print(f"  Gateway role trust not propagated yet — retrying ({attempt}/12)...")
+                time.sleep(5)
+                continue
+            raise
+    if response is None:
+        print("❌ Target registration failed after retries (Gateway role AssumeRole trust).")
+        sys.exit(1)
 
     target_id = response['targetId']
     print(f"[OK] Created SemanticLayer target: {target_id}")
