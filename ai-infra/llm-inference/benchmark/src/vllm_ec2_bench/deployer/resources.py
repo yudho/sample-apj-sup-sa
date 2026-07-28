@@ -169,6 +169,30 @@ class ResourceManager:
             }),
         )
 
+        # Self-terminate backstop (throwaway benchmark branch): let the instance
+        # terminate ITSELF from user-data at a deadline, so a killed controller
+        # can't leave a GPU running. Spot instances can't use
+        # InstanceInitiatedShutdownBehavior=terminate, so we call the EC2 API
+        # in-guest instead. Scoped by a tag condition to instances tagged with
+        # this project, so the role can only ever terminate its own fleet.
+        self.iam.put_role_policy(
+            RoleName=role_name,
+            PolicyName="SelfTerminateBackstop",
+            PolicyDocument=json.dumps({
+                "Version": "2012-10-17",
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Action": "ec2:TerminateInstances",
+                    "Resource": "arn:aws:ec2:*:*:instance/*",
+                    "Condition": {
+                        "StringEquals": {
+                            "ec2:ResourceTag/Project": ms.project_tag_value,
+                        }
+                    },
+                }],
+            }),
+        )
+
         # 2. Instance profile
         try:
             self.iam.create_instance_profile(
@@ -213,16 +237,18 @@ class ResourceManager:
         )
         sg_id = resp["GroupId"]
 
-        # Inbound: vLLM port 8000 from caller only
+        # Inbound: vLLM port 8000 + diagnostic log-server port 8001, from caller only.
+        # 8001 serves the vLLM startup log so we can watch progress/errors live
+        # (this account has no SSM RunShellCommand document). (throwaway branch)
         self.ec2.authorize_security_group_ingress(
             GroupId=sg_id,
             IpPermissions=[{
                 "IpProtocol": "tcp",
                 "FromPort": 8000,
-                "ToPort": 8000,
+                "ToPort": 8001,
                 "IpRanges": [{
                     "CidrIp": caller_ip_cidr,
-                    "Description": "vLLM HTTP from notebook",
+                    "Description": "vLLM HTTP (8000) + diag log server (8001) from notebook",
                 }],
             }],
         )

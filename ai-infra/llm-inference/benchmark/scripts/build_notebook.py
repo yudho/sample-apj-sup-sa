@@ -42,6 +42,13 @@ class ModelNotebookConfig:
     gated: bool                # gated HF model => HF_TOKEN required
     architecture_note: str     # short architecture/lineage comment
     experiments: list[tuple[str, str, str]]   # (exp_id, title, flavor)
+    # Optional: absolute path to an external JSONL data dir/glob to benchmark
+    # against instead of the in-repo sample-data. Records must be {"text": ...}.
+    # Used for one-off benchmarks over private datasets that must NOT be copied
+    # into the repo. When set, the notebook reads from here directly.
+    external_data_glob: str = ""
+    # Optional: override the default multi-tier concurrency sweep. Empty = default.
+    concurrency_tiers: tuple[int, ...] = ()
 
 
 # 7 standard experiments shared by most models (g5/g6/g6e/g7e small/large/p4d/p4de)
@@ -59,6 +66,16 @@ _EXPERIMENTS_FULL: list[tuple[str, str, str]] = [
 # GPUs, one replica per GPU (TP=1, DP=8), with a persistent spot wait.
 _EXPERIMENTS_MEDGEMMA: list[tuple[str, str, str]] = _EXPERIMENTS_FULL + [
     ("exp_8", "Experiment 8 — p6-b200.48xlarge (8× B200 / Blackwell) — TP=1 DP=8, persistent spot wait", "standard"),
+    ("exp_9", "Experiment 9 — g7.12xlarge (2× RTX PRO 4500 / Blackwell) — TP=2", "standard"),
+]
+
+# Holmusk cross-GPU medical benchmark (throwaway branch): only the 4 GPUs of
+# interest, c=100 only, against the external medical-notes dataset.
+_EXPERIMENTS_MEDGEMMA_HOLMUSK: list[tuple[str, str, str]] = [
+    ("exp_9", "Experiment 1 — g7.12xlarge (2× RTX PRO 4500 / Blackwell) — TP=2", "standard"),
+    ("exp_4", "Experiment 2 — g7e.2xlarge (1× RTX PRO 6000 / Blackwell) — TP=1", "standard"),
+    ("exp_3", "Experiment 3 — g6e.12xlarge (4× L40S / Ada) — TP=2 DP=2", "standard"),
+    ("exp_8", "Experiment 4 — p6-b200.48xlarge (8× B200 / Blackwell) — TP=1 DP=8 (all 8 GPUs)", "standard"),
 ]
 
 # Llama-4-Scout's 218 GiB BF16 weights only fit on p4d/p4de.
@@ -99,7 +116,12 @@ MODEL_CONFIGS: dict[str, ModelNotebookConfig] = {
         weight_note="MedGemma-27B (BF16) weights are ~55 GiB. g6.12xl is limited to 1 replica via TP=4; g6e.12xl fits 2 replicas (each 2× L40S = 96 GiB).",
         gated=True,
         architecture_note="MedGemma-27B is built on the Gemma 3 architecture. vLLM's Neuron backend does not currently support Gemma 3, so inf2/trn1 are out of scope.",
-        experiments=list(_EXPERIMENTS_MEDGEMMA),
+        experiments=list(_EXPERIMENTS_MEDGEMMA_HOLMUSK),
+        external_data_glob="/Users/diponego/Projects/llm-deployment/models-deploy-and-benchmark/data/samples/medical-notes/*.jsonl",
+        # Standard benchmark sweep for all GPUs. p6 (8× B200) additionally gets
+        # higher tiers appended in its experiment cell (c=800 + phase-2 c=X),
+        # since it needs far more concurrency to saturate than the small GPUs.
+        concurrency_tiers=(1, 10, 30, 50, 100),
     ),
     "qwen3_8b": ModelNotebookConfig(
         package="qwen3_8b",
@@ -347,8 +369,12 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             HF_TOKEN = "PLACEHOLDER_PASTE_YOUR_HF_TOKEN"
             HF_SECRET_NAME = f"{{{c.var_name}.resource_prefix}}-benchmark/hf-token"
 
-            N_BENCHMARK_SAMPLES = 1000
-            N_WARMUP_SAMPLES = 5
+            # Large sample so even a fast 8× B200 (p6) runs for MINUTES at
+            # steady state per tier — the 500-sample run drained p6 in 16s and
+            # never saturated it, invalidating its economics. Full medical-notes
+            # pool is 100K; the loader reads enough shards to cover this.
+            N_BENCHMARK_SAMPLES = 20000
+            N_WARMUP_SAMPLES = 20
             BENCHMARK_SAMPLE_SEED = 42
 
             assert 1 <= N_BENCHMARK_SAMPLES <= 100_000
@@ -397,45 +423,67 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                     region_prices = "(price unavailable)"
                 print(f"  {it:<18} {hw.num_accelerators}× {hw.accelerator_model:<20} {region_prices}")
             """)),
-        md("### 0.6 Load synthesized benchmark data"),
+        md("### 0.6 Load benchmark data"),
         md(dedent(f"""\
-            Benchmark inputs come from `sample-data/{c.domain}/{c.sample_data_file}`
-            (~10,000 synthesized {domain_blurb}). We randomly sample
+            {"Benchmark inputs come from an **external dataset** (`" + c.external_data_glob + "`) — private medical notes that are NOT copied into this repo. Records are `{{\\\"text\\\": ...}}` JSONL." if c.external_data_glob else "Benchmark inputs come from `sample-data/" + c.domain + "/" + c.sample_data_file + "` (~10,000 synthesized " + domain_blurb + ")."} We randomly sample
             `N_BENCHMARK_SAMPLES` prompts and reuse the same sample across all
             experiments + concurrency tiers so the workload is apples-to-apples.
             """)),
         code(dedent(f"""\
             import random
+            import glob
 
-            synth_file = PROJECT_ROOT.parent / "sample-data" / "{c.domain}" / "{c.sample_data_file}"
-            assert synth_file.exists(), (
-                f"{{synth_file}} is missing. Run "
-                f"`python sample-data/scripts/synthesize.py --domain {c.domain}` first."
-            )
+            EXTERNAL_DATA_GLOB = {repr(c.external_data_glob) if c.external_data_glob else "None"}
 
             all_texts: list[str] = []
-            with synth_file.open() as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    text = obj.get("text")
-                    if text:
-                        all_texts.append(text)
+            if EXTERNAL_DATA_GLOB:
+                shards = sorted(glob.glob(EXTERNAL_DATA_GLOB))
+                assert shards, f"No files match EXTERNAL_DATA_GLOB={{EXTERNAL_DATA_GLOB}}"
+                source_desc = f"{{len(shards)}} shard(s) matching {{EXTERNAL_DATA_GLOB}}"
+                for shard in shards:
+                    with open(shard) as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                obj = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            text = obj.get("text")
+                            if text:
+                                all_texts.append(text)
+                    if len(all_texts) >= N_BENCHMARK_SAMPLES * 5:
+                        break  # enough pool; don't read all shards
+            else:
+                synth_file = PROJECT_ROOT.parent / "sample-data" / "{c.domain}" / "{c.sample_data_file}"
+                assert synth_file.exists(), (
+                    f"{{synth_file}} is missing. Run "
+                    f"`python sample-data/scripts/synthesize.py --domain {c.domain}` first."
+                )
+                source_desc = synth_file.name
+                with synth_file.open() as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        text = obj.get("text")
+                        if text:
+                            all_texts.append(text)
 
             assert len(all_texts) >= N_BENCHMARK_SAMPLES, (
-                f"Synthesis pool has only {{len(all_texts)}} records; "
+                f"Pool has only {{len(all_texts)}} records; "
                 f"need at least N_BENCHMARK_SAMPLES={{N_BENCHMARK_SAMPLES}}"
             )
 
             rng = random.Random(BENCHMARK_SAMPLE_SEED)
             INPUTS: list[str] = rng.sample(all_texts, N_BENCHMARK_SAMPLES)
 
-            print(f"Synthesis pool:    {{len(all_texts):,}} records from {{synth_file.name}}")
+            print(f"Data pool:         {{len(all_texts):,}} records from {{source_desc}}")
             print(f"Sampled:           {{len(INPUTS):,}} prompts (seed={{BENCHMARK_SAMPLE_SEED}})")
             print()
             print("--- system prompt ---")
@@ -444,13 +492,24 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             print("--- first input (abbreviated) ---")
             print(INPUTS[0][:320] + ("..." if len(INPUTS[0]) > 320 else ""))
             """)),
-        code(dedent("""\
-            BENCH_TOTAL_REQUESTS_PER_TIER = N_BENCHMARK_SAMPLES
+        code(dedent(f"""\
+            # Fixed requests PER CLIENT (not a flat per-run total): the request
+            # count at each tier is c * REQUESTS_PER_CLIENT, so the sample scales
+            # WITH concurrency. A flat per-run floor is a trap — it forces c=1 to
+            # serve the whole budget serially (20k requests ≈ 10+ hours on a slow
+            # GPU), while per-client keeps c=1 tiny yet still gives the high-c
+            # tiers a deep steady-state sample (p6 @ c=800 -> 40k requests).
+            REQUESTS_PER_CLIENT = 50
             MAX_NEW_TOKENS = 512
-            CONCURRENCY_TIERS = [1, 10, 30, 50, 100]
-            print(f"Per-tier request budget: {BENCH_TOTAL_REQUESTS_PER_TIER}")
-            print(f"Concurrency tiers:       {CONCURRENCY_TIERS}")
-            print(f"Warmup requests:         {N_WARMUP_SAMPLES} at c=1 (discarded)")
+            # Distinct-prompt pool for input variety; LLMeter shuffles and cycles
+            # through it, so a tier may reuse prompts when c*REQUESTS_PER_CLIENT
+            # exceeds the pool size (fine — throughput/economics are rate-based).
+            PAYLOAD_POOL_SIZE = N_BENCHMARK_SAMPLES
+            CONCURRENCY_TIERS = {list(c.concurrency_tiers) if c.concurrency_tiers else [1, 10, 30, 50, 100]}
+            print(f"Requests per client:     {{REQUESTS_PER_CLIENT}}")
+            print(f"Payload pool size:       {{PAYLOAD_POOL_SIZE}}")
+            print(f"Concurrency tiers:       {{CONCURRENCY_TIERS}}")
+            print(f"Warmup requests:         {{N_WARMUP_SAMPLES}} at c=1 (discarded)")
             """)),
         md("### 0.7 Shared helper to run one experiment end-to-end"),
         code(dedent(f"""\
@@ -484,6 +543,13 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                     hf_secret_name={"HF_SECRET_NAME" if c.gated else "None"},
                     capacity_reservation_id=capacity_reservation_id,
                 )
+                # Register the runner BEFORE launch so teardown_experiment can
+                # always find and terminate the instance even if a later step
+                # (smoke test, load test) fails after the instance came up.
+                EXPERIMENTS_STATE[exp_id] = {{
+                    "spec": cfg, "runner": runner,
+                    "concurrency_tiers": concurrency_tiers,
+                }}
                 state = runner.launch()
 
                 endpoint = VLLMEndpoint(
@@ -504,7 +570,7 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
 
                 payloads = [
                     VLLMEndpoint.create_payload(SYSTEM_PROMPT, x, max_tokens=MAX_NEW_TOKENS)
-                    for x in INPUTS[:BENCH_TOTAL_REQUESTS_PER_TIER]
+                    for x in INPUTS[:PAYLOAD_POOL_SIZE]
                 ]
 
                 if N_WARMUP_SAMPLES > 0:
@@ -527,8 +593,11 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                     payload=payloads,
                     sequence_of_clients=concurrency_tiers,
                     output_path=str(OUTPUT_BASE / exp_id / "load_test"),
-                    min_requests_per_run=BENCH_TOTAL_REQUESTS_PER_TIER,
-                    min_requests_per_client=max(1, BENCH_TOTAL_REQUESTS_PER_TIER // max(concurrency_tiers)),
+                    # Fixed per-client count -> total requests = c * REQUESTS_PER_CLIENT.
+                    # min_requests_per_run=1 disables LLMeter's ceil(run/c) branch,
+                    # so every tier does exactly REQUESTS_PER_CLIENT per client.
+                    min_requests_per_run=1,
+                    min_requests_per_client=REQUESTS_PER_CLIENT,
                 )
                 # Time ONLY the load test — this is the benchmark run window.
                 # Capacity acquisition (state.capacity_wait_s) and vLLM warmup
@@ -546,19 +615,22 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                       f"vllm_warmup={{state.vllm_ready_wait_s or 0:.0f}}s")
                 print(f"[{{exp_id}}] benchmark run (measured): {{benchmark_wall_s:.0f}}s")
 
-                EXPERIMENTS_STATE[exp_id] = {{
-                    "spec": cfg,
-                    "runner": runner,
+                EXPERIMENTS_STATE[exp_id].update({{
                     "state": state,
                     "endpoint": endpoint,
                     "load_test": load_test,
                     "results": results,
-                    "concurrency_tiers": concurrency_tiers,
                     "benchmark_wall_s": benchmark_wall_s,
                     "capacity_wait_s": state.capacity_wait_s,
                     "vllm_ready_wait_s": state.vllm_ready_wait_s,
                     "completed_at": datetime.utcnow().isoformat(),
-                }}
+                    "status": "ok",
+                }})
+                # Persist a durable per-experiment result the INSTANT it finishes,
+                # so a later experiment's capacity failure (or any kernel death)
+                # can never discard already-completed work. The final comparison
+                # table is rebuilt from these files, not just in-memory state.
+                persist_experiment_result(exp_id)
                 return EXPERIMENTS_STATE[exp_id]
 
 
@@ -567,10 +639,95 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 if not entry:
                     print(f"[{{exp_id}}] no state; nothing to tear down.")
                     return
-                runner: DeploymentRunner = entry["runner"]
-                print(f"[{{exp_id}}] terminating {{runner.state.instance_id}} in {{runner.state.region}}...")
-                runner.terminate()
-                print(f"[{{exp_id}}] terminated.")
+                runner = entry.get("runner")
+                if runner is None:
+                    print(f"[{{exp_id}}] no runner; nothing to tear down.")
+                    return
+                iid = getattr(runner.state, "instance_id", None)
+                if not iid:
+                    # launch() never acquired an instance (e.g. capacity failure)
+                    print(f"[{{exp_id}}] no instance acquired; nothing to tear down.")
+                    return
+                print(f"[{{exp_id}}] terminating {{iid}} in {{runner.state.region}}...")
+                try:
+                    runner.terminate()
+                    print(f"[{{exp_id}}] terminated.")
+                except Exception as _e:  # noqa: BLE001
+                    # Never let a teardown error mask the benchmark result; the
+                    # standalone wrapper's emergency sweep is the final backstop.
+                    print(f"[{{exp_id}}] teardown error (continuing): {{_e}}")
+
+
+            def _live_hourly(cfg, dep_state) -> tuple[float | None, str]:
+                \"\"\"Real $/hr for an experiment: live spot in the actual AZ, else OD.\"\"\"
+                dep = cfg.deployment
+                od = CATALOG.price_od(dep.instance_type, dep.region)
+                mode = getattr(dep_state, "capacity_mode", None)
+                if mode == "spot":
+                    az = getattr(dep_state, "placement_az", None)
+                    live = CATALOG.live_spot(dep.instance_type, dep.region, az)
+                    if live is not None:
+                        return live, f"spot (live, {{az or dep.region}})"
+                    est = CATALOG.estimated_spot(dep.instance_type, dep.region) or od
+                    return est, "spot (estimated, 0.7xOD; live lookup failed)*"
+                return od, (mode or "OD")
+
+
+            def _per_tier_econ(entry: dict) -> dict[int, dict]:
+                \"\"\"{{tier: {{total_tpm, out_tpm, cost_per_1m, ttlt_p50, ...}}}}\"\"\"
+                results_obj = entry.get("results")
+                results_dict = getattr(results_obj, "results", None) or {{}}
+                cfg = entry["spec"]; dep_state = entry.get("state")
+                hourly, _src = _live_hourly(cfg, dep_state)
+                out = {{}}
+                for clients, result in results_dict.items():
+                    stats = getattr(result, "stats", None) or {{}}
+                    in_tpm = stats.get("average_input_tokens_per_minute") or 0
+                    out_tpm = stats.get("average_output_tokens_per_minute") or 0
+                    total_tpm = in_tpm + out_tpm
+                    cost = round(hourly / (total_tpm * 60) * 1_000_000, 4) if (total_tpm and hourly) else None
+                    out[int(clients)] = {{
+                        "total_tok_min": round(total_tpm, 1) if total_tpm else None,
+                        "out_tok_min": round(out_tpm, 1) if out_tpm else None,
+                        "cost_per_1m_total": cost,
+                        "ttlt_p50": stats.get("time_to_last_token-p50"),
+                        "ttlt_p90": stats.get("time_to_last_token-p90"),
+                        "req_per_min": stats.get("requests_per_minute"),
+                    }}
+                return out
+
+
+            def persist_experiment_result(exp_id: str) -> None:
+                \"\"\"Write outputs/<exp>/result.json the instant an experiment finishes.\"\"\"
+                entry = EXPERIMENTS_STATE.get(exp_id)
+                if not entry or entry.get("status") != "ok":
+                    return
+                cfg = entry["spec"]; dep = cfg.deployment; dep_state = entry.get("state")
+                hw = CATALOG.hardware(dep.instance_type)
+                hourly, src = _live_hourly(cfg, dep_state)
+                rec = {{
+                    "exp_id": exp_id,
+                    "status": "ok",
+                    "instance_type": dep.instance_type,
+                    "region": dep.region,
+                    "placement_az": getattr(dep_state, "placement_az", None),
+                    "gpus": hw.num_accelerators,
+                    "gpu_model": hw.accelerator_model,
+                    "tp": dep.tensor_parallel,
+                    "dp": dep.data_parallel,
+                    "capacity_mode": getattr(dep_state, "capacity_mode", None),
+                    "hourly_usd": round(hourly, 4) if hourly else None,
+                    "hourly_source": src,
+                    "spot_wait_s": entry.get("capacity_wait_s"),
+                    "vllm_ready_s": entry.get("vllm_ready_wait_s"),
+                    "benchmark_wall_s": entry.get("benchmark_wall_s"),
+                    "completed_at": entry.get("completed_at"),
+                    "per_tier": _per_tier_econ(entry),
+                }}
+                out = OUTPUT_BASE / exp_id / "result.json"
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(json.dumps(rec, indent=2, default=str))
+                print(f"[{{exp_id}}] durable result -> {{out}}")
             """)),
     ]
 
@@ -588,17 +745,57 @@ def cells_experiment(exp_id: str, title: str) -> list[dict]:
         code(dedent(f"""\
             cfg = get_experiment("{exp_id}")
             print(cfg.model_dump())
-            concurrency_tiers = CONCURRENCY_TIERS
+            # p6 (exp_8, 8× B200) needs far higher concurrency to saturate than
+            # the small GPUs, so it extends the standard sweep with high tiers.
+            # P6_EXTRA_TIERS: c=800 + the phase-2-discovered optimal c (P6_OPT_C).
+            # Phase-2 saturation sweep (2026-07-24) found the plateau at c=800
+            # (~4.24M tok/min, +1.8% over c=600), so P6_OPT_C coincides with the
+            # standard 800 tier — the dedupe below keeps it listed once.
+            P6_OPT_C = 800  # <- c=X found by the phase-2 saturation sweep
+            if "{exp_id}" == "exp_8":
+                _p6 = list(CONCURRENCY_TIERS) + [800] + ([P6_OPT_C] if P6_OPT_C else [])
+                # order-preserving dedupe (avoid running the same tier twice)
+                concurrency_tiers = list(dict.fromkeys(_p6))
+            else:
+                concurrency_tiers = list(CONCURRENCY_TIERS)
             concurrency_tiers
             """)),
         code(dedent(f"""\
-            state_{exp_id} = await run_experiment(
-                "{exp_id}",
-                concurrency_tiers=concurrency_tiers,
-            )
+            # Run this experiment, then ALWAYS tear it down before the next one
+            # so a headless (nbconvert/papermill) run never leaves more than one
+            # GPU instance alive at a time. An in-guest `shutdown -h +90` backstop
+            # (baked into the launch template on this branch) is the final guard
+            # if this process itself dies mid-run.
+            #
+            # Isolation: a capacity failure (InsufficientInstanceCapacity) or any
+            # other error for THIS GPU must NOT abort the whole notebook and kill
+            # the remaining experiments (esp. p6, which runs last). We record the
+            # failure, tear down, and continue — the comparison table simply omits
+            # GPUs that never produced results.
+            try:
+                state_{exp_id} = await run_experiment(
+                    "{exp_id}",
+                    concurrency_tiers=concurrency_tiers,
+                )
+            except Exception as _err:
+                import traceback as _tb
+                print(f"[{exp_id}] FAILED: {{type(_err).__name__}}: {{_err}}")
+                _tb.print_exc()
+                _e = EXPERIMENTS_STATE.setdefault("{exp_id}", {{}})
+                _e["status"] = "failed"
+                _e["error"] = f"{{type(_err).__name__}}: {{_err}}"
+                # Durable failure marker so the wrapper/report can show it honestly.
+                try:
+                    _p = OUTPUT_BASE / "{exp_id}" / "result.json"
+                    _p.parent.mkdir(parents=True, exist_ok=True)
+                    _p.write_text(json.dumps(
+                        {{"exp_id": "{exp_id}", "status": "failed",
+                          "error": _e["error"]}}, indent=2))
+                except Exception:
+                    pass
+            finally:
+                teardown_experiment("{exp_id}")
             """)),
-        md(f"**Teardown for {exp_id}** — also deletes Spot Fleet, Launch Template, and any auto-created ODCR."),
-        code(f'# teardown_experiment("{exp_id}")  # <-- uncomment to tear down this experiment'),
     ]
 
 
@@ -625,12 +822,20 @@ def cells_analysis() -> list[dict]:
 
             def build_comparison_df(stat_variant: str = "average") -> pd.DataFrame:
                 rows: list[dict] = []
+                # Only experiments that actually produced results (status == "ok"
+                # and a deployment state) contribute rows. GPUs that failed to get
+                # capacity are reported separately so the table isn't polluted with
+                # empty rows or KeyErrors.
+                ok_items = {
+                    eid: e for eid, e in EXPERIMENTS_STATE.items()
+                    if e.get("status") == "ok" and e.get("state") is not None
+                }
                 all_tiers: set[int] = set()
-                for entry in EXPERIMENTS_STATE.values():
-                    all_tiers.update(entry["concurrency_tiers"])
+                for entry in ok_items.values():
+                    all_tiers.update(entry.get("concurrency_tiers", []))
                 all_tiers_sorted = sorted(all_tiers)
 
-                for exp_id, entry in EXPERIMENTS_STATE.items():
+                for exp_id, entry in ok_items.items():
                     cfg = entry["spec"]
                     dep = cfg.deployment
                     hw = CATALOG.hardware(dep.instance_type)
@@ -640,8 +845,18 @@ def cells_analysis() -> list[dict]:
                     actual_hourly = od_price
                     price_source = "OD"
                     if capacity_mode == "spot":
-                        actual_hourly = CATALOG.estimated_spot(dep.instance_type, dep.region) or od_price
-                        price_source = "spot (estimated, 0.7×OD)*"
+                        # Use the REAL spot price in the AZ the instance actually
+                        # ran in (state.placement_az) — NOT the 0.7×OD heuristic,
+                        # which overstated p6 by ~2× ($79.8 vs real ~$40) and gave
+                        # the wrong economics verdict in the earlier run.
+                        az = getattr(entry.get("state"), "placement_az", None)
+                        live = CATALOG.live_spot(dep.instance_type, dep.region, az)
+                        if live is not None:
+                            actual_hourly = live
+                            price_source = f"spot (live, {az or dep.region})"
+                        else:
+                            actual_hourly = CATALOG.estimated_spot(dep.instance_type, dep.region) or od_price
+                            price_source = "spot (estimated, 0.7×OD; live lookup failed)*"
 
                     # Launch overhead (capacity acquisition + vLLM warmup) is
                     # tracked on the deployment state and is EXCLUDED from the
@@ -689,6 +904,18 @@ def cells_analysis() -> list[dict]:
             csv_path = OUTPUT_BASE / "comparison_table.csv"
             df_compare.to_csv(csv_path, index=False)
             print(f"Comparison table saved -> {csv_path}")
+
+            # Report any experiments that failed (e.g. no capacity) so the run is
+            # honest about which GPUs are missing and why, rather than silently
+            # dropping them.
+            _failed = {eid: e.get("error", "unknown")
+                       for eid, e in EXPERIMENTS_STATE.items()
+                       if e.get("status") == "failed"}
+            if _failed:
+                print("\\nEXPERIMENTS THAT DID NOT COMPLETE:")
+                for eid, err in _failed.items():
+                    _it = get_experiment(eid).deployment.instance_type
+                    print(f"  {eid} ({_it}): {err}")
             df_compare
             """)),
     ]

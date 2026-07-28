@@ -34,3 +34,7 @@ Thumbs.db
 
 # Dev scratch
 .scratch/
+
+# Renamed/archived run outputs (dodge the outputs/ rule above) + executed nb
+outputs.*/
+*.EXECUTED.ipynb

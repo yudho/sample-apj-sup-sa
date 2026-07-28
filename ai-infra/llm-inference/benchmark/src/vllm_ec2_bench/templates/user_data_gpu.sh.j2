@@ -28,6 +28,35 @@ exec > >(tee -a /var/log/{{ log_tag }}-bootstrap.log) 2>&1
 
 echo "[{{ log_tag }}] bootstrap start $(date -Iseconds)"
 
+# ---------------------------------------------------------------------------
+# 0. Self-terminate backstop (throwaway benchmark branch only)
+# ---------------------------------------------------------------------------
+# GUARANTEE the instance self-destructs after 90 min even if the controlling
+# notebook/process dies and runner.terminate() never runs. Spot instances
+# can't use InstanceInitiatedShutdownBehavior=terminate, so instead of `shutdown`
+# (which only STOPS a spot instance, leaving it billing) we call the EC2 API
+# in-guest to TERMINATE this instance by its own id (from IMDSv2). The instance
+# role grants ec2:TerminateInstances scoped by the Project tag. 90 min
+# comfortably exceeds one experiment's worst case; the notebook's own teardown
+# normally fires within seconds of the load test, so this only matters as a
+# runaway-cost backstop.
+cat > /usr/local/bin/self-terminate-backstop.sh <<'BACKSTOP'
+#!/bin/bash
+sleep 5400   # 90 minutes
+TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
+IID=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null)
+REGION=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null)
+echo "[self-terminate-backstop] firing: terminating $IID in $REGION"
+aws ec2 terminate-instances --region "$REGION" --instance-ids "$IID" \
+  || shutdown -h now "backstop fallback (terminate API failed)"
+BACKSTOP
+chmod +x /usr/local/bin/self-terminate-backstop.sh
+nohup /usr/local/bin/self-terminate-backstop.sh \
+  >/var/log/{{ log_tag }}-backstop.log 2>&1 &
+
 export DEBIAN_FRONTEND=noninteractive
 
 # ---------------------------------------------------------------------------
@@ -123,17 +152,57 @@ docker run -d \
   {{ extra_serve_flags }}
 
 # ---------------------------------------------------------------------------
+# 5b. Stream the vLLM container logs to a file on the root volume so startup
+#     progress/errors survive even if the container later dies or the
+#     controlling process is killed. Without this, `docker logs` is the only
+#     copy and it dies with the container — leaving startup hangs undiagnosable.
+# ---------------------------------------------------------------------------
+VLLM_LOG=/var/log/{{ log_tag }}-vllm.log
+nohup docker logs -f {{ container_name }} >"$VLLM_LOG" 2>&1 &
+echo "[{{ log_tag }}] streaming vLLM logs -> $VLLM_LOG"
+
+# Diagnostic log server on :8001 — serves the vLLM log so startup progress /
+# errors are readable from the caller IP even without SSM. (throwaway branch)
+cat > /usr/local/bin/diag-logserver.py <<'PYDIAG'
+import http.server, socketserver, glob
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.send_header("Content-Type","text/plain"); self.end_headers()
+        out=[]
+        for f in sorted(glob.glob("/var/log/*-vllm.log"))+sorted(glob.glob("/var/log/*-bootstrap.log")):
+            try:
+                with open(f) as fh: data=fh.read()[-8000:]
+                out.append("===== %s =====\n%s\n"%(f,data))
+            except Exception as e: out.append("%s: %s\n"%(f,e))
+        self.wfile.write(("".join(out) or "no logs yet").encode())
+    def log_message(self,*a): pass
+socketserver.TCPServer(("0.0.0.0",8001),H).serve_forever()
+PYDIAG
+nohup python3 /usr/local/bin/diag-logserver.py >/var/log/{{ log_tag }}-diag.log 2>&1 &
+echo "[{{ log_tag }}] diag log server on :8001"
+
+# ---------------------------------------------------------------------------
 # 6. Readiness marker (polls /v1/models until 200)
 # ---------------------------------------------------------------------------
 cat > /usr/local/bin/{{ ready_check_name }}.sh <<'EOF'
 #!/bin/bash
+VLLM_LOG=/var/log/{{ log_tag }}-vllm.log
 for i in {1..3600}; do
   if curl -fsS -H "Authorization: Bearer $1" http://127.0.0.1:8000/v1/models >/dev/null 2>&1; then
     touch /run/{{ ready_check_name }}-ready
+    echo "[{{ log_tag }}] vLLM READY after $((i*5))s"
     exit 0
+  fi
+  # Every ~2 min, surface the vLLM log tail into the console-visible boot log
+  # so a hung/slow startup can be diagnosed via get-console-output (no SSH/SSM).
+  if [ $((i % 24)) -eq 0 ] && [ -f "$VLLM_LOG" ]; then
+    echo "[{{ log_tag }}] not ready after $((i*5))s; last vLLM log lines:"
+    tail -n 8 "$VLLM_LOG" 2>/dev/null | sed 's/^/    vllm| /'
   fi
   sleep 5
 done
+echo "[{{ log_tag }}] vLLM FAILED to become ready; final vLLM log tail:"
+tail -n 40 "$VLLM_LOG" 2>/dev/null | sed 's/^/    vllm| /'
 exit 1
 EOF
 chmod +x /usr/local/bin/{{ ready_check_name }}.sh

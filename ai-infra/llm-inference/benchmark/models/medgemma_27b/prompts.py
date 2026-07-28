@@ -16,39 +16,27 @@ from __future__ import annotations
 
 
 SYSTEM_PROMPT = (
-    "You are a structured-data extractor. Given a travel booking confirmation "
-    "email, return ONLY a valid JSON object matching this schema: "
-    "{\"booking_reference\": string, \"traveler\": string, \"origin\": string, "
-    "\"destination\": string, \"depart_date\": string, \"return_date\": string|null, "
-    "\"total_price\": string, \"currency\": string, \"segments\": array}. Use "
-    "ISO-8601 dates (YYYY-MM-DD). Use only information present in the email. "
-    "Do not invent fields. If a field is not present in the email, set it to "
-    "null (or an empty array for segments)."
+    "You are a clinical information extractor. Given a psychiatry follow-up "
+    "note, return ONLY a valid JSON object matching this schema: "
+    "{\"diagnosis\": string, \"medication\": string, \"dose\": string, "
+    "\"phq9_current\": number|null, \"phq9_prior\": number|null, "
+    "\"suicidal_ideation\": boolean, \"side_effects\": array, "
+    "\"plan\": string}. Use only information present in the note. Do not invent "
+    "fields. If a field is not present, set it to null (empty array for "
+    "side_effects). Output the JSON object only, no prose."
 )
-"""System prompt the MedGemma endpoint will see at serve time."""
+"""System prompt the MedGemma endpoint will see at serve time (medical extraction)."""
 
 
 SEED_INPUT = (
-    "Subject: Your booking is confirmed — PNR ABC123\n"
-    "From: no-reply@example-air.com\n"
-    "\n"
-    "Dear Jordan Lee,\n"
-    "\n"
-    "Thank you for booking with Example Air. Your reservation is confirmed.\n"
-    "\n"
-    "Booking reference: ABC123\n"
-    "Passenger:        Jordan Lee\n"
-    "From:             San Francisco (SFO)\n"
-    "To:               Tokyo (HND)\n"
-    "Outbound:         2026-08-12  EX 0421  Economy\n"
-    "Return:           2026-08-26  EX 0422  Economy\n"
-    "Total fare:       USD 1,289.50  (paid with **** 4321)\n"
-    "Cancellation:     Refundable up to 24h before departure.\n"
-    "\n"
-    "Have a great trip!\n"
-    "Example Air Team"
+    "Patient attended a 4-week follow-up for persistent depressive disorder, "
+    "currently prescribed escitalopram 20 mg daily; reports moderate improvement "
+    "in mood and concentration with PHQ-9 decreasing from 14 to 9. Side effects "
+    "include initial mild dizziness and dry mouth, now resolved. No current "
+    "suicidal ideation noted. Plan includes continuation of current dosage for "
+    "another 6 weeks, with scheduled psychotherapy sessions twice monthly."
 )
-"""Generic travel-booking email used for smoke tests."""
+"""Representative synthetic psychiatry follow-up note used for smoke tests."""
 
 
 __all__ = ["SYSTEM_PROMPT", "SEED_INPUT"]

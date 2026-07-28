@@ -20,6 +20,12 @@ MEDGEMMA_27B = ModelSpec(
     default_max_model_len=16384,
     gated=True,
     dtype="bfloat16",
+    # A/B-measured 2026-07-27 (p6-b200, DP=8, c=800): v0.26.0 gives +4.7%
+    # total tok/min over v0.25.1 with identical flags. cu129 build runs clean
+    # on the p6 DLAMI driver. Do NOT add --max-num-batched-tokens 16384 or
+    # --async-scheduling: measured regression + silent request loss on this
+    # short-prompt shape (see p6-ab-vllm-results.json).
+    vllm_gpu_image="vllm/vllm-openai:v0.26.0-cu129-ubuntu2404",
 )
 
 

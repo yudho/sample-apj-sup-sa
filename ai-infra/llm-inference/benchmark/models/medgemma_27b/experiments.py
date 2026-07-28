@@ -90,10 +90,15 @@ _PLANS: dict[str, DeploymentPlan] = {
         tensor_parallel=2,
         data_parallel=2,
         pipeline_parallel=1,
-        max_model_len=16384,
+        # 4096: common serving config across all 4 GPUs. Real notes need ~700 tok
+        # (p99 input ~181 + 512 out). Also keeps KV headroom on 4x L40S TP=2/DP=2.
+        max_model_len=4096,
         region="us-west-2",
-        capacity_preference=_STANDARD,
-        concurrency_high=30,
+        capacity_preference=_SCARCE_GPU,  # spot -> on-demand -> odcr (repo default)
+        spot_wait_timeout_s=300,
+        spot_poll_interval_s=30,
+        vllm_ready_timeout_s=7200,  # generous: cold 55 GiB download + load + compile
+        concurrency_high=100,
         notes="2 replicas on 4× L40S (44.7 GiB each); each replica sharded TP=2 over 2 GPUs, DP=2 replicas in parallel.",
     ),
     "exp_4": DeploymentPlan(
@@ -102,10 +107,16 @@ _PLANS: dict[str, DeploymentPlan] = {
         tensor_parallel=1,
         data_parallel=1,
         pipeline_parallel=1,
-        max_model_len=16384,
+        # 4096: common serving config across all 4 GPUs. Real notes need ~700 tok.
+        # 1x 96 GiB Blackwell has plenty of room; kept equal for fair comparison.
+        max_model_len=4096,
         region="us-west-2",
-        capacity_preference=_STANDARD,
-        concurrency_high=20,
+        capacity_preference=_SCARCE_GPU,  # spot -> on-demand -> odcr (repo default)
+        spot_wait_timeout_s=300,
+        spot_poll_interval_s=30,
+        # sm_120 Blackwell + cold 55 GiB download: generous headroom.
+        vllm_ready_timeout_s=7200,
+        concurrency_high=100,
         notes="1 replica on 1× Blackwell RTX PRO 6000 (96 GiB); TP=1. Smallest and cheapest Blackwell SKU.",
     ),
     "exp_5": DeploymentPlan(
@@ -157,23 +168,57 @@ _PLANS: dict[str, DeploymentPlan] = {
         tensor_parallel=1,
         data_parallel=8,
         pipeline_parallel=1,
-        max_model_len=16384,
-        # p6-B200 is currently offered only in us-east-1/us-east-2 (+ Mumbai,
-        # GovCloud). Default this plan to us-east-2 (CMH), which had the best
-        # commercial B200 spot signal, rather than the project-wide us-west-2.
-        region="us-east-2",
-        capacity_preference=_SCARCE_GPU,
-        # Persistently poll for a scarce B200 spot slot (see preset docstring).
+        # 4096: identical serving config across all 4 GPUs (apples-to-apples).
+        # p6 has ample VRAM so this isn't a fit constraint here, but a common
+        # max_model_len keeps the comparison clean. Real notes need ~700 tok.
+        max_model_len=4096,
+        # p6-B200 is offered in us-east-1, us-east-2, us-west-2 (+ Mumbai,
+        # GovCloud). Using us-west-2: on 2026-07-22 it had p6 spot pools across
+        # 3 AZs vs 1 in us-east-1, and us-east-2 was capacity-starved that day.
+        region="us-west-2",
+        capacity_preference=_SCARCE_GPU,  # spot -> on-demand -> odcr (repo default)
+        # Persistently poll for a scarce B200 spot slot before falling back.
         spot_wait_timeout_s=_P6_SPOT_WAIT_S,
         spot_poll_interval_s=30,
+        vllm_ready_timeout_s=7200,
+        # Raise vLLM's concurrent-sequence cap (default 256) so c=800 isn't
+        # throttled by the scheduler. DP=8 → this is per-replica headroom.
+        extra_serve_flags="--max-num-seqs 512",
+        concurrency_high=800,  # 8× B200 needs high concurrency to saturate (see phase-2 sweep)
+        notes=(
+            "8 independent MedGemma replicas, one per B200 (TP=1, DP=8) — vLLM "
+            "data-parallel load-balancer over 8 replicas, single endpoint. This is "
+            "the THROUGHPUT/economics-optimal packing (55 GiB fits one 180 GiB "
+            "B200, so no TP sharding overhead). NOTE the 2026-07-22 DP=8 cold-load "
+            "wedge (8 engines reading 50 GiB each off one EBS vol): mitigate with "
+            "gp3 provisioned throughput on the launch template + 120-min timeout. "
+            "Needs high concurrency (c>=512) to saturate — see phase-2 sweep for c=X."
+        ),
+    ),
+    "exp_9": DeploymentPlan(
+        experiment_id="exp_9",
+        instance_type="g7.12xlarge",
+        tensor_parallel=2,
+        data_parallel=1,
+        pipeline_parallel=1,
+        # 4096 >> real Holmusk notes (p99 input ~181 tok, max ~215, + 512 output
+        # ~= 700 tok needed). The prior 16384 demanded a 1.33 GiB KV cache that
+        # did NOT fit in g7's ~1.09 GiB of post-weights VRAM (2x 32 GiB, 55 GiB
+        # weights TP=2) -> vLLM "Engine core initialization failed" crash loop.
+        # 4096 leaves ample KV headroom AND keeps serving config identical across
+        # all 4 GPUs for a valid apples-to-apples comparison.
+        max_model_len=4096,
+        region="us-west-2",
+        capacity_preference=_SCARCE_GPU,  # spot -> on-demand -> odcr (repo default)
+        spot_wait_timeout_s=300,
+        spot_poll_interval_s=30,
+        # sm_120 Blackwell + TP=2 + cold 55 GiB download: generous headroom.
+        vllm_ready_timeout_s=7200,
         concurrency_high=100,
         notes=(
-            "8 replicas on 8× NVIDIA B200 (180 GiB each); one replica per GPU "
-            "(TP=1, DP=8) so all 8 GPUs are utilised. 55 GiB weights fit "
-            "comfortably per GPU with a large KV-cache budget. Newest Blackwell "
-            "datacenter GPU in the set. Spot is scarce, so this plan waits "
-            "(persistently, up to 30 min) for a spot opening before falling "
-            "back to on-demand — the wait is excluded from benchmark run time."
+            "1 replica on 2× NVIDIA RTX PRO 4500 (32 GiB each); 55 GiB weights "
+            "don't fit one 32 GiB GPU so TP=2. Newest g7 Blackwell SKU (RTX PRO "
+            "4500), smallest g7 size that fits MedGemma-27B."
         ),
     ),
 }
@@ -182,8 +227,21 @@ _PLANS: dict[str, DeploymentPlan] = {
 # -----------------------------------------------------------------------------
 # Public API: ExperimentConfigs
 # -----------------------------------------------------------------------------
+# Per-experiment gpu_memory_utilization overrides (default is 0.90). g7.12xlarge
+# (2x 32 GiB) is the tightest fit for 27B: even at max_model_len=4096 we give it
+# extra KV headroom by raising utilization to 0.95, so KV-cache allocation is
+# comfortably deterministic rather than on the edge.
+_GPU_MEM_UTIL: dict[str, float] = {
+    "exp_9": 0.95,  # g7.12xlarge — tight 2x 32 GiB fit for MedGemma-27B
+}
+
 EXPERIMENTS: dict[str, ExperimentConfig] = {
-    exp_id: ExperimentConfig(model_spec=MEDGEMMA_27B, deployment=plan)
+    exp_id: ExperimentConfig(
+        model_spec=MEDGEMMA_27B,
+        deployment=plan,
+        **({"gpu_memory_utilization": _GPU_MEM_UTIL[exp_id]}
+           if exp_id in _GPU_MEM_UTIL else {}),
+    )
     for exp_id, plan in _PLANS.items()
 }
 
