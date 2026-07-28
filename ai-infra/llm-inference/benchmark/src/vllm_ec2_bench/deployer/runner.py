@@ -345,6 +345,10 @@ class DeploymentRunner:
         start = time.time()
         deadline = start + self.ready_timeout_s
         last_error = "<no attempt>"
+        # Corp NAT egress IPs rotate mid-launch (observed 3×): the SG pins the
+        # /32 captured at creation, so a rotation blocks this poll for the full
+        # timeout while vLLM is healthy. Re-check/self-heal ingress every minute.
+        last_ip_check = 0.0
         while time.time() < deadline:
             try:
                 req = urllib.request.Request(
@@ -362,6 +366,10 @@ class DeploymentRunner:
                 last_error = str(exc)
             except Exception as exc:  # noqa: BLE001
                 last_error = repr(exc)
+            if time.time() - last_ip_check >= 60:
+                last_ip_check = time.time()
+                if self._resources.refresh_caller_ingress():
+                    self.state.caller_ip_cidr = self._resources.caller_ip_cidr
             time.sleep(20)
         raise TimeoutError(
             f"vLLM did not become ready on {url} within {self.ready_timeout_s}s. "
