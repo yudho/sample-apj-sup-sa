@@ -31,7 +31,7 @@ echo "[{{ log_tag }}] bootstrap start $(date -Iseconds)"
 # ---------------------------------------------------------------------------
 # 0. Self-terminate backstop (throwaway benchmark branch only)
 # ---------------------------------------------------------------------------
-# GUARANTEE the instance self-destructs after 90 min even if the controlling
+# GUARANTEE the instance self-destructs after the configured window even if the controlling
 # notebook/process dies and runner.terminate() never runs. Spot instances
 # can't use InstanceInitiatedShutdownBehavior=terminate, so instead of `shutdown`
 # (which only STOPS a spot instance, leaving it billing) we call the EC2 API
@@ -42,7 +42,7 @@ echo "[{{ log_tag }}] bootstrap start $(date -Iseconds)"
 # runaway-cost backstop.
 cat > /usr/local/bin/self-terminate-backstop.sh <<'BACKSTOP'
 #!/bin/bash
-sleep 5400   # 90 minutes
+sleep {{ self_terminate_backstop_s }}   # DeploymentPlan.self_terminate_backstop_s
 TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
   -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
 IID=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" \

@@ -120,6 +120,7 @@ class UserDataRenderer:
             # quoting is safe.
             "extra_env_vars": dict(dp.extra_env_vars),
             "dtype": ms.dtype,
+            "self_terminate_backstop_s": dp.self_terminate_backstop_s,
             "container_name": ms.container_name,
             "ready_check_name": f"{ms.resource_prefix}-ready-check",
         }

@@ -156,6 +156,18 @@ class DeploymentPlan(BaseModel):
             "wraps the HF weight download must cover the slow path."
         ),
     )
+    self_terminate_backstop_s: int = Field(
+        default=5400, ge=600,
+        description=(
+            "In-guest runaway-cost backstop: the instance terminates ITSELF "
+            "after this many seconds even if the controlling process dies and "
+            "runner.terminate() never fires. The default (90 min) covers a "
+            "single-experiment run. A multi-phase sweep on one instance must "
+            "raise this to exceed its own worst-case wall time (warmup + every "
+            "tier) or the backstop will kill the run mid-flight and the "
+            "later tiers are simply lost."
+        ),
+    )
     spot_wait_timeout_s: int = Field(
         default=0, ge=0,
         description=(

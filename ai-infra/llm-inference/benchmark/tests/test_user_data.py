@@ -177,6 +177,24 @@ class TestUserDataRenderer:
         ud = r.render(cfg, cat, hf_secret_name=None, vllm_api_key="k")
         assert "--kv-cache-dtype" not in ud
 
+    def test_self_terminate_backstop_default_is_90_min(self) -> None:
+        cfg = _gpu_no_mig_cfg()
+        ud = UserDataRenderer().render(
+            cfg, _mock_catalog(), hf_secret_name=None, vllm_api_key="k")
+        assert "sleep 5400" in ud
+
+    def test_self_terminate_backstop_is_configurable(self) -> None:
+        """A multi-phase sweep on one instance must be able to outlive the
+        default 90-min backstop, or the backstop terminates the instance
+        mid-run and every remaining tier is lost."""
+        plan = _plan("p5e.48xlarge", tensor_parallel=1, data_parallel=8)
+        plan = plan.model_copy(update={"self_terminate_backstop_s": 14400})
+        cfg = ExperimentConfig(model_spec=_ms(), deployment=plan)
+        ud = UserDataRenderer().render(
+            cfg, _mock_catalog(), hf_secret_name=None, vllm_api_key="k")
+        assert "sleep 14400" in ud
+        assert "sleep 5400" not in ud
+
     def test_extra_serve_flags_propagate_to_user_data(self) -> None:
         """extra_serve_flags on the plan must surface verbatim in the
         rendered vllm serve command line. This is the only path that gets
