@@ -41,6 +41,24 @@ class PayloadPoolExhausted(RuntimeError):
     """Raised when more requests were issued than unique notes supplied."""
 
 
+def make_http_client(max_connections: int = 4096, timeout_s: float = 900.0):
+    """An httpx client whose pool can't throttle a high-concurrency sweep.
+
+    The OpenAI SDK defaults to ``max_connections=1000``. Above that, requests
+    queue CLIENT-SIDE, so a c=1200/1600 tier silently measures ~1,000 in flight
+    and the throughput curve flattens for a reason that has nothing to do with
+    the GPU. Observed on 2026-07-28: c=1200 and c=1600 both plateaued at ~1,085
+    concurrent requests. Pass the result as ``http_client=`` and verify with
+    ``ep._client._client._transport._pool._max_connections``.
+    """
+    import httpx
+    return httpx.Client(
+        limits=httpx.Limits(max_connections=max_connections,
+                            max_keepalive_connections=max_connections),
+        timeout=httpx.Timeout(timeout_s),
+    )
+
+
 class UniquePayloadEndpoint(VLLMEndpoint):
     """vLLM endpoint that serves each request a unique note from a pool.
 
@@ -53,6 +71,9 @@ class UniquePayloadEndpoint(VLLMEndpoint):
         shared prefix, matching Holmusk's "~1% cacheable" reality).
     max_tokens, temperature, top_p
         Sampling params applied to every generated payload.
+    kwargs
+        Forwarded to the OpenAI client — notably ``http_client`` (see
+        :func:`make_http_client`) to lift the 1,000-connection default.
     """
 
     def __init__(
