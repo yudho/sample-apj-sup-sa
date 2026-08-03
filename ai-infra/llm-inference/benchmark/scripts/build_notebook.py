@@ -302,6 +302,7 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 DeploymentRunner,
                 ExperimentConfig,
                 catalog_meta,
+                rates_from_responses,
                 scrape_vllm_metrics,
                 upsert_hf_token,
                 verify_tier,
@@ -329,7 +330,7 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 refresh_catalog,
             )
 
-            from llmeter.experiments import LoadTest
+            from llmeter.runner import Runner
 
             logging.basicConfig(
                 level=logging.INFO,
@@ -353,7 +354,11 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             HF_TOKEN = "PLACEHOLDER_PASTE_YOUR_HF_TOKEN"
             HF_SECRET_NAME = f"{{{c.var_name}.resource_prefix}}-benchmark/hf-token"
 
-            N_BENCHMARK_SAMPLES = 1000
+            # Must cover sum(c * PER_CLIENT_REQUESTS) across all tiers, since each
+            # request consumes a DISTINCT input and the cursor advances between
+            # tiers. A c=800 sweep needs ~16,000; the pooled corpus holds 10,000,
+            # so the assert in the run helper will tell you if a plan outgrows it.
+            N_BENCHMARK_SAMPLES = 10000
             N_WARMUP_SAMPLES = 5
             BENCHMARK_SAMPLE_SEED = 42
 
@@ -405,33 +410,40 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             """)),
         md("### 0.6 Load synthesized benchmark data"),
         md(dedent(f"""\
-            Benchmark inputs come from `sample-data/{c.domain}/{c.sample_data_file}`
-            (~10,000 synthesized {domain_blurb}). We randomly sample
-            `N_BENCHMARK_SAMPLES` prompts and reuse the same sample across all
-            experiments + concurrency tiers so the workload is apples-to-apples.
+            Benchmark inputs are pooled across every file in
+            `sample-data/{c.domain}/` (~10,000 synthesized {domain_blurb}), then
+            sampled deterministically.
+
+            Every request consumes one **distinct** input and the pool cursor
+            advances between concurrency tiers, so a large sweep needs
+            `sum(c * PER_CLIENT_REQUESTS)` inputs — several thousand for a
+            high-concurrency instance. Pooling all files rather than one keeps
+            that satisfiable; a single file holds only 1,000 records.
             """)),
         code(dedent(f"""\
             import random
 
-            synth_file = PROJECT_ROOT.parent / "sample-data" / "{c.domain}" / "{c.sample_data_file}"
-            assert synth_file.exists(), (
-                f"{{synth_file}} is missing. Run "
+            synth_dir = PROJECT_ROOT.parent / "sample-data" / "{c.domain}"
+            synth_files = sorted(synth_dir.glob("*.jsonl"))
+            assert synth_files, (
+                f"No .jsonl files in {{synth_dir}}. Run "
                 f"`python sample-data/scripts/synthesize.py --domain {c.domain}` first."
             )
 
             all_texts: list[str] = []
-            with synth_file.open() as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    text = obj.get("text")
-                    if text:
-                        all_texts.append(text)
+            for synth_file in synth_files:
+                with synth_file.open() as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        text = obj.get("text")
+                        if text:
+                            all_texts.append(text)
 
             assert len(all_texts) >= N_BENCHMARK_SAMPLES, (
                 f"Synthesis pool has only {{len(all_texts)}} records; "
@@ -441,7 +453,8 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             rng = random.Random(BENCHMARK_SAMPLE_SEED)
             INPUTS: list[str] = rng.sample(all_texts, N_BENCHMARK_SAMPLES)
 
-            print(f"Synthesis pool:    {{len(all_texts):,}} records from {{synth_file.name}}")
+            print(f"Synthesis pool:    {{len(all_texts):,}} records "
+                  f"from {{len(synth_files)}} file(s)")
             print(f"Sampled:           {{len(INPUTS):,}} prompts (seed={{BENCHMARK_SAMPLE_SEED}})")
             print()
             print("--- system prompt ---")
@@ -451,14 +464,40 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             print(INPUTS[0][:320] + ("..." if len(INPUTS[0]) > 320 else ""))
             """)),
         code(dedent("""\
-            BENCH_TOTAL_REQUESTS_PER_TIER = N_BENCHMARK_SAMPLES
             MAX_NEW_TOKENS = 512
-            CONCURRENCY_TIERS = [1, 10, 30, 50, 100]
+
+            # Requests per CLIENT per tier. Total requests scale WITH concurrency
+            # (c * PER_CLIENT_REQUESTS), which is what keeps every tier to a
+            # bounded, comparable duration. A flat per-tier total instead makes
+            # low-concurrency tiers run serially: at 40 s/request a 640-request
+            # c=1 tier takes 7 hours.
+            PER_CLIENT_REQUESTS = 10
+
+            def tier_requests(c: int) -> int:
+                return c * PER_CLIENT_REQUESTS
+
+            # Tiers are derived from the PLAN's own concurrency_high so a large
+            # SKU is actually driven to saturation. Using one hardcoded ladder
+            # for every instance understates the big boxes badly: the same 8-GPU
+            # box measured $1.03/1M tokens at c=100 and $0.177/1M at c=800.
+            def tiers_for(exp_id: str) -> list[int]:
+                high = get_experiment(exp_id).deployment.concurrency_high
+                ladder = [1, 10, 30, 50, 100, 200, 400, 800, 1600]
+                tiers = [c for c in ladder if c <= high]
+                if high not in tiers:
+                    tiers.append(high)
+                return tiers
 
             # Client-side connection ceiling. The OpenAI SDK defaults to 1,000,
             # which silently caps any tier above that and flattens the curve for
             # a reason that has nothing to do with the GPU.
             HTTP_MAX_CONNECTIONS = 4096
+
+            # Per-request timeout handed to LLMeter. Its default is 60 s and the
+            # per-client budget is timeout x n_requests; on expiry a client's
+            # entire response set is discarded while failed_requests still reads
+            # 0. Size this above the slowest expected single request.
+            REQUEST_TIMEOUT_S = 900
 
             # Verification thresholds applied to every tier (see
             # vllm_ec2_bench.verify). MAX_PREEMPTIONS=0 is the strict setting
@@ -468,19 +507,10 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             MAX_DIVERGENCE = 0.05
             MAX_PREEMPTIONS = 0
 
-            # UniquePayloadEndpoint consumes one input per request and refuses to
-            # recycle, so the pool must cover the largest tier.
-            assert N_BENCHMARK_SAMPLES >= BENCH_TOTAL_REQUESTS_PER_TIER, (
-                "input pool smaller than a tier's request budget"
-            )
-            assert HTTP_MAX_CONNECTIONS >= max(CONCURRENCY_TIERS), (
-                "HTTP_MAX_CONNECTIONS below the top concurrency tier"
-            )
-
-            print(f"Per-tier request budget: {BENCH_TOTAL_REQUESTS_PER_TIER}")
-            print(f"Concurrency tiers:       {CONCURRENCY_TIERS}")
+            print(f"Requests per client:     {PER_CLIENT_REQUESTS}")
             print(f"Warmup requests:         {N_WARMUP_SAMPLES} at c=1 (discarded)")
             print(f"Client conn ceiling:     {HTTP_MAX_CONNECTIONS}")
+            print(f"Per-request timeout:     {REQUEST_TIMEOUT_S}s")
             print(f"Gates: completeness>={MIN_COMPLETENESS:.0%} "
                   f"divergence<={MAX_DIVERGENCE:.0%} preemptions<={MAX_PREEMPTIONS}")
             """)),
@@ -525,11 +555,22 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 # that inflate throughput. make_http_client lifts the OpenAI
                 # SDK's 1,000-connection cap so tiers above c=1000 measure the
                 # server rather than the client's connection pool.
+                # The pool must cover the SUM of all tiers, because the cursor
+                # advances between tiers rather than replaying the same inputs.
+                # Replaying would let later tiers hit a prefix cache that earlier
+                # tiers filled, inflating exactly the high-concurrency tiers that
+                # decide the reported optimum.
+                _needed_total = sum(tier_requests(c) for c in concurrency_tiers)
+                assert len(INPUTS) >= _needed_total, (
+                    f"input pool {{len(INPUTS)}} < {{_needed_total}} required for "
+                    f"tiers {{concurrency_tiers}}; raise N_BENCHMARK_SAMPLES"
+                )
+
                 endpoint = UniquePayloadEndpoint(
                     base_url=state.base_url,
                     api_key=state.api_key,
                     model_id=cfg.model_spec.served_model_name,
-                    inputs=INPUTS,
+                    inputs=INPUTS[:_needed_total],
                     system_prompt=SYSTEM_PROMPT,
                     max_tokens=MAX_NEW_TOKENS,
                     http_client=make_http_client(HTTP_MAX_CONNECTIONS),
@@ -548,117 +589,139 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 print(f"[{{exp_id}}] smoke: "
                       f"input_tokens={{smoke.num_tokens_input}} "
                       f"output_tokens={{smoke.num_tokens_output}} "
-                      f"latency_s={{smoke.time_to_last_token:.2f}}")
-
-                # These payloads are placeholders: prepare_payload() replaces
-                # the message body with a fresh input on every request. Only the
-                # LIST LENGTH matters, since it sets LLMeter's request budget.
-                payloads = [
-                    VLLMEndpoint.create_payload(SYSTEM_PROMPT, x, max_tokens=MAX_NEW_TOKENS)
-                    for x in INPUTS[:BENCH_TOTAL_REQUESTS_PER_TIER]
-                ]
-
-                if N_WARMUP_SAMPLES > 0:
-                    n_warmup = min(N_WARMUP_SAMPLES, len(payloads))
-                    print(f"[{{exp_id}}] warmup: {{n_warmup}} passes at c=1 (discarded)")
-                    warmup_payloads = payloads[:n_warmup]
-                    warmup = LoadTest(
-                        endpoint=endpoint,
-                        payload=warmup_payloads,
-                        sequence_of_clients=[1],
-                        output_path=str(OUTPUT_BASE / exp_id / "warmup"),
-                        min_requests_per_run=n_warmup,
-                        min_requests_per_client=n_warmup,
-                    )
-                    await warmup.run()
-                    print(f"[{{exp_id}}] warmup done")
-
-                load_test = LoadTest(
-                    endpoint=endpoint,
-                    payload=payloads,
-                    sequence_of_clients=concurrency_tiers,
-                    output_path=str(OUTPUT_BASE / exp_id / "load_test"),
-                    min_requests_per_run=BENCH_TOTAL_REQUESTS_PER_TIER,
-                    min_requests_per_client=max(1, BENCH_TOTAL_REQUESTS_PER_TIER // max(concurrency_tiers)),
-                )
-                # Time ONLY the load test — this is the benchmark run window.
-                # Capacity acquisition (state.capacity_wait_s) and vLLM warmup
-                # (state.vllm_ready_wait_s) already happened during
-                # runner.launch() above and are deliberately excluded here, so
-                # a long spot wait for a scarce GPU never inflates the measured
-                # benchmark duration.
-                import time as _time
-                # Bracket the run with /metrics scrapes: the counters are
-                # cumulative for the life of the server, so only deltas are
-                # meaningful. This is the only way to see prefix-cache behaviour
-                # and preemptions — vLLM leaves usage.cached_tokens at 0 even
-                # with --enable-prefix-caching enabled.
-                metrics_before = scrape_vllm_metrics(state.base_url, state.api_key)
-                endpoint.reset_pool()
-                _bench_start = _time.time()
-                results = await load_test.run()
-                benchmark_wall_s = _time.time() - _bench_start
-                metrics_after = scrape_vllm_metrics(state.base_url, state.api_key)
+                      f"latency_s={{smoke.time_to_last_token:.2f}} "
+                      f"finish={{endpoint.finish_reasons}}")
 
                 print(f"[{{exp_id}}] launch overhead (excluded): "
                       f"spot_wait={{state.capacity_wait_s or 0:.0f}}s "
                       f"vllm_warmup={{state.vllm_ready_wait_s or 0:.0f}}s")
-                print(f"[{{exp_id}}] benchmark run (measured): {{benchmark_wall_s:.0f}}s")
-                print(f"[{{exp_id}}] unique inputs served: {{endpoint.served:,}}")
 
-                # Verify each tier. A tier that fails a gate is still recorded —
-                # you want to see it and why — but it is flagged so it never
-                # silently becomes a quoted number.
+                # One Runner per tier, not one LoadTest across all of them:
+                #  * LoadTest does not expose `timeout`, and LLMeter's default is
+                #    60 s per request. The per-client budget is timeout x n, and
+                #    on expiry a client's ENTIRE response set is discarded while
+                #    failed_requests still reads 0.
+                #  * Each tier needs its own output directory. count_responses()
+                #    globs recursively, so a shared directory makes every tier's
+                #    verdict count every other tier's responses.
+                #  * /metrics counters must be bracketed per tier; deltas across
+                #    a whole sweep cannot attribute preemptions to a tier.
+                import time as _time
                 verdicts = {{}}
-                _results_dict = getattr(results, "results", None) or {{}}
-                for _clients, _result in _results_dict.items():
-                    _stats = getattr(_result, "stats", None)
-                    if _stats is None:
-                        continue
-                    _in_tok = _stats.get("total_input_tokens") or 0
-                    _out_tok = _stats.get("total_output_tokens") or 0
-                    _tpm = (
-                        (_stats.get("average_input_tokens_per_minute") or 0)
-                        + (_stats.get("average_output_tokens_per_minute") or 0)
+                tier_results = {{}}
+                _cursor = 0
+                for _c in concurrency_tiers:
+                    _needed = tier_requests(_c)
+                    _tier_dir = OUTPUT_BASE / exp_id / f"c{{_c}}"
+                    _tier_notes = INPUTS[_cursor:_cursor + _needed]
+                    endpoint.reset_pool(offset=_cursor)
+                    endpoint.reset_finish_reasons()
+                    _cursor += _needed
+
+                    # Placeholders: prepare_payload() swaps in a fresh input per
+                    # request, so only the LIST LENGTH matters here.
+                    _payloads = [
+                        VLLMEndpoint.create_payload(
+                            SYSTEM_PROMPT, x, max_tokens=MAX_NEW_TOKENS
+                        )
+                        for x in _tier_notes
+                    ]
+
+                    _m_before = scrape_vllm_metrics(state.base_url, state.api_key)
+                    _t0 = _time.time()
+                    _run = Runner(
+                        endpoint=endpoint,
+                        payload=_payloads,
+                        clients=_c,
+                        n_requests=PER_CLIENT_REQUESTS,
+                        output_path=str(_tier_dir),
+                        timeout=REQUEST_TIMEOUT_S,
+                        run_name=f"c{{_c}}",
+                        disable_per_client_progress_bar=True,
+                        disable_clients_progress_bar=True,
                     )
+                    _res = await _run.run()
+                    _wall = _time.time() - _t0
+                    _m_after = scrape_vllm_metrics(state.base_url, state.api_key)
+                    _stats = getattr(_res, "stats", None) or {{}}
+
+                    # Rates recomputed from the response records over ONE window.
+                    # LLMeter divides input tokens by the first-to-last DISPATCH
+                    # window and output tokens by the dispatch-to-END window, so
+                    # summing its two rates adds figures measured over different
+                    # periods — a measured 9.4% inflation on a real tier, which
+                    # understates cost per token by the same margin.
+                    _rates = rates_from_responses(_tier_dir)
+                    _tpm = _rates.get("total_tokens_per_min") or 0
+                    _n_ok = _rates.get("n_successful") or 0
+                    _window = (
+                        _rates.get("window_s")
+                        or _stats.get("total_test_time")
+                        or _wall
+                    )
+                    _tot_tok = (_rates.get("total_input_tokens") or 0) + (
+                        _rates.get("total_output_tokens") or 0
+                    )
+
                     _v = verify_tier(
-                        concurrency=int(_clients),
-                        output_dir=OUTPUT_BASE / exp_id / "load_test",
-                        n_expected=_stats.get("total_requests") or 0,
+                        concurrency=_c,
+                        output_dir=_tier_dir,
+                        n_expected=_needed,
                         stats_tokens_per_min=_tpm,
-                        total_tokens=_in_tok + _out_tok,
-                        wall_clock_s=_stats.get("total_test_time") or 0.0,
-                        metrics_before=metrics_before,
-                        metrics_after=metrics_after,
+                        total_tokens=_tot_tok,
+                        wall_clock_s=_window,
+                        metrics_before=_m_before,
+                        metrics_after=_m_after,
                         min_completeness=MIN_COMPLETENESS,
                         max_divergence=MAX_DIVERGENCE,
                         max_preemptions=MAX_PREEMPTIONS,
                     )
-                    verdicts[int(_clients)] = _v
-                    _flag = "VALID" if _v.valid else "INVALID"
-                    print(f"[{{exp_id}}] c={{_clients}}: {{_flag}}"
-                          + (f" — {{'; '.join(_v.reasons)}}" if _v.reasons else ""))
-                if verdicts:
-                    _hit = [v.prefix_cache_hit_rate for v in verdicts.values()
-                            if v.prefix_cache_hit_rate is not None]
-                    if _hit:
-                        print(f"[{{exp_id}}] prefix-cache hit rate: {{max(_hit):.1%}} "
-                              "(high values mean payload reuse, not a fast engine)")
+
+                    # A truncated output means the item was never finished, so
+                    # any per-item cost derived from it is meaningless.
+                    _trunc = endpoint.truncated_count
+                    _done = endpoint.completed_count
+                    if _trunc:
+                        _v.valid = False
+                        _v.reasons.append(
+                            f"{{_trunc}}/{{_trunc + _done}} outputs hit "
+                            f"max_tokens={{MAX_NEW_TOKENS}} — items not completed; "
+                            "raise MAX_NEW_TOKENS and re-run"
+                        )
+
+                    verdicts[_c] = _v
+                    tier_results[_c] = {{
+                        "stats": _stats,
+                        "rates": _rates,
+                        "responses_ok": _n_ok,
+                        "window_s": _window,
+                        "outputs_truncated": _trunc,
+                        "outputs_completed": _done,
+                        "wall_clock_s": _wall,
+                    }}
+                    print(
+                        f"[{{exp_id}}] c={{_c}}: {{_tpm:,.0f}} tok/min, "
+                        f"{{_n_ok}}/{{_needed}} ok, trunc={{_trunc}} "
+                        f"[{{'VALID' if _v.valid else 'INVALID'}}]"
+                        + (f" — {{'; '.join(_v.reasons)}}" if _v.reasons else "")
+                    )
+
+                _hit = [v.prefix_cache_hit_rate for v in verdicts.values()
+                        if v.prefix_cache_hit_rate is not None]
+                if _hit:
+                    print(f"[{{exp_id}}] max prefix-cache hit rate: {{max(_hit):.1%}} "
+                          "(high values mean payload reuse, not a fast engine)")
 
                 EXPERIMENTS_STATE[exp_id] = {{
                     "spec": cfg,
                     "runner": runner,
                     "state": state,
                     "endpoint": endpoint,
-                    "load_test": load_test,
-                    "results": results,
+                    "tier_results": tier_results,
                     "concurrency_tiers": concurrency_tiers,
-                    "benchmark_wall_s": benchmark_wall_s,
                     "capacity_wait_s": state.capacity_wait_s,
                     "vllm_ready_wait_s": state.vllm_ready_wait_s,
                     "verdicts": {{k: v.as_dict() for k, v in verdicts.items()}},
-                    "metrics_before": metrics_before,
-                    "metrics_after": metrics_after,
                     "unique_inputs_served": endpoint.served,
                     "completed_at": datetime.utcnow().isoformat(),
                 }}
@@ -686,13 +749,17 @@ def cells_experiment(exp_id: str, title: str) -> list[dict]:
             The deployer walks each mode in order; the final mode is recorded
             in `state.capacity_mode` and shown in the comparison table.
 
-            Concurrency tiers: `CONCURRENCY_TIERS` (defined in section 0).
+            Concurrency tiers come from this experiment's own
+            `concurrency_high` via `tiers_for()` (section 0), so a large
+            instance is actually driven to saturation rather than swept with a
+            ladder borrowed from a smaller SKU.
             """)),
         code(dedent(f"""\
             cfg = get_experiment("{exp_id}")
             print(cfg.model_dump())
-            concurrency_tiers = CONCURRENCY_TIERS
-            concurrency_tiers
+            concurrency_tiers = tiers_for("{exp_id}")
+            print(f"tiers: {{concurrency_tiers}} "
+                  f"(requests: {{[tier_requests(c) for c in concurrency_tiers]}})")
             """)),
         code(dedent(f"""\
             state_{exp_id} = await run_experiment(
@@ -713,15 +780,25 @@ def cells_analysis() -> list[dict]:
             STAT_VARIANT = "average"  # "p50" | "p90" | "p99"
 
             def _get_per_tier_stats(entry: dict) -> dict[int, dict]:
-                results_obj = entry.get("results")
-                if results_obj is None:
-                    return {}
-                results_dict = getattr(results_obj, "results", None) or {}
+                # Per-tier stats, with rate keys overridden by the recomputation.
+                # The LLMeter average_*_tokens_per_minute pair uses two
+                # different denominators, so anything derived from their sum is
+                # inflated. rates_from_responses recomputes over a single
+                # window; those values win wherever available.
                 per_tier = {}
-                for clients, result in results_dict.items():
-                    stats = getattr(result, "stats", None)
-                    if stats is None:
-                        continue
+                for clients, tr in (entry.get("tier_results") or {}).items():
+                    stats = dict(tr.get("stats") or {})
+                    rates = tr.get("rates") or {}
+                    if rates.get("total_tokens_per_min"):
+                        stats["total_tokens_per_minute"] = rates["total_tokens_per_min"]
+                        stats["average_input_tokens_per_minute"] = rates[
+                            "input_tokens_per_min"
+                        ]
+                        stats["average_output_tokens_per_minute"] = rates[
+                            "output_tokens_per_min"
+                        ]
+                        stats["responses_ok"] = rates.get("n_successful")
+                        stats["measurement_window_s"] = rates.get("window_s")
                     per_tier[int(clients)] = stats
                 return per_tier
 
@@ -767,7 +844,11 @@ def cells_analysis() -> list[dict]:
                     dep_state = entry.get("state")
                     cap_wait = getattr(dep_state, "capacity_wait_s", None)
                     ready_wait = getattr(dep_state, "vllm_ready_wait_s", None)
-                    bench_wall = entry.get("benchmark_wall_s")
+                    # Sum of the per-tier measurement windows.
+                    bench_wall = sum(
+                        (tr.get("wall_clock_s") or 0)
+                        for tr in (entry.get("tier_results") or {}).values()
+                    ) or None
 
                     row = {
                         "Experiment": exp_id,
@@ -786,16 +867,29 @@ def cells_analysis() -> list[dict]:
                         "Benchmark run (s)": round(bench_wall, 1) if bench_wall is not None else None,
                     }
                     per_tier = _get_per_tier_stats(entry)
+                    verdicts = entry.get("verdicts") or {}
                     for tier in all_tiers_sorted:
                         stats = per_tier.get(tier, {})
-                        in_tpm = stats.get("average_input_tokens_per_minute") or 0
-                        out_tpm = stats.get("average_output_tokens_per_minute") or 0
-                        total_tpm = in_tpm + out_tpm
+                        # Prefer the single-window recomputation; fall back to
+                        # LLMeter's sum only if it is unavailable, and mark it.
+                        total_tpm = stats.get("total_tokens_per_minute")
+                        basis = "recomputed"
+                        if not total_tpm:
+                            total_tpm = (
+                                (stats.get("average_input_tokens_per_minute") or 0)
+                                + (stats.get("average_output_tokens_per_minute") or 0)
+                            )
+                            basis = "llmeter (two-window; inflated)"
                         cost_per_1m = None
                         if total_tpm and actual_hourly:
                             cost_per_1m = round(actual_hourly / (total_tpm * 60) * 1_000_000, 4)
                         row[f"c={tier} tok/min"] = round(total_tpm, 1) if total_tpm else None
                         row[f"c={tier} $/1M"] = cost_per_1m
+                        # Never let a gated-out tier be read as a clean result.
+                        v = verdicts.get(tier) or verdicts.get(str(tier)) or {}
+                        row[f"c={tier} valid"] = v.get("valid")
+                        if total_tpm:
+                            row[f"c={tier} rate basis"] = basis
                     rows.append(row)
                 return pd.DataFrame(rows) if rows else pd.DataFrame()
 

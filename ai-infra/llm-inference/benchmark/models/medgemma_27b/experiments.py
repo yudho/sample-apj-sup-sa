@@ -199,7 +199,17 @@ _PLANS: dict[str, DeploymentPlan] = {
 # Public API: ExperimentConfigs
 # -----------------------------------------------------------------------------
 EXPERIMENTS: dict[str, ExperimentConfig] = {
-    exp_id: ExperimentConfig(model_spec=MEDGEMMA_27B, deployment=plan)
+    exp_id: ExperimentConfig(
+        model_spec=MEDGEMMA_27B,
+        deployment=plan,
+        # Pin the scheduler's concurrent-sequence cap at (a little above) the
+        # highest tier this plan sweeps. Left unset, vLLM derives it from device
+        # memory — 1024 on the >=70 GiB Blackwell parts but 256 on the 22-45 GiB
+        # g5/g6/g6e — so an unpinned matrix compares SKUs under different
+        # scheduler limits, and any plan whose concurrency_high exceeds the
+        # derived cap measures a queue instead of the GPU.
+        max_num_seqs=max(1024, plan.concurrency_high * 2),
+    )
     for exp_id, plan in _PLANS.items()
 }
 
