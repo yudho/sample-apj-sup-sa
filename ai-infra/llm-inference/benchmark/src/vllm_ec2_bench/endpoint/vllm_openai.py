@@ -82,6 +82,10 @@ class VLLMEndpoint(OpenAICompletionEndpoint):  # type: ignore[misc]
             base_url=base_url,
             **kwargs,
         )
+        # finish_reason tallies. Underscore-prefixed so the parent's to_dict(),
+        # which filters private attrs, doesn't try to serialise them.
+        object.__setattr__(self, "_finish_reasons", {})
+        object.__setattr__(self, "_finish_lock", threading.Lock())
 
     @staticmethod
     def create_payload(  # type: ignore[override]
@@ -104,6 +108,58 @@ class VLLMEndpoint(OpenAICompletionEndpoint):  # type: ignore[misc]
         }
         payload.update(kwargs)
         return payload
+
+    def process_raw_response(self, raw_response: Any, start_t: float, response: Any) -> None:
+        """Record the response, and count ``finish_reason == "length"`` truncations.
+
+        LLMeter neither captures nor persists ``finish_reason``: its
+        ``InvocationResponse`` is a dataclass serialised with ``asdict()``, so an
+        extra attribute is silently dropped. That makes output truncation
+        invisible — a request stopped by ``max_tokens`` looks identical to one
+        that finished naturally, and its output-token count reads as the cap
+        rather than the task's real length.
+
+        Why that matters: it silently corrupts any per-item cost figure, because
+        the item was never actually completed. And if ``max_tokens`` was chosen
+        from an assumed output length, a capped run circularly "confirms" that
+        assumption. Observed on a real run where 95% of responses stopped at
+        exactly 1024 tokens, mid-JSON.
+
+        Since the per-response field cannot survive serialisation, the counts are
+        accumulated on the endpoint instead and exposed via
+        :attr:`truncated_count` / :attr:`completed_count` for the runner to gate
+        on. The raw ``finish_reason`` values seen are kept in
+        :attr:`finish_reasons`.
+        """
+        super().process_raw_response(raw_response, start_t, response)
+        try:
+            reason = raw_response.choices[0].finish_reason
+        except (AttributeError, IndexError, TypeError):
+            return
+        with self._finish_lock:
+            self._finish_reasons[reason] = self._finish_reasons.get(reason, 0) + 1
+
+    # -- truncation accounting --------------------------------------------
+    @property
+    def finish_reasons(self) -> dict:
+        """Counts of every ``finish_reason`` seen, e.g. ``{"stop": 640}``."""
+        with self._finish_lock:
+            return dict(self._finish_reasons)
+
+    @property
+    def truncated_count(self) -> int:
+        """Responses cut short by ``max_tokens`` — these are incomplete outputs."""
+        return self.finish_reasons.get("length", 0)
+
+    @property
+    def completed_count(self) -> int:
+        """Responses that ended naturally at a stop token."""
+        return self.finish_reasons.get("stop", 0)
+
+    def reset_finish_reasons(self) -> None:
+        """Clear the counters. Call between concurrency tiers."""
+        with self._finish_lock:
+            self._finish_reasons.clear()
 
 
 # -----------------------------------------------------------------------------

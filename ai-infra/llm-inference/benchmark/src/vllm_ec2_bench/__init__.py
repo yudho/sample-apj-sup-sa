@@ -32,6 +32,7 @@ from .verify import (
     check_completeness,
     count_responses,
     cross_check_throughput,
+    rates_from_responses,
     scrape_vllm_metrics,
     verify_tier,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "check_completeness",
     "count_responses",
     "cross_check_throughput",
+    "rates_from_responses",
     "scrape_vllm_metrics",
     "upsert_hf_token",
     "verify_tier",

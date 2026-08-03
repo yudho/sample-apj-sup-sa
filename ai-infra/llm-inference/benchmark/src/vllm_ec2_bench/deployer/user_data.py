@@ -113,6 +113,7 @@ class UserDataRenderer:
             "max_model_len": config.effective_max_model_len,
             "gpu_memory_utilization": f"{config.gpu_memory_utilization:.2f}",
             "enable_prefix_caching": config.enable_prefix_caching,
+            "max_num_seqs": config.max_num_seqs,
             "extra_serve_flags": dp.extra_serve_flags,
             # Plan-author-provided per-model env vars rendered as
             # ``-e KEY=VALUE`` Docker flags. The validator on DeploymentPlan

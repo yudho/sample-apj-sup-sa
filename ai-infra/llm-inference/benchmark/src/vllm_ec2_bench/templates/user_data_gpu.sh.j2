@@ -120,6 +120,9 @@ docker run -d \
   --api-key '{{ vllm_api_key }}' \
   --trust-remote-code \
   $PREFIX_CACHING_FLAG \
+{% if max_num_seqs %}
+  --max-num-seqs {{ max_num_seqs }} \
+{% endif %}
   {{ extra_serve_flags }}
 
 # ---------------------------------------------------------------------------

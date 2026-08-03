@@ -29,10 +29,12 @@ deliberately conservative defaults you can tighten per run.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Counters worth pulling from vLLM's /metrics. Summed across data-parallel
@@ -57,6 +59,13 @@ DEFAULT_MAX_DIVERGENCE = 0.05
 # this are latency probes; their divergence is reported but not gated.
 MIN_REQUESTS_FOR_DIVERGENCE = 30
 
+# Minimum fraction of successful responses that must carry a DISTINCT prompt.
+# UniquePayloadEndpoint should deliver 100%; anything materially below that means
+# payloads were replayed and prefix caching turned the repeats into near-free
+# cache hits. Set at 0.95 rather than 1.0 to tolerate genuinely duplicated inputs
+# in a caller-supplied corpus.
+DEFAULT_MIN_UNIQUENESS = 0.95
+
 
 @dataclass
 class TierVerdict:
@@ -70,6 +79,9 @@ class TierVerdict:
     preemptions: float | None = None
     prefix_cache_hit_rate: float | None = None
     distinct_prompts: int | None = None
+    successful_responses: int | None = None
+    failed_responses: int | None = None
+    uniqueness: float | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -81,23 +93,38 @@ class TierVerdict:
             "preemptions": self.preemptions,
             "prefix_cache_hit_rate": self.prefix_cache_hit_rate,
             "distinct_prompts": self.distinct_prompts,
+            "successful_responses": self.successful_responses,
+            "failed_responses": self.failed_responses,
+            "uniqueness": self.uniqueness,
         }
 
 
 # -----------------------------------------------------------------------------
 # Response-set inspection
 # -----------------------------------------------------------------------------
-def count_responses(output_dir: Path) -> tuple[int, int]:
-    """Count response records on disk and how many carry distinct prompts.
+def count_responses(output_dir: Path) -> tuple[int, int, int]:
+    """Count SUCCESSFUL responses, distinct prompts, and failures on disk.
 
-    Returns ``(n_responses, n_distinct_prompts)``. A distinct-prompt count far
-    below the response count means payloads were replayed — see
-    :class:`~vllm_ec2_bench.endpoint.UniquePayloadEndpoint`.
+    Returns ``(n_successful, n_distinct_prompts, n_failed)``.
+
+    A record is successful only if it carries no ``error`` **and** has a non-null
+    ``num_tokens_output``. That distinction matters: LLMeter writes a record for
+    every attempt, including ones that only say ``{"error": "Request timed
+    out."}`` with null text and null token counts. Counting those as delivered
+    responses inverts the completeness gate — an observed tier wrote 640
+    timed-out records plus 64 real ones and would have reported 1100%
+    completeness instead of failing.
+
+    A distinct-prompt count far below the successful count means payloads were
+    replayed — see :class:`~vllm_ec2_bench.endpoint.UniquePayloadEndpoint`.
+    Only successful records contribute prompts, so a replay verdict is never
+    based on requests the server never answered.
 
     Missing or unreadable files count as zero rather than raising, so a
     verification pass never masks the underlying run error.
     """
-    n_responses = 0
+    n_successful = 0
+    n_failed = 0
     prompts: set[str] = set()
     for path in sorted(Path(output_dir).rglob("responses*.jsonl")):
         try:
@@ -106,11 +133,17 @@ def count_responses(output_dir: Path) -> tuple[int, int]:
                     line = line.strip()
                     if not line:
                         continue
-                    n_responses += 1
                     try:
                         rec = json.loads(line)
                     except json.JSONDecodeError:
+                        # Unparseable line: real work may have happened but we
+                        # cannot confirm it, so count it against the run.
+                        n_failed += 1
                         continue
+                    if rec.get("error") is not None or rec.get("num_tokens_output") is None:
+                        n_failed += 1
+                        continue
+                    n_successful += 1
                     # LLMeter's InvocationResponse stores the request it sent as
                     # ``input_payload`` (and a flattened ``input_prompt``). Read
                     # the user message from the payload, falling back to the
@@ -128,7 +161,7 @@ def count_responses(output_dir: Path) -> tuple[int, int]:
                         prompts.add(str(rec["input_prompt"])[-512:])
         except OSError:
             continue
-    return n_responses, len(prompts)
+    return n_successful, len(prompts), n_failed
 
 
 def check_completeness(
@@ -147,6 +180,108 @@ def check_completeness(
         return False, 0.0
     ratio = n_responses / n_expected
     return ratio >= minimum, ratio
+
+
+# -----------------------------------------------------------------------------
+# Authoritative rate computation
+# -----------------------------------------------------------------------------
+def rates_from_responses(output_dir: Path | str) -> dict:
+    """Recompute throughput from the response records, ignoring LLMeter's rates.
+
+    **Why not just use LLMeter's stats.** ``RunningStats.to_stats`` divides the
+    two token rates by two *different* windows:
+
+    * ``average_input_tokens_per_minute`` uses ``_send_window()`` — first to last
+      *dispatch* timestamp (``utils.py`` lines 195-200, 215-226). That excludes
+      the entire duration of the final wave of requests, so for K requests per
+      client it covers only K-1 of K request durations.
+    * ``average_output_tokens_per_minute`` uses ``end_time - first_send_time``
+      (``utils.py`` lines 202-211), a genuinely different denominator.
+
+    Summing the two — the natural thing to do to get total tok/min — therefore
+    adds two rates measured over different periods. Measured on a real g7e c=32
+    tier: LLMeter reported 117,620 tok/min against a true 107,531, an inflation
+    of **9.4%**. The error grows with concurrency, which bends the throughput
+    curve upward exactly where the headline figure is taken and understates
+    cost per token.
+
+    This function instead uses one window for everything — first dispatch to
+    last completion — and counts only successful responses. Returns a dict with
+    ``total_tokens_per_min``, ``input_tokens_per_min``,
+    ``output_tokens_per_min``, ``requests_per_min``, ``window_s``,
+    ``n_successful``, ``total_input_tokens``, ``total_output_tokens``, and
+    ``mean_input_tokens`` / ``mean_output_tokens``. Empty on no usable records.
+    """
+    n = 0
+    t_in = 0
+    t_out = 0
+    starts: list[datetime] = []
+    ends: list[datetime] = []
+    for path in sorted(Path(output_dir).rglob("responses*.jsonl")):
+        try:
+            with path.open() as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if rec.get("error") is not None:
+                        continue
+                    n_out = rec.get("num_tokens_output")
+                    n_inp = rec.get("num_tokens_input")
+                    if n_out is None or n_inp is None:
+                        continue
+                    n += 1
+                    t_in += n_inp
+                    t_out += n_out
+                    rt = rec.get("request_time")
+                    ttlt = rec.get("time_to_last_token")
+                    if rt is None:
+                        continue
+                    try:
+                        start = datetime.fromisoformat(str(rt))
+                    except (TypeError, ValueError):
+                        continue
+                    # Normalise to UTC-aware. A file mixing naive and aware
+                    # timestamps otherwise raises TypeError on comparison
+                    # ("can't compare offset-naive and offset-aware datetimes"),
+                    # which would abort the analysis of a run that already cost
+                    # GPU time. Naive values are treated as UTC, matching how
+                    # LLMeter stamps them.
+                    if start.tzinfo is None:
+                        start = start.replace(tzinfo=timezone.utc)
+                    else:
+                        start = start.astimezone(timezone.utc)
+                    starts.append(start)
+                    if ttlt is not None:
+                        with contextlib.suppress(TypeError, ValueError, OverflowError):
+                            ends.append(start + timedelta(seconds=float(ttlt)))
+        except OSError:
+            continue
+
+    if not n or not starts:
+        return {}
+    # One window for every rate: first dispatch to last completion. This is the
+    # period during which the server was actually doing this tier's work.
+    last = max(ends) if ends else max(starts)
+    window = (last - min(starts)).total_seconds()
+    if window <= 0:
+        return {}
+    return {
+        "window_s": window,
+        "n_successful": n,
+        "total_input_tokens": t_in,
+        "total_output_tokens": t_out,
+        "mean_input_tokens": t_in / n,
+        "mean_output_tokens": t_out / n,
+        "input_tokens_per_min": t_in * 60 / window,
+        "output_tokens_per_min": t_out * 60 / window,
+        "total_tokens_per_min": (t_in + t_out) * 60 / window,
+        "requests_per_min": n * 60 / window,
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -238,6 +373,7 @@ def verify_tier(
     min_completeness: float = DEFAULT_MIN_COMPLETENESS,
     max_divergence: float = DEFAULT_MAX_DIVERGENCE,
     max_preemptions: int = 0,
+    min_uniqueness: float = DEFAULT_MIN_UNIQUENESS,
 ) -> TierVerdict:
     """Run every gate over one tier and return a single verdict.
 
@@ -248,19 +384,46 @@ def verify_tier(
     ``max_preemptions`` defaults to 0 — the strictest setting, and the right one
     when you intend to quote the result. Raise it only if you are deliberately
     characterising the engine past its stable concurrency ceiling.
+
+    ``min_uniqueness`` guards against payload replay. It is a hard gate rather
+    than a note because replay is silent, inflates throughput via prefix-cache
+    hits, and has already produced two unusable measurements.
     """
     verdict = TierVerdict(concurrency=concurrency, valid=True)
 
-    n_responses, distinct = count_responses(Path(output_dir))
+    n_responses, distinct, n_failed = count_responses(Path(output_dir))
     verdict.distinct_prompts = distinct
+    verdict.successful_responses = n_responses
+    verdict.failed_responses = n_failed
     ok, ratio = check_completeness(n_responses, n_expected, minimum=min_completeness)
     verdict.completeness = ratio
     if not ok:
         verdict.valid = False
         verdict.reasons.append(
             f"completeness {ratio:.1%} < {min_completeness:.0%} "
-            f"({n_responses}/{n_expected} responses on disk)"
+            f"({n_responses} successful of {n_expected} expected"
+            + (f", {n_failed} failed/timed-out" if n_failed else "")
+            + ")"
         )
+    elif n_failed:
+        verdict.reasons.append(
+            f"{n_failed} failed/timed-out record(s) present but completeness "
+            f"still met ({n_responses}/{n_expected})"
+        )
+
+    # Payload replay: the whole point of UniquePayloadEndpoint. If distinct
+    # prompts fall well below successful responses, prefix caching served
+    # repeats and the throughput is not a real-workload number.
+    if n_responses:
+        uniqueness = distinct / n_responses
+        verdict.uniqueness = uniqueness
+        if uniqueness < min_uniqueness:
+            verdict.valid = False
+            verdict.reasons.append(
+                f"payload uniqueness {uniqueness:.1%} < {min_uniqueness:.0%} "
+                f"({distinct} distinct prompts across {n_responses} responses) — "
+                "replayed payloads inflate throughput via prefix-cache hits"
+            )
 
     ok, divergence, _ = cross_check_throughput(
         stats_tokens_per_min=stats_tokens_per_min,
@@ -315,9 +478,11 @@ __all__ = [
     "count_responses",
     "check_completeness",
     "cross_check_throughput",
+    "rates_from_responses",
     "scrape_vllm_metrics",
     "verify_tier",
     "DEFAULT_MIN_COMPLETENESS",
     "DEFAULT_MAX_DIVERGENCE",
+    "DEFAULT_MIN_UNIQUENESS",
     "MIN_REQUESTS_FOR_DIVERGENCE",
 ]

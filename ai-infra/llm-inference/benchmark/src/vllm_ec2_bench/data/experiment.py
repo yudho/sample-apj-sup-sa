@@ -41,6 +41,19 @@ class ExperimentConfig(BaseModel):
         ),
     )
     enable_prefix_caching: bool = Field(default=True)
+    max_num_seqs: int | None = Field(
+        default=None, gt=0,
+        description=(
+            "vLLM --max-num-seqs: the server-side cap on CONCURRENT sequences. "
+            "Leave None to use vLLM's default. Set it explicitly whenever you "
+            "sweep concurrency, and keep it at or above the highest tier: if it "
+            "is lower, the surplus clients queue instead of running, so the "
+            "sweep measures a client-side queue rather than the engine and the "
+            "'optimum concurrency' it reports is really just 'the point where "
+            "max_num_seqs saturates'. Latency percentiles then also include "
+            "queue wait."
+        ),
+    )
 
     # --- EBS sizing ---------------------------------------------------------
     ebs_headroom_gib: int = Field(

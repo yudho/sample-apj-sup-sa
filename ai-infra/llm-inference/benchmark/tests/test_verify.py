@@ -14,58 +14,71 @@ from vllm_ec2_bench.verify import (
     check_completeness,
     count_responses,
     cross_check_throughput,
+    rates_from_responses,
     scrape_vllm_metrics,
     verify_tier,
 )
 
 
 def _write_responses(
-    directory, prompts: list[str], filename="responses.jsonl", key="input_payload"
+    directory,
+    prompts: list[str],
+    filename="responses.jsonl",
+    key="input_payload",
+    successful: bool = True,
 ) -> None:
     """Write LLMeter-shaped response records.
 
     ``key`` defaults to ``input_payload``, which is what
     ``llmeter.endpoints.base.InvocationResponse`` actually serialises.
+
+    A successful record carries a non-null ``num_tokens_output`` and no
+    ``error``; ``successful=False`` writes the timed-out shape LLMeter emits
+    (null text, null token counts, ``error`` set), which must NOT count as a
+    delivered response.
     """
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / filename).open("w") as fh:
         for p in prompts:
-            fh.write(
-                json.dumps(
-                    {
-                        key: {
-                            "messages": [
-                                {"role": "system", "content": "sys"},
-                                {"role": "user", "content": p},
-                            ]
-                        }
-                    }
-                )
-                + "\n"
-            )
+            rec: dict = {
+                key: {
+                    "messages": [
+                        {"role": "system", "content": "sys"},
+                        {"role": "user", "content": p},
+                    ]
+                }
+            }
+            if successful:
+                rec["num_tokens_output"] = 100
+                rec["error"] = None
+            else:
+                rec["num_tokens_output"] = None
+                rec["response_text"] = None
+                rec["error"] = "Request timed out."
+            fh.write(json.dumps(rec) + "\n")
 
 
 class TestCountResponses:
     def test_counts_records_and_distinct_prompts(self, tmp_path) -> None:
         _write_responses(tmp_path / "load_test", [f"note-{i}" for i in range(10)])
-        n, distinct = count_responses(tmp_path)
-        assert (n, distinct) == (10, 10)
+        n, distinct, failed = count_responses(tmp_path)
+        assert (n, distinct, failed) == (10, 10, 0)
 
     def test_detects_replayed_payloads(self, tmp_path) -> None:
         """The 40,000-requests-from-49-prompts signature."""
         _write_responses(tmp_path / "load_test", ["same-note"] * 100)
-        n, distinct = count_responses(tmp_path)
+        n, distinct, _ = count_responses(tmp_path)
         assert n == 100
         assert distinct == 1, "replayed payloads must be visible as a low distinct count"
 
     def test_aggregates_across_multiple_files(self, tmp_path) -> None:
         _write_responses(tmp_path / "t1", ["a", "b"], "responses.jsonl")
         _write_responses(tmp_path / "t2", ["c"], "responses-2.jsonl")
-        n, distinct = count_responses(tmp_path)
+        n, distinct, _ = count_responses(tmp_path)
         assert (n, distinct) == (3, 3)
 
     def test_missing_directory_is_zero_not_an_error(self, tmp_path) -> None:
-        assert count_responses(tmp_path / "nope") == (0, 0)
+        assert count_responses(tmp_path / "nope") == (0, 0, 0)
 
     def test_reads_llmeters_input_payload_field(self, tmp_path) -> None:
         """Regression: the field is ``input_payload``, not ``payload``.
@@ -75,22 +88,119 @@ class TestCountResponses:
         replay detection exactly when it mattered.
         """
         _write_responses(tmp_path / "t", ["a", "b", "c"], key="input_payload")
-        assert count_responses(tmp_path) == (3, 3)
+        assert count_responses(tmp_path) == (3, 3, 0)
 
     def test_falls_back_to_flattened_input_prompt(self, tmp_path) -> None:
         d = tmp_path / "t"
         d.mkdir(parents=True)
         with (d / "responses.jsonl").open("w") as fh:
             for p in ("note-one", "note-two"):
-                fh.write(json.dumps({"input_prompt": f"system preamble {p}"}) + "\n")
-        assert count_responses(tmp_path) == (2, 2)
+                fh.write(
+                    json.dumps(
+                        {
+                            "input_prompt": f"system preamble {p}",
+                            "num_tokens_output": 50,
+                            "error": None,
+                        }
+                    )
+                    + "\n"
+                )
+        assert count_responses(tmp_path) == (2, 2, 0)
 
-    def test_malformed_lines_are_skipped_but_counted(self, tmp_path) -> None:
+    def test_timed_out_records_are_failures_not_responses(self, tmp_path) -> None:
+        """The bug that inverted the completeness gate.
+
+        A real tier wrote 640 ``{"error": "Request timed out."}`` records
+        alongside 64 real ones. Counting the timeouts as delivered responses read
+        as 1100% completeness instead of failing the tier.
+        """
+        d = tmp_path / "load_test"
+        _write_responses(d, [f"ok-{i}" for i in range(64)], "responses.jsonl")
+        _write_responses(
+            d, [f"dead-{i}" for i in range(640)], "responses-2.jsonl", successful=False
+        )
+        n, distinct, failed = count_responses(tmp_path)
+        assert n == 64, "only successful responses count"
+        assert failed == 640
+        assert distinct == 64, "failed requests must not contribute prompts"
+
+    def test_malformed_lines_count_as_failures(self, tmp_path) -> None:
         d = tmp_path / "load_test"
         d.mkdir(parents=True)
         (d / "responses.jsonl").write_text('{"bad json\n\n{"payload":{}}\n')
-        n, _ = count_responses(tmp_path)
-        assert n == 2, "blank lines skipped, malformed lines still counted as records"
+        n, _, failed = count_responses(tmp_path)
+        assert n == 0, "unparseable lines are not confirmed successes"
+        assert failed == 2
+
+
+class TestRatesFromResponses:
+    """The authoritative rate path — LLMeter's own rates use two windows."""
+
+    @staticmethod
+    def _write(directory, n, *, start="2026-07-31T09:29:02+00:00", ttlt=5.0,
+               t_in=250, t_out=110, tz_mixed=False):
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / "responses.jsonl").open("w") as fh:
+            for i in range(n):
+                ts = start
+                if tz_mixed and i % 2:
+                    ts = start.replace("+00:00", "")
+                fh.write(
+                    json.dumps(
+                        {
+                            "input_payload": {
+                                "messages": [{"role": "user", "content": f"n{i}"}]
+                            },
+                            "num_tokens_input": t_in,
+                            "num_tokens_output": t_out,
+                            "error": None,
+                            "request_time": ts,
+                            "time_to_last_token": ttlt,
+                        }
+                    )
+                    + "\n"
+                )
+
+    def test_single_window_for_both_token_directions(self, tmp_path) -> None:
+        # 10 requests, all dispatched together, each taking 5s: window is 5s,
+        # so the rate is (10*360 tokens)/5s = 43,200 tok/min.
+        self._write(tmp_path / "t", 10)
+        r = rates_from_responses(tmp_path)
+        assert r["window_s"] == pytest.approx(5.0)
+        assert r["n_successful"] == 10
+        assert r["total_tokens_per_min"] == pytest.approx(3600 * 60 / 5)
+        # And input/output rates must share that denominator.
+        assert r["input_tokens_per_min"] + r["output_tokens_per_min"] == pytest.approx(
+            r["total_tokens_per_min"]
+        )
+
+    def test_failed_records_excluded_from_rates(self, tmp_path) -> None:
+        d = tmp_path / "t"
+        self._write(d, 5)
+        with (d / "responses-2.jsonl").open("w") as fh:
+            fh.write(
+                json.dumps(
+                    {"error": "Request timed out.", "num_tokens_output": None}
+                )
+                + "\n"
+            )
+        r = rates_from_responses(tmp_path)
+        assert r["n_successful"] == 5, "timeouts must not enter the numerator"
+
+    def test_mixed_naive_and_aware_timestamps_do_not_raise(self, tmp_path) -> None:
+        """Comparing naive to aware datetimes raises and would abort a paid run."""
+        self._write(tmp_path / "t", 6, tz_mixed=True)
+        r = rates_from_responses(tmp_path)
+        assert r and r["n_successful"] == 6
+
+    def test_empty_directory_returns_empty(self, tmp_path) -> None:
+        assert rates_from_responses(tmp_path / "nope") == {}
+
+    def test_mean_token_counts_reported(self, tmp_path) -> None:
+        self._write(tmp_path / "t", 4, t_in=246, t_out=112)
+        r = rates_from_responses(tmp_path)
+        assert r["mean_input_tokens"] == pytest.approx(246)
+        assert r["mean_output_tokens"] == pytest.approx(112)
 
 
 class TestCheckCompleteness:
@@ -284,6 +394,38 @@ class TestVerifyTier:
         assert verdict.valid, "a healthy latency probe must not be INVALID"
         assert verdict.divergence is not None and verdict.divergence > 0.2
         assert any("not gated" in r for r in verdict.reasons)
+
+    def test_payload_replay_now_fails_the_tier(self, tmp_path) -> None:
+        """Replay was previously only *reported*; it must be a hard gate.
+
+        Reproduces the real signature: 40,000 requests served from 49 distinct
+        prompts, which prefix caching turned into near-free hits.
+        """
+        _write_responses(tmp_path / "load_test", ["same-note"] * 100)
+        verdict = verify_tier(
+            concurrency=16,
+            output_dir=tmp_path,
+            n_expected=100,
+            stats_tokens_per_min=1_000_000,
+            total_tokens=1_000_000,
+            wall_clock_s=60.0,
+        )
+        assert not verdict.valid
+        assert verdict.uniqueness == 0.01
+        assert any("uniqueness" in r for r in verdict.reasons)
+
+    def test_unique_payloads_pass_the_gate(self, tmp_path) -> None:
+        _write_responses(tmp_path / "load_test", [f"n{i}" for i in range(100)])
+        verdict = verify_tier(
+            concurrency=16,
+            output_dir=tmp_path,
+            n_expected=100,
+            stats_tokens_per_min=1_000_000,
+            total_tokens=1_000_000,
+            wall_clock_s=60.0,
+        )
+        assert verdict.valid
+        assert verdict.uniqueness == 1.0
 
     def test_large_tier_still_gated_on_divergence(self, tmp_path) -> None:
         _write_responses(tmp_path / "load_test", [f"n{i}" for i in range(128)])
