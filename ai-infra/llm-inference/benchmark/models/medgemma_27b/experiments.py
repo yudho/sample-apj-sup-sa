@@ -202,13 +202,25 @@ EXPERIMENTS: dict[str, ExperimentConfig] = {
     exp_id: ExperimentConfig(
         model_spec=MEDGEMMA_27B,
         deployment=plan,
-        # Pin the scheduler's concurrent-sequence cap at (a little above) the
-        # highest tier this plan sweeps. Left unset, vLLM derives it from device
-        # memory — 1024 on the >=70 GiB Blackwell parts but 256 on the 22-45 GiB
-        # g5/g6/g6e — so an unpinned matrix compares SKUs under different
-        # scheduler limits, and any plan whose concurrency_high exceeds the
-        # derived cap measures a queue instead of the GPU.
-        max_num_seqs=max(1024, plan.concurrency_high * 2),
+        # Pin the scheduler's concurrent-sequence cap just above this plan's top
+        # tier, per REPLICA. Two failure modes to avoid:
+        #
+        #  * Unset, vLLM derives it from device memory — 1024 on the >=70 GiB
+        #    Blackwell parts but 256 on the 22-45 GiB g5/g6/g6e — so an unpinned
+        #    matrix silently compares SKUs under different scheduler limits, and
+        #    a plan whose concurrency_high exceeds the derived cap measures a
+        #    queue rather than the GPU.
+        #  * Set arbitrarily high, the scheduler admits far more sequences than
+        #    the KV cache can hold and starts preempting: evicting running
+        #    sequences and recomputing their prefill. That makes throughput
+        #    unstable and the tier unquotable, however fast it looks.
+        #
+        # A small multiple of the per-replica tier leaves scheduling headroom
+        # without licensing over-admission. Override per plan if a measured KV
+        # ceiling says otherwise.
+        max_num_seqs=max(
+            32, int(plan.concurrency_high / plan.data_parallel * 1.25)
+        ),
     )
     for exp_id, plan in _PLANS.items()
 }
