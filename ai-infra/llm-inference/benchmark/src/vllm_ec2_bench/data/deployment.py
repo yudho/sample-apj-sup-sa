@@ -11,6 +11,7 @@ and safe to construct at import time in ``models/<name>/experiments.py``.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -18,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 if TYPE_CHECKING:
     from .catalog import Catalog
 
+LOG = logging.getLogger(__name__)
 
 CapacityMode = Literal["spot", "on-demand", "odcr", "capacity-block"]
 """Capacity sourcing mode.
@@ -297,10 +299,29 @@ class DeploymentPlan(BaseModel):
 
         tp_dp_pp = self.tensor_parallel * self.data_parallel * self.pipeline_parallel
         effective = self.effective_device_count(catalog)
-        if tp_dp_pp != effective:
+        # Over-subscription is always fatal: asking for more devices than the
+        # host has means vLLM cannot start, and the failure lands *after* paying
+        # for capacity acquisition. (A real example: a g7e.12xlarge plan set DP=4
+        # when that instance has two GPUs.)
+        if tp_dp_pp > effective:
             raise ValueError(
-                f"{self.experiment_id}: Parallelism mismatch — "
-                f"TP × DP × PP = {tp_dp_pp}, but effective device count is "
-                f"{effective} (num_accelerators={facts.num_accelerators}, "
-                f"mig_replicas_per_gpu={self.mig_replicas_per_gpu})."
+                f"{self.experiment_id}: Parallelism over-subscribed — "
+                f"TP × DP × PP = {tp_dp_pp}, but only {effective} device(s) "
+                f"available (num_accelerators={facts.num_accelerators}, "
+                f"mig_replicas_per_gpu={self.mig_replicas_per_gpu}). "
+                "vLLM cannot start; fix the plan before launching."
+            )
+        # Under-use is legitimate and sometimes the only option: a model whose
+        # weights only fit on a large host may still be best served by a subset
+        # of its GPUs (e.g. Qwen3-Coder-Next at TP=2 on a p4de.24xlarge, where
+        # the 160 GiB of weights rule out every smaller instance). Warn rather
+        # than reject, because the idle GPUs are paid for and that should be a
+        # deliberate, visible choice rather than a silent one.
+        if tp_dp_pp < effective:
+            LOG.warning(
+                "%s: using %d of %d device(s) on %s — %d GPU(s) will sit idle "
+                "and are still billed. Intentional for weights that only fit a "
+                "large host; otherwise raise TP/DP/PP.",
+                self.experiment_id, tp_dp_pp, effective, self.instance_type,
+                effective - tp_dp_pp,
             )

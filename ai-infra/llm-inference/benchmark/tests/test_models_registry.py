@@ -147,3 +147,57 @@ def test_experiment_serve_flags_satisfy_model_required_flags(
                 f"{fragment!r}, but plan.extra_serve_flags is "
                 f"{plan.extra_serve_flags!r} (missing the fragment)"
             )
+
+
+@pytest.mark.parametrize("package", _MODELS)
+def test_every_experiment_plan_validates_against_hardware(package: str) -> None:
+    """Every plan must survive ``validate_against`` on the real catalog facts.
+
+    This is the check that was missing, and three launch-blocking bugs shipped
+    through the gap:
+
+    * ``gpt_oss_20b/exp_2`` set ``data_parallel=4`` on a ``g7e.12xlarge``, which
+      has **two** GPUs (confirmed via describe-instance-types).
+    * ``qwen3_coder_next/exp_3`` set ``tensor_parallel=2`` on a
+      ``p4de.24xlarge`` for an 80B model whose 160 GiB of BF16 weights need
+      ~168 GiB — two A100-80G is exactly 160 GiB, leaving nothing for weights,
+      let alone KV cache.
+    * A third plan tripped the same over-subscription rule.
+
+    Each would have failed at vLLM engine init *after* paying for capacity
+    acquisition — on a scarce accelerator that can take 30 minutes to obtain.
+    Validating at test time costs nothing and catches it before any spend.
+    """
+    pkg = importlib.import_module(package)
+    catalog = pkg.load_catalog(offline_ok=True)
+    failures: list[str] = []
+    for exp_id, exp in pkg.EXPERIMENTS.items():
+        try:
+            exp.validate_against(catalog)
+        except Exception as exc:  # noqa: BLE001 — collect all, report together
+            failures.append(f"{exp_id}: {type(exc).__name__}: {exc}")
+    assert not failures, (
+        f"{package} has invalid experiment plan(s):\n  " + "\n  ".join(failures)
+    )
+
+
+@pytest.mark.parametrize("package", _MODELS)
+def test_no_plan_over_subscribes_its_host(package: str) -> None:
+    """TP × DP × PP must never exceed the host's device count.
+
+    Under-use is allowed — a model whose weights only fit a large host may
+    deliberately idle GPUs — but over-subscription means vLLM cannot start at
+    all, so it is always a bug rather than a trade-off.
+    """
+    pkg = importlib.import_module(package)
+    catalog = pkg.load_catalog(offline_ok=True)
+    for exp_id, exp in pkg.EXPERIMENTS.items():
+        plan = exp.deployment
+        requested = (
+            plan.tensor_parallel * plan.data_parallel * plan.pipeline_parallel
+        )
+        available = plan.effective_device_count(catalog)
+        assert requested <= available, (
+            f"{package}.{exp_id}: requests {requested} device(s) on "
+            f"{plan.instance_type} which provides {available}"
+        )

@@ -54,7 +54,12 @@ _PLANS: dict[str, DeploymentPlan] = {
         experiment_id="exp_2",
         instance_type="g7e.12xlarge",
         tensor_parallel=1,
-        data_parallel=4,
+        # g7e.12xlarge has TWO GPUs, not four (verified against
+        # describe-instance-types: g7e.12xlarge=2, g7e.48xlarge=8). DP=4 here
+        # asked for four devices on a two-device host, so
+        # ExperimentConfig.validate_against() rejects the plan and the launch
+        # would have failed after paying for capacity acquisition.
+        data_parallel=2,
         pipeline_parallel=1,
         max_model_len=65536,
         region="us-west-2",
@@ -62,7 +67,7 @@ _PLANS: dict[str, DeploymentPlan] = {
         concurrency_high=120,
         extra_serve_flags=_GPT_OSS_BASE_FLAGS,
         # Same SM_120 FlashInfer rejection as exp_1 — auto-pick MARLIN_MXFP4.
-        notes="4 replicas on 4x Blackwell RTX PRO 6000 (96 GiB each); Marlin MXFP4, DP=4 TP=1.",
+        notes="2 replicas on 2x Blackwell RTX PRO 6000 (96 GiB each); Marlin MXFP4, DP=2 TP=1.",
     ),
     "exp_3": DeploymentPlan(
         experiment_id="exp_3",

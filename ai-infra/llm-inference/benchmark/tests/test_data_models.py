@@ -249,13 +249,44 @@ class TestValidateAgainstCatalog:
         defaults.update(overrides)
         return DeploymentPlan(**defaults)
 
-    def test_tp_dp_pp_mismatch_rejected(self) -> None:
+    def test_tp_dp_pp_over_subscription_rejected(self) -> None:
+        """Asking for more devices than the host has is always fatal.
+
+        vLLM cannot start, and the failure lands *after* capacity acquisition —
+        which for a scarce accelerator can be a 30-minute wait already paid for.
+        A real plan set DP=4 on a g7e.12xlarge, which has two GPUs.
+        """
+        cat = _mock_catalog({"p4d.24xlarge": _a100_40gb_facts()})
+        plan = self._plan(
+            "p4d.24xlarge", tensor_parallel=4, data_parallel=4, pipeline_parallel=1,
+        )  # 4×4 = 16 > 8 GPUs
+        with pytest.raises(ValueError, match="over-subscribed"):
+            plan.validate_against(cat)
+
+    def test_tp_dp_pp_under_use_allowed_with_warning(self, caplog) -> None:
+        """Deliberately idling GPUs is legitimate and must not be rejected.
+
+        A model whose weights only fit a large host may still be best served by a
+        subset of its GPUs — Qwen3-Coder-Next needs a p4de for its 160 GiB of
+        weights but runs TP=4. Rejecting that would have made the plan
+        unexpressible; the idle GPUs are billed, so warn instead.
+        """
         cat = _mock_catalog({"p4d.24xlarge": _a100_40gb_facts()})
         plan = self._plan(
             "p4d.24xlarge", tensor_parallel=3, data_parallel=2, pipeline_parallel=1,
-        )  # 3×2 = 6 ≠ 8 GPUs
-        with pytest.raises(ValueError, match="Parallelism mismatch"):
+        )  # 3×2 = 6 of 8 GPUs
+        with caplog.at_level("WARNING"):
+            plan.validate_against(cat)  # must not raise
+        assert any("will sit idle" in r.getMessage() for r in caplog.records)
+
+    def test_exact_device_match_is_silent(self, caplog) -> None:
+        cat = _mock_catalog({"p4d.24xlarge": _a100_40gb_facts()})
+        plan = self._plan(
+            "p4d.24xlarge", tensor_parallel=2, data_parallel=4, pipeline_parallel=1,
+        )  # 2×4 = 8 GPUs exactly
+        with caplog.at_level("WARNING"):
             plan.validate_against(cat)
+        assert not any("will sit idle" in r.getMessage() for r in caplog.records)
 
     def test_mig_only_on_gpu_rejected(self) -> None:
         cat = _mock_catalog({"inf2.24xlarge": _inf2_facts()})

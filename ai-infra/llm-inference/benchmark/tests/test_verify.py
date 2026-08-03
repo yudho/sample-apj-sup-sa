@@ -486,6 +486,51 @@ class TestVerifyTier:
         assert verdict.divergence is not None and verdict.divergence > 0.2
         assert any("not gated" in r for r in verdict.reasons)
 
+    def test_surplus_failed_records_reveal_a_pooled_attempt(self, tmp_path) -> None:
+        """Completeness bounds successes, so surplus FAILURES slipped through.
+
+        Measured on real output: a c=8 tier held 64 successes against a
+        64-request budget — a clean 100% — plus 640 timed-out records from an
+        aborted earlier attempt in the same directory. Because the rate is
+        computed from first dispatch to last completion across every file, the
+        window swallowed the idle gap between the two runs: 40,717 tok/min
+        reported against a true 6,374, a 6.4x error with every gate green.
+        """
+        d = tmp_path / "load_test"
+        _write_responses(d, [f"ok-{i}" for i in range(64)], "responses.jsonl")
+        _write_responses(
+            d, [f"dead-{i}" for i in range(640)], "responses-2.jsonl", successful=False
+        )
+        verdict = verify_tier(
+            concurrency=8,
+            output_dir=tmp_path,
+            n_expected=64,
+            stats_tokens_per_min=1_000_000,
+            total_tokens=1_000_000,
+            wall_clock_s=60.0,
+        )
+        assert verdict.completeness == pytest.approx(1.0), "successes alone look fine"
+        assert not verdict.valid, "but the surplus failures must fail the tier"
+        assert any("more than one attempt" in r for r in verdict.reasons)
+
+    def test_normal_failure_rate_within_one_attempt_still_passes(self, tmp_path) -> None:
+        """Some failures are expected in a single run; only pooling is fatal."""
+        d = tmp_path / "load_test"
+        _write_responses(d, [f"ok-{i}" for i in range(100)], "responses.jsonl")
+        _write_responses(
+            d, [f"slow-{i}" for i in range(5)], "responses-2.jsonl", successful=False
+        )
+        verdict = verify_tier(
+            concurrency=10,
+            output_dir=tmp_path,
+            n_expected=100,
+            stats_tokens_per_min=1_000_000,
+            total_tokens=1_000_000,
+            wall_clock_s=60.0,
+        )
+        assert verdict.valid
+        assert any("failed/timed-out" in r for r in verdict.reasons)
+
     def test_payload_replay_now_fails_the_tier(self, tmp_path) -> None:
         """Replay was previously only *reported*; it must be a hard gate.
 

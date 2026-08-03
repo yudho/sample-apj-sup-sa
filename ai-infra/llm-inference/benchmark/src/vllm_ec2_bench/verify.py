@@ -451,7 +451,31 @@ def verify_tier(
                 + (f", {n_failed} failed/timed-out" if n_failed else "")
                 + ")"
             )
-    elif n_failed:
+    # Bound the TOTAL record count, not just the successes.
+    #
+    # The completeness ratio above divides successes by the budget, so it cannot
+    # see surplus *failed* records — and those are just as much evidence of two
+    # attempts pooled in one directory. Observed on real data: a c=8 tier held 64
+    # successes against a 64-request budget (100%, clean) plus 640 timed-out
+    # records from an aborted earlier attempt. Because
+    # ``rates_from_responses`` spans min(start) to max(end) across every file in
+    # the directory, that window swallowed the idle gap between the two runs and
+    # the tier reported 40,717 tok/min against a true 6,374 — a 6.4x error, with
+    # every gate green.
+    #
+    # Some failures are normal within a single attempt, so allow generous slack
+    # (2x the budget) before calling it pooled; beyond that the arithmetic simply
+    # cannot describe one run.
+    total_records = n_responses + n_failed
+    if n_expected > 0 and total_records > n_expected * 2:
+        verdict.valid = False
+        verdict.reasons.append(
+            f"{total_records} total records ({n_responses} ok + {n_failed} "
+            f"failed) for a {n_expected}-request budget — the directory holds "
+            "more than one attempt, so the measurement window spans both and the "
+            "rate is wrong; use a fresh per-attempt directory"
+        )
+    elif ok and n_failed:
         verdict.reasons.append(
             f"{n_failed} failed/timed-out record(s) present but completeness "
             f"still met ({n_responses}/{n_expected})"

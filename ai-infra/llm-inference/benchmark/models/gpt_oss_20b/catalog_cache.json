@@ -6,8 +6,8 @@
       "us-east-2",
       "us-east-1"
     ],
-    "hardware_refreshed_at": "2026-05-05T08:48:28+00:00",
-    "prices_refreshed_at": "2026-05-17T01:29:12+00:00"
+    "hardware_refreshed_at": "2026-08-03T08:32:12+00:00",
+    "prices_refreshed_at": "2026-08-03T08:32:12+00:00"
   },
   "hardware": {
     "g5.12xlarge": {
@@ -39,6 +39,16 @@
       "vram_gib_per_accelerator": 44.703,
       "vcpu": 48,
       "ram_gib": 384
+    },
+    "g6e.2xlarge": {
+      "instance_type": "g6e.2xlarge",
+      "family": "gpu",
+      "accelerator_model": "NVIDIA L40S",
+      "accelerator_architecture": "Ada Lovelace",
+      "num_accelerators": 1,
+      "vram_gib_per_accelerator": 44.703,
+      "vcpu": 8,
+      "ram_gib": 64
     },
     "g7e.12xlarge": {
       "instance_type": "g7e.12xlarge",

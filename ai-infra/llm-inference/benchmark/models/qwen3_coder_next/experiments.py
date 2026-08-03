@@ -64,16 +64,30 @@ _PLANS: dict[str, DeploymentPlan] = {
     "exp_3": DeploymentPlan(
         experiment_id="exp_3",
         instance_type="p4de.24xlarge",
-        tensor_parallel=2,
+        # Was TP=2, which is arithmetically impossible: 160 GiB of BF16 weights
+        # need ~168 GiB with overhead, but 2x A100-80G is exactly 160 GiB — no
+        # room for the weights at all, let alone KV cache and activations. The
+        # plan would have failed at engine init after paying for the instance.
+        #
+        # Repurposed to the configuration that was actually missing: use the
+        # WHOLE host. exp_4 keeps TP=4 (half the GPUs idle but still billed), so
+        # TP=8 is the like-for-like comparison that shows whether the extra four
+        # GPUs earn their cost, and it is the only plan here that wastes nothing.
+        tensor_parallel=8,
         data_parallel=1,
         pipeline_parallel=1,
-        max_model_len=32768,
+        # 640 GiB across 8 GPUs leaves ~470 GiB for KV after weights, so the
+        # context can go well past the TP=4 plan's 32K.
+        max_model_len=131072,
         region="us-west-2",
         capacity_preference=_STANDARD,
-        concurrency_high=64,
+        concurrency_high=128,
         extra_serve_flags=_QWEN3_CODER_BASE_FLAGS,
         vllm_ready_timeout_s=_QWEN3_CODER_VLLM_READY_TIMEOUT_S,
-        notes="2xA100-80G BF16 TP=2. Idle 6 GPUs but cleanest hybrid sharding.",
+        notes=(
+            "8xA100-80G BF16 TP=8 at 131K context — the full host, nothing idle. "
+            "Compare against exp_4 (TP=4) to price the extra four GPUs."
+        ),
     ),
     "exp_4": DeploymentPlan(
         experiment_id="exp_4",
