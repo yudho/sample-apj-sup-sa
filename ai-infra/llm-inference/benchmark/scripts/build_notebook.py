@@ -308,8 +308,9 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 verify_tier,
             )
             from vllm_ec2_bench.cleanup import (
-                terminate_all_tagged_instances,
                 cleanup_tagged_security_groups,
+                sweep_all,
+                terminate_all_tagged_instances,
             )
             from vllm_ec2_bench.endpoint import (
                 UniquePayloadEndpoint,
@@ -962,12 +963,30 @@ def cells_cleanup(c: ModelNotebookConfig) -> list[dict]:
             #         print(f"[{{eid}}] teardown error: {{e}}")
             """)),
         code(dedent(f"""\
+            # sweep_all covers every resource kind and every launchable region.
+            #
+            # The earlier loop called only terminate_all_tagged_instances and
+            # cleanup_tagged_security_groups, which left the two resources that
+            # actually persist unswept: capacity reservations (an auto-created
+            # ODCR bills the full on-demand rate — ~$114/hr for a p6-b200 —
+            # whether or not an instance occupies it) and launch templates (free,
+            # but quota-bound; 16 real orphans accumulated across two regions
+            # before anything looked for them).
+            #
+            # It also missed ap-south-1, which the scarce-accelerator plans use as
+            # a fallback.
             PROJECT_TAG = {c.var_name}.project_tag_value
-            for r in [REGION, ALT_REGION_1, ALT_REGION_2]:
-                killed = terminate_all_tagged_instances(r, PROJECT_TAG)
-                print(f"{{r}}: terminated {{len(killed)}} instance(s): {{killed}}")
-                deleted = cleanup_tagged_security_groups(r, PROJECT_TAG)
-                print(f"{{r}}: deleted {{len(deleted)}} security group(s): {{deleted}}")
+            report = sweep_all(
+                PROJECT_TAG,
+                [REGION, ALT_REGION_1, ALT_REGION_2, "ap-south-1"],
+            )
+            leftovers = 0
+            for r, kinds in report.items():
+                found = {{k: v for k, v in kinds.items() if v}}
+                leftovers += sum(len(v) for v in kinds.values())
+                print(f"{{r}}: {{found or 'clean'}}")
+            print(f"\\nTotal resources removed: {{leftovers}} "
+                  f"({{'nothing was leaking' if leftovers == 0 else 'check the list above'}})")
             """)),
     ]
 

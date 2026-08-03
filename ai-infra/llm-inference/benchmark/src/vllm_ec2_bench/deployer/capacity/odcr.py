@@ -28,29 +28,54 @@ class ODCRStrategy(CapacityStrategy):
         cfg = ctx.config.deployment
         odcr_id, odcr_az = self._auto_create_odcr(ctx)
 
-        run_params = _build_run_instances_params(ctx)
-        run_params["CapacityReservationSpecification"] = {
-            "CapacityReservationTarget": {"CapacityReservationId": odcr_id},
-        }
-        subnets_by_az = ctx.get_subnets_for_preferred_azs()
-        if odcr_az in subnets_by_az:
-            run_params["SubnetId"] = subnets_by_az[odcr_az]
-
-        LOG.info(
-            "[%s] RunInstances against auto-ODCR %s in %s",
-            cfg.experiment_id, odcr_id, odcr_az,
-        )
+        # EVERYTHING after the reservation exists must be guarded. An ODCR bills
+        # the full on-demand rate whether or not an instance occupies it — up to
+        # ~$114/hr for a p6-b200 — so any escape between creation here and a
+        # successful launch leaks money indefinitely.
+        #
+        # Two holes this closes:
+        #  * get_subnets_for_preferred_azs() makes a describe_subnets call and
+        #    used to sit OUTSIDE the try, so a throttle there leaked the ODCR.
+        #  * the handler caught ClientError only, so a BotoCoreError
+        #    (ReadTimeout, EndpointConnectionError) or an IndexError from an
+        #    empty Instances list escaped uncancelled.
         try:
+            run_params = _build_run_instances_params(ctx)
+            run_params["CapacityReservationSpecification"] = {
+                "CapacityReservationTarget": {"CapacityReservationId": odcr_id},
+            }
+            subnets_by_az = ctx.get_subnets_for_preferred_azs()
+            if odcr_az in subnets_by_az:
+                run_params["SubnetId"] = subnets_by_az[odcr_az]
+
+            LOG.info(
+                "[%s] RunInstances against auto-ODCR %s in %s",
+                cfg.experiment_id, odcr_id, odcr_az,
+            )
             resp = ctx.ec2.run_instances(**run_params)
-        except ClientError:
-            # Clean up the orphan ODCR before re-raising
+            instances = resp.get("Instances") or []
+            if not instances:
+                raise RuntimeError(
+                    f"[{cfg.experiment_id}] RunInstances against ODCR {odcr_id} "
+                    "returned no instances"
+                )
+            instance = instances[0]
+        except BaseException:
+            # BaseException so a KeyboardInterrupt mid-launch cannot leave a
+            # billing reservation behind either.
+            LOG.warning(
+                "[%s] launch failed after creating ODCR %s — cancelling it",
+                cfg.experiment_id, odcr_id,
+            )
             try:
                 ctx.ec2.cancel_capacity_reservation(CapacityReservationId=odcr_id)
-            except ClientError:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                LOG.error(
+                    "[%s] COULD NOT CANCEL ODCR %s — it is still billing, cancel "
+                    "it by hand: %s", cfg.experiment_id, odcr_id, exc,
+                )
             raise
 
-        instance = resp["Instances"][0]
         return LaunchResult(
             instance_id=instance["InstanceId"],
             availability_zone=odcr_az,

@@ -198,7 +198,15 @@ class DeploymentRunner:
         return self.state
 
     def terminate(self) -> None:
-        """Clean up everything the runner created. Idempotent."""
+        """Clean up everything the runner created. Idempotent.
+
+        Every step catches broadly and independently. Previously each guarded
+        only ``ClientError``, so a transient ``BotoCoreError`` (read timeout,
+        endpoint connection failure) on step 1 propagated out and **skipped steps
+        2-5** — including the capacity-reservation cancel, which bills the full
+        on-demand rate whether or not an instance occupies it. One network blip
+        during teardown could leave ~$114/hr running.
+        """
         cfg = self.config.deployment
 
         # 1. Instance
@@ -207,17 +215,26 @@ class DeploymentRunner:
                 LOG.info("[%s] terminating %s", cfg.experiment_id, self.state.instance_id)
                 self.ec2.terminate_instances(InstanceIds=[self.state.instance_id])
                 self._wait_for_terminated(self.state.instance_id)
-            except ClientError as exc:
+            except Exception as exc:  # noqa: BLE001 — must not skip later steps
                 LOG.warning("Terminate instance failed: %s", exc)
             self.state.instance_id = None
 
-        # 2. Spot Fleet
+        # 2. Spot Fleet. `instant` fleets reject NoTerminateInstances, and
+        # delete_fleets reports per-fleet problems in UnsuccessfulFleetDeletions
+        # with an HTTP 200 rather than raising — so check the response body or the
+        # fleet silently survives against quota. The instance was already
+        # terminated in step 1, so there is nothing left to terminate here.
         if self.state.spot_fleet_id:
             try:
-                self.ec2.delete_fleets(
-                    FleetIds=[self.state.spot_fleet_id], TerminateInstances=False,
+                resp = self.ec2.delete_fleets(
+                    FleetIds=[self.state.spot_fleet_id], TerminateInstances=True,
                 )
-            except ClientError as exc:
+                for bad in resp.get("UnsuccessfulFleetDeletions", []) or []:
+                    LOG.warning(
+                        "Fleet %s not deleted: %s",
+                        bad.get("FleetId"), (bad.get("Error") or {}).get("Message"),
+                    )
+            except Exception as exc:  # noqa: BLE001
                 LOG.warning("Delete fleet failed: %s", exc)
             self.state.spot_fleet_id = None
 
@@ -227,22 +244,30 @@ class DeploymentRunner:
                 self.ec2.delete_launch_template(
                     LaunchTemplateId=self.state.launch_template_id,
                 )
-            except ClientError as exc:
+            except Exception as exc:  # noqa: BLE001
                 LOG.warning("Delete launch template failed: %s", exc)
             self.state.launch_template_id = None
 
-        # 4. Auto-created ODCR (skip Capacity Blocks — not cancellable)
+        # 4. Auto-created ODCR (skip Capacity Blocks — not cancellable).
+        # This is the billing-critical step, which is why nothing above may
+        # short-circuit it.
         if self.state.auto_created_odcr_id and self.state.capacity_mode != "capacity-block":
             try:
                 self.ec2.cancel_capacity_reservation(
                     CapacityReservationId=self.state.auto_created_odcr_id,
                 )
-            except ClientError as exc:
-                LOG.warning("Cancel ODCR failed: %s", exc)
+            except Exception as exc:  # noqa: BLE001
+                LOG.error(
+                    "CANCEL ODCR %s FAILED — it is still billing, cancel by hand: %s",
+                    self.state.auto_created_odcr_id, exc,
+                )
             self.state.auto_created_odcr_id = None
 
         # 5. Security group (ResourceManager retries on ENI cleanup)
-        self._resources.teardown()
+        try:
+            self._resources.teardown()
+        except Exception as exc:  # noqa: BLE001
+            LOG.warning("Security group teardown failed: %s", exc)
         self.state.security_group_id = None
         self.state.mark_terminated()
 
