@@ -362,15 +362,26 @@ def scrape_vllm_metrics(base_url: str, api_key: str, *, timeout_s: float = 15.0)
     for line in text.splitlines():
         if line.startswith("#"):
             continue
-        for key in _METRIC_KEYS:
-            if key in line:
-                try:
-                    out[key] = out.get(key, 0.0) + float(line.rsplit(" ", 1)[1])
-                except (ValueError, IndexError):
-                    # A malformed or truncated sample line is not worth failing
-                    # a whole verification pass over; the counters we can parse
-                    # are still useful and a missing key surfaces downstream.
-                    continue
+        # Parse the metric NAME exactly, rather than substring-matching the whole
+        # line. vLLM exports both `vllm:prefix_cache_queries_total` and
+        # `vllm:gpu_prefix_cache_queries_total` on some versions, and a substring
+        # test credits one sample to both — doubling every counter. The hit
+        # *rate* happens to survive (numerator and denominator both double) but
+        # the preemption count, which is what invalidates a tier, is reported at
+        # 2x. Verified: a synthetic body with both series read 2000 queries
+        # against a true 1000.
+        name = line.split("{", 1)[0].split(" ", 1)[0]
+        if ":" in name:
+            name = name.rsplit(":", 1)[1]
+        if name not in _METRIC_KEYS:
+            continue
+        try:
+            out[name] = out.get(name, 0.0) + float(line.rsplit(" ", 1)[1])
+        except (ValueError, IndexError):
+            # A malformed or truncated sample line is not worth failing a whole
+            # verification pass over; the counters we can parse are still useful
+            # and a missing key surfaces downstream.
+            continue
 
     queries = out.get("prefix_cache_queries_total")
     hits = out.get("prefix_cache_hits_total")

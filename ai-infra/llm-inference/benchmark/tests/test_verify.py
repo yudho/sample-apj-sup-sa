@@ -332,6 +332,45 @@ class TestScrapeVllmMetrics:
         assert "error" in out
         assert "connection refused" in out["error"]
 
+    def test_gpu_prefixed_series_is_not_double_counted(self, monkeypatch) -> None:
+        """vLLM exports both ``prefix_cache_*`` and ``gpu_prefix_cache_*``.
+
+        A substring match credits one sample to both metrics, doubling every
+        counter — including the preemption count that invalidates a tier.
+        """
+        body = "\n".join(
+            [
+                'vllm:gpu_prefix_cache_queries_total{engine="0"} 1000.0',
+                'vllm:prefix_cache_queries_total{engine="0"} 1000.0',
+                'vllm:gpu_prefix_cache_hits_total{engine="0"} 30.0',
+                'vllm:prefix_cache_hits_total{engine="0"} 30.0',
+                'vllm:num_preemptions_total{engine="0"} 5.0',
+            ]
+        )
+        _patch_urlopen(monkeypatch, body)
+        out = scrape_vllm_metrics("http://198.51.100.1:8000/v1", "key")
+        assert out["prefix_cache_queries_total"] == 1000.0
+        assert out["prefix_cache_hits_total"] == 30.0
+        assert out["num_preemptions_total"] == 5.0
+        assert out["prefix_cache_hit_rate"] == pytest.approx(0.03)
+
+    def test_unlabelled_series_parsed(self, monkeypatch) -> None:
+        _patch_urlopen(monkeypatch, "vllm:num_preemptions_total 7.0")
+        out = scrape_vllm_metrics("http://198.51.100.1:8000/v1", "key")
+        assert out["num_preemptions_total"] == 7.0
+
+    def test_unrelated_metrics_ignored(self, monkeypatch) -> None:
+        body = "\n".join(
+            [
+                'vllm:some_other_prefix_cache_queries_total_extra{a="b"} 99.0',
+                'vllm:num_preemptions_total{a="b"} 2.0',
+            ]
+        )
+        _patch_urlopen(monkeypatch, body)
+        out = scrape_vllm_metrics("http://198.51.100.1:8000/v1", "key")
+        assert "prefix_cache_queries_total" not in out
+        assert out["num_preemptions_total"] == 2.0
+
 
 def _patch_urlopen(monkeypatch, body: str) -> None:
     class _Resp:
