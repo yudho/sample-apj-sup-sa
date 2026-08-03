@@ -51,6 +51,10 @@ _METRIC_KEYS = (
 # at 100% completeness and <2% timing divergence, so 98%/5% flags real trouble
 # without tripping on noise.
 DEFAULT_MIN_COMPLETENESS = 0.98
+# Upper bound on completeness. Exceeding the request budget means the directory
+# contains records from more than one attempt (LLMeter appends), which corrupts
+# the measurement window. A little slack absorbs a stray retry record.
+DEFAULT_MAX_COMPLETENESS = 1.02
 DEFAULT_MAX_DIVERGENCE = 0.05
 
 # Below this request count the divergence check is not meaningful: the
@@ -169,17 +173,28 @@ def check_completeness(
     n_expected: int,
     *,
     minimum: float = DEFAULT_MIN_COMPLETENESS,
+    maximum: float = DEFAULT_MAX_COMPLETENESS,
 ) -> tuple[bool, float]:
     """Return ``(ok, ratio)`` for responses actually captured vs expected.
 
     ``n_expected`` is the tier's request budget (usually ``c * K``). Guards
     against a zero budget so a misconfigured tier fails loudly instead of
     dividing by zero.
+
+    The check is **two-sided**. More responses than requested is not a healthier
+    run, it is evidence that the directory holds records from more than one
+    attempt: LLMeter appends to ``responses.jsonl``, so re-running a tier into
+    the same path accumulates. The rate computation then spans both attempts —
+    including the idle gap between them — which stretches the window and
+    *understates* throughput. Simulated on a c=800 tier re-run 20 minutes after
+    an abort: 105% completeness, all other gates green, and cost per 1k
+    overstated 7.8x with a clean VALID stamp. Bounding the ratio above turns
+    that into a failure.
     """
     if n_expected <= 0:
         return False, 0.0
     ratio = n_responses / n_expected
-    return ratio >= minimum, ratio
+    return minimum <= ratio <= maximum, ratio
 
 
 # -----------------------------------------------------------------------------
@@ -378,6 +393,7 @@ def verify_tier(
     metrics_before: dict | None = None,
     metrics_after: dict | None = None,
     min_completeness: float = DEFAULT_MIN_COMPLETENESS,
+    max_completeness: float = DEFAULT_MAX_COMPLETENESS,
     max_divergence: float = DEFAULT_MAX_DIVERGENCE,
     max_preemptions: int = 0,
     min_uniqueness: float = DEFAULT_MIN_UNIQUENESS,
@@ -402,16 +418,28 @@ def verify_tier(
     verdict.distinct_prompts = distinct
     verdict.successful_responses = n_responses
     verdict.failed_responses = n_failed
-    ok, ratio = check_completeness(n_responses, n_expected, minimum=min_completeness)
+    ok, ratio = check_completeness(
+        n_responses, n_expected,
+        minimum=min_completeness, maximum=max_completeness,
+    )
     verdict.completeness = ratio
     if not ok:
         verdict.valid = False
-        verdict.reasons.append(
-            f"completeness {ratio:.1%} < {min_completeness:.0%} "
-            f"({n_responses} successful of {n_expected} expected"
-            + (f", {n_failed} failed/timed-out" if n_failed else "")
-            + ")"
-        )
+        if ratio > max_completeness:
+            verdict.reasons.append(
+                f"completeness {ratio:.1%} > {max_completeness:.0%} "
+                f"({n_responses} successful vs {n_expected} requested) — the "
+                "output directory holds more than one attempt, so the "
+                "measurement window spans both and the rate is wrong; use a "
+                "fresh per-attempt directory"
+            )
+        else:
+            verdict.reasons.append(
+                f"completeness {ratio:.1%} < {min_completeness:.0%} "
+                f"({n_responses} successful of {n_expected} expected"
+                + (f", {n_failed} failed/timed-out" if n_failed else "")
+                + ")"
+            )
     elif n_failed:
         verdict.reasons.append(
             f"{n_failed} failed/timed-out record(s) present but completeness "

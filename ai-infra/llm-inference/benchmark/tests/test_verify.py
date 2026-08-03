@@ -214,6 +214,27 @@ class TestCheckCompleteness:
         assert not ok
         assert 0.90 < ratio < 0.92
 
+    def test_over_100_percent_fails(self) -> None:
+        """More responses than requested means two attempts in one directory.
+
+        LLMeter appends to responses.jsonl, so a re-run accumulates. The rate
+        computation then spans both attempts plus the idle gap between them,
+        which understates throughput badly — simulated at 7.8x on a c=800 tier —
+        while every other gate stays green.
+        """
+        ok, ratio = check_completeness(8400, 8000)
+        assert not ok
+        assert ratio == pytest.approx(1.05)
+
+    def test_double_counted_tier_fails(self) -> None:
+        ok, _ = check_completeness(200, 100)
+        assert not ok
+
+    def test_small_overshoot_tolerated(self) -> None:
+        """A stray retry record should not fail an otherwise clean tier."""
+        ok, _ = check_completeness(101, 100)
+        assert ok
+
     def test_boundary_at_threshold_passes(self) -> None:
         ok, _ = check_completeness(98, 100, minimum=0.98)
         assert ok

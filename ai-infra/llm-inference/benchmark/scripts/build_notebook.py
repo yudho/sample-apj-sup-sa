@@ -480,12 +480,22 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             # SKU is actually driven to saturation. Using one hardcoded ladder
             # for every instance understates the big boxes badly: the same 8-GPU
             # box measured $1.03/1M tokens at c=100 and $0.177/1M at c=800.
-            def tiers_for(exp_id: str) -> list[int]:
+            def tiers_for(exp_id: str, pool_size: int | None = None) -> list[int]:
                 high = get_experiment(exp_id).deployment.concurrency_high
                 ladder = [1, 10, 30, 50, 100, 200, 400, 800, 1600]
                 tiers = [c for c in ladder if c <= high]
                 if high not in tiers:
                     tiers.append(high)
+                # Every request needs a distinct input and the cursor advances
+                # between tiers, so the ladder's total demand is bounded by the
+                # corpus. Drop from the BOTTOM: the low tiers are cheap latency
+                # probes, while the top tier is the one that finds saturation and
+                # is the whole point of sweeping a large instance.
+                if pool_size is not None:
+                    while len(tiers) > 1 and sum(
+                        tier_requests(c) for c in tiers
+                    ) > pool_size:
+                        tiers.pop(0)
                 return tiers
 
             # Client-side connection ceiling. The OpenAI SDK defaults to 1,000,
@@ -521,6 +531,10 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
             OUTPUT_BASE = Path("outputs")
             OUTPUT_BASE.mkdir(exist_ok=True)
 
+            # Stamps each tier's output directory so re-running a cell never
+            # appends into a previous attempt's responses.jsonl.
+            RUN_STAMP = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
 
             async def run_experiment(
                 exp_id: str,
@@ -540,13 +554,39 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 print(f"[{{exp_id}}] total VRAM = {{hw.vram_gib_total:.1f}} GiB across "
                       f"{{hw.num_accelerators}} accelerators")
 
+                # ---- validate BEFORE launching anything -------------------
+                # Every request consumes a distinct input and the cursor advances
+                # between tiers (replaying would let later tiers hit a prefix
+                # cache earlier tiers filled, inflating precisely the
+                # high-concurrency tiers that decide the reported optimum). So the
+                # pool must cover the SUM of all tiers.
+                #
+                # This check MUST precede runner.launch(): failing afterwards
+                # leaves a GPU instance running with nothing to tear it down.
+                _needed_total = sum(tier_requests(c) for c in concurrency_tiers)
+                if len(INPUTS) < _needed_total:
+                    raise ValueError(
+                        f"[{{exp_id}}] input pool {{len(INPUTS):,}} < {{_needed_total:,}} "
+                        f"required for tiers {{concurrency_tiers}}. Either raise "
+                        f"N_BENCHMARK_SAMPLES (the pooled corpus caps it), lower "
+                        f"PER_CLIENT_REQUESTS, or trim the top tiers. Nothing has "
+                        f"been launched."
+                    )
+
                 runner = DeploymentRunner(
                     cfg,
                     catalog=CATALOG,
                     hf_secret_name={"HF_SECRET_NAME" if c.gated else "None"},
                     capacity_reservation_id=capacity_reservation_id,
                 )
+                # Register the runner immediately so a later failure still leaves
+                # something to tear down: `teardown_experiment(exp_id)` and the
+                # emergency sweep at the end of the notebook both work off this.
+                # (An exception between here and the end of the function does not
+                # auto-terminate — run the teardown cell.)
+                EXPERIMENTS_STATE[exp_id] = {{"runner": runner, "spec": cfg}}
                 state = runner.launch()
+                EXPERIMENTS_STATE[exp_id]["state"] = state
 
                 # UniquePayloadEndpoint guarantees every request carries a
                 # distinct input. Without it, LLMeter's constant-seeded shuffle
@@ -555,17 +595,6 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 # that inflate throughput. make_http_client lifts the OpenAI
                 # SDK's 1,000-connection cap so tiers above c=1000 measure the
                 # server rather than the client's connection pool.
-                # The pool must cover the SUM of all tiers, because the cursor
-                # advances between tiers rather than replaying the same inputs.
-                # Replaying would let later tiers hit a prefix cache that earlier
-                # tiers filled, inflating exactly the high-concurrency tiers that
-                # decide the reported optimum.
-                _needed_total = sum(tier_requests(c) for c in concurrency_tiers)
-                assert len(INPUTS) >= _needed_total, (
-                    f"input pool {{len(INPUTS)}} < {{_needed_total}} required for "
-                    f"tiers {{concurrency_tiers}}; raise N_BENCHMARK_SAMPLES"
-                )
-
                 endpoint = UniquePayloadEndpoint(
                     base_url=state.base_url,
                     api_key=state.api_key,
@@ -612,7 +641,12 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                 _cursor = 0
                 for _c in concurrency_tiers:
                     _needed = tier_requests(_c)
-                    _tier_dir = OUTPUT_BASE / exp_id / f"c{{_c}}"
+                    # Timestamped per attempt. LLMeter APPENDS to
+                    # responses.jsonl, so re-executing a tier cell into the same
+                    # directory accumulates both attempts: completeness reads
+                    # over 100% and the measurement window spans the idle gap
+                    # between runs, badly understating throughput.
+                    _tier_dir = OUTPUT_BASE / exp_id / f"c{{_c}}-{{RUN_STAMP}}"
                     _tier_notes = INPUTS[_cursor:_cursor + _needed]
                     endpoint.reset_pool(offset=_cursor)
                     endpoint.reset_finish_reasons()
@@ -765,9 +799,11 @@ def cells_experiment(exp_id: str, title: str) -> list[dict]:
         code(dedent(f"""\
             cfg = get_experiment("{exp_id}")
             print(cfg.model_dump())
-            concurrency_tiers = tiers_for("{exp_id}")
+            concurrency_tiers = tiers_for("{exp_id}", pool_size=len(INPUTS))
             print(f"tiers: {{concurrency_tiers}} "
-                  f"(requests: {{[tier_requests(c) for c in concurrency_tiers]}})")
+                  f"(requests: {{[tier_requests(c) for c in concurrency_tiers]}}, "
+                  f"total {{sum(tier_requests(c) for c in concurrency_tiers):,}} "
+                  f"of {{len(INPUTS):,}} inputs)")
             """)),
         code(dedent(f"""\
             state_{exp_id} = await run_experiment(

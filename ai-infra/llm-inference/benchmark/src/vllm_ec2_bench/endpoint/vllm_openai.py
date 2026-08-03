@@ -17,6 +17,7 @@ Both are model- and GPU-agnostic, so every benchmark in this repo gets them:
 """
 from __future__ import annotations
 
+import contextlib
 import threading
 from typing import Any
 
@@ -135,7 +136,11 @@ class VLLMEndpoint(OpenAICompletionEndpoint):  # type: ignore[misc]
         try:
             reason = raw_response.choices[0].finish_reason
         except (AttributeError, IndexError, TypeError):
-            return
+            # Record the miss under a distinct key. Returning silently would make
+            # "we never looked" indistinguishable from "nothing was truncated",
+            # so a broken extraction path would report a clean tier — the exact
+            # failure this accounting exists to catch.
+            reason = "__unreadable__"
         with self._finish_lock:
             self._finish_reasons[reason] = self._finish_reasons.get(reason, 0) + 1
 
@@ -155,6 +160,20 @@ class VLLMEndpoint(OpenAICompletionEndpoint):  # type: ignore[misc]
     def completed_count(self) -> int:
         """Responses that ended naturally at a stop token."""
         return self.finish_reasons.get("stop", 0)
+
+    @property
+    def unreadable_finish_count(self) -> int:
+        """Responses whose ``finish_reason`` could not be read.
+
+        Non-zero means the truncation check did not actually inspect those
+        responses, so a zero ``truncated_count`` proves nothing about them.
+        """
+        return self.finish_reasons.get("__unreadable__", 0)
+
+    @property
+    def accounted_count(self) -> int:
+        """Total responses that reached the finish-reason tally."""
+        return sum(self.finish_reasons.values())
 
     def reset_finish_reasons(self) -> None:
         """Clear the counters. Call between concurrency tiers."""
@@ -189,8 +208,47 @@ class VLLMStreamEndpoint(OpenAICompletionStreamEndpoint):  # type: ignore[misc]
             base_url=base_url,
             **kwargs,
         )
+        object.__setattr__(self, "_finish_reasons", {})
+        object.__setattr__(self, "_finish_lock", threading.Lock())
 
-    create_payload = VLLMEndpoint.create_payload  # inherit the helper
+    # Re-wrap in staticmethod: `VLLMEndpoint.create_payload` evaluates to the
+    # plain function, so assigning it directly makes it an instance method here
+    # and `ep.create_payload(system, user, max_tokens=N)` binds `self` to
+    # `system_prompt` — TypeError on the duplicate `max_tokens`. Class-level
+    # access happens to work, which is how this stayed hidden.
+    create_payload = staticmethod(VLLMEndpoint.create_payload)
+
+    # Truncation accounting, same as the non-streaming endpoint. This class does
+    # NOT inherit from VLLMEndpoint (both derive from different LLMeter bases),
+    # so without these a caller that swaps in the streaming endpoint for accurate
+    # TTFT would silently lose the truncation gate entirely.
+    def process_raw_response(self, raw_response: Any, start_t: float, response: Any) -> None:
+        """Record the response and tally ``finish_reason`` where obtainable.
+
+        ⚠️ In streaming mode the parent CONSUMES the chunk iterator, and
+        ``finish_reason`` arrives on a late chunk that is not retained on any
+        accumulated object. So this reliably tallies ``__unreadable__`` rather
+        than the real reason.
+
+        That is deliberate: a caller gating on truncation will see
+        ``unreadable_finish_count > 0`` and know the check did not actually run,
+        instead of reading a zero ``truncated_count`` as proof of clean output.
+        **Use the non-streaming :class:`VLLMEndpoint` when truncation must be
+        verified**; reach for this class only when accurate TTFT matters more.
+        """
+        super().process_raw_response(raw_response, start_t, response)
+        reason = "__unreadable__"
+        with contextlib.suppress(AttributeError, IndexError, TypeError):
+            reason = raw_response.choices[0].finish_reason or "__unreadable__"
+        with self._finish_lock:
+            self._finish_reasons[reason] = self._finish_reasons.get(reason, 0) + 1
+
+    finish_reasons = VLLMEndpoint.finish_reasons
+    truncated_count = VLLMEndpoint.truncated_count
+    completed_count = VLLMEndpoint.completed_count
+    unreadable_finish_count = VLLMEndpoint.unreadable_finish_count
+    accounted_count = VLLMEndpoint.accounted_count
+    reset_finish_reasons = VLLMEndpoint.reset_finish_reasons
 
 
 # -----------------------------------------------------------------------------
