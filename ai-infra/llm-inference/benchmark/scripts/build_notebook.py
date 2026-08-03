@@ -663,13 +663,18 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                         _rates.get("total_output_tokens") or 0
                     )
 
+                    # The divergence check needs two INDEPENDENT measurements:
+                    # the rate over the recomputed request-level window, against
+                    # the same tokens over the PROCESS wall clock. Passing the
+                    # recomputed window alongside its own rate would be
+                    # self-referential and pass unconditionally.
                     _v = verify_tier(
                         concurrency=_c,
                         output_dir=_tier_dir,
                         n_expected=_needed,
                         stats_tokens_per_min=_tpm,
                         total_tokens=_tot_tok,
-                        wall_clock_s=_window,
+                        wall_clock_s=_wall,
                         metrics_before=_m_before,
                         metrics_after=_m_after,
                         min_completeness=MIN_COMPLETENESS,
@@ -678,13 +683,16 @@ def cells_preamble(c: ModelNotebookConfig) -> list[dict]:
                     )
 
                     # A truncated output means the item was never finished, so
-                    # any per-item cost derived from it is meaningless.
+                    # any per-item cost derived from it is meaningless. The
+                    # denominator is responses_ok, not the finish_reason tally:
+                    # an errored request never reached process_raw_response and
+                    # so has no finish_reason at all.
                     _trunc = endpoint.truncated_count
                     _done = endpoint.completed_count
                     if _trunc:
                         _v.valid = False
                         _v.reasons.append(
-                            f"{{_trunc}}/{{_trunc + _done}} outputs hit "
+                            f"{{_trunc}} of {{_n_ok}} successful outputs hit "
                             f"max_tokens={{MAX_NEW_TOKENS}} — items not completed; "
                             "raise MAX_NEW_TOKENS and re-run"
                         )

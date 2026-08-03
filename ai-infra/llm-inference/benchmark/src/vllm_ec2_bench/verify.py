@@ -294,14 +294,21 @@ def cross_check_throughput(
     wall_clock_s: float,
     maximum_divergence: float = DEFAULT_MAX_DIVERGENCE,
 ) -> tuple[bool, float, float]:
-    """Compare LLMeter's reported rate against a wall-clock recomputation.
+    """Compare a reported rate against an independent wall-clock recomputation.
 
     Returns ``(ok, divergence, wall_clock_tokens_per_min)`` where divergence is
-    the absolute relative gap between the two rates. Both figures are legitimate
-    measurements of different windows — LLMeter times its own request window,
-    wall-clock includes tier setup and the straggler tail — so a gap is not
-    automatically an error. It *is* a signal that you must decide which window
-    you mean before quoting a number.
+    the absolute relative gap between the two rates.
+
+    **The two inputs must come from independent sources**, or this degenerates
+    into a tautology. Pass ``stats_tokens_per_min`` from the *reporting* side
+    (LLMeter's own summed rate) and ``total_tokens``/``wall_clock_s`` from the
+    *recomputed* side. Deriving both from the same numbers makes divergence
+    exactly zero — measured 1.35e-16 — so the gate passes unconditionally and
+    straggler tails become invisible.
+
+    A gap is not automatically an error: the two figures legitimately cover
+    different windows. It *is* a signal that you must decide which window you
+    mean before quoting a number.
     """
     if wall_clock_s <= 0 or stats_tokens_per_min <= 0:
         return False, float("inf"), 0.0

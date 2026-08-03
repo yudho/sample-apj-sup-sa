@@ -245,6 +245,37 @@ class TestCrossCheckThroughput:
         assert not ok
         assert divergence > 0.4
 
+    def test_self_referential_inputs_are_a_tautology(self) -> None:
+        """Guards against re-breaking the gate by deriving both inputs together.
+
+        If the caller passes a rate alongside the very window it was computed
+        from, divergence is exactly zero and the gate can never fire — which is
+        how a straggler tail became invisible once already.
+        """
+        total, window = 1_036_371, 578.6
+        derived_rate = total / window * 60
+        ok, divergence, _ = cross_check_throughput(
+            stats_tokens_per_min=derived_rate,
+            total_tokens=total,
+            wall_clock_s=window,
+        )
+        assert ok
+        assert divergence < 1e-12, (
+            "self-referential inputs produce ~0 divergence; the caller must pass "
+            "two independently measured quantities"
+        )
+
+    def test_independent_inputs_catch_a_stretched_window(self) -> None:
+        """The real signal: a tail stretches the outer window past the inner one."""
+        total, inner = 1_036_371, 578.6
+        ok, divergence, _ = cross_check_throughput(
+            stats_tokens_per_min=total / inner * 60,
+            total_tokens=total,
+            wall_clock_s=inner * 1.35,   # process wall clock, tail included
+        )
+        assert not ok
+        assert divergence > 0.2
+
     def test_zero_wall_clock_is_invalid(self) -> None:
         ok, divergence, _ = cross_check_throughput(
             stats_tokens_per_min=1000, total_tokens=100, wall_clock_s=0.0
