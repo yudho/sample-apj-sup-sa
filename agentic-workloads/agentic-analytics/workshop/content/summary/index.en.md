@@ -14,11 +14,14 @@ Congratulations! You've built a self-service analytics system for Timely-Unicorn
 | 3 | React chat UI | Business users can interact naturally |
 | 4 | Prebaked SQL toolset | Analytics tools backed by database Views |
 | 5 | API integration toolset | Connect agent to existing business APIs |
-| 6 | Custom SQL toolset | Ad-hoc queries with Glue + Bedrock KB RAG |
-| 7 | Multi-Tenant Isolation & User Access | Cedar policies + JWT → PostgreSQL RLS |
+| 6 | Custom SQL toolset | Ad-hoc queries with Glue schema (whole or indexed) + a managed Bedrock knowledge base |
+| 6b | Web Search connector | Public context (holidays, seasons) next to your own data, no API key |
+| 7 | Multi-Tenant Isolation & User Access | Cedar policies + JWT → PostgreSQL RLS; guardrail checks and a booking-order rule in policy |
+| 7c | Front door | Gateway + AWS WAF + per-user rate limit; the only way to reach the runtime |
 | 8 | Guardrails | Off-topic blocked, PII filtered |
 | 9 | Observability | Trace agent behavior end-to-end |
-| 10 | Evaluation | Measure quality with LLM-as-a-Judge |
+| 10 | Evaluation | Measure quality with LLM-as-a-Judge, on demand and continuously |
+| 11 | Schema changes | Keep the catalog and knowledge base current; approve breaking changes; refuse tenant tables without RLS |
 | Optional | Semantic Layer (Cube Core) | Structured ad-hoc analytics: flexible yet reliable |
 | Optional | Voice | Spoken interface to the same secured agent |
 
@@ -27,7 +30,8 @@ Congratulations! You've built a self-service analytics system for Timely-Unicorn
 | Layer | What It Controls | How It Works |
 |-------|-----------------|-------------|
 | **Authentication, Authorization, JWT propagation** | access control | Restrict access to authenticated user and role-based access control with propagated claim |
-| **Cedar Policy** | Which tools each role can access | Gateway hides tools from unauthorized users |
+| **Front door** | Who reaches the agent, and how often | AWS WAF and a per-user rate limit on a gateway in front of an IAM-only runtime |
+| **Cedar Policy** | Which tools each role can access, what goes into a tool call, and in what order tools run | Gateway hides tools, screens tool inputs with guardrail checks, and enforces the booking-order rule |
 | **Row-Level Security** | Which data rows each tenant sees | PostgreSQL filters rows via JWT claims |
 | **Bedrock Guardrails** | Content safety and topic boundaries | Blocks off-topic, PII, and schema leakage |
 | **SOPs** | Agent behavior and response format | RFC 2119 constraints guide LLM decisions |
@@ -56,6 +60,8 @@ The pattern in this workshop maps to a real SaaS challenge:
 | **Guardrails** | Protect your platform from misuse: off-topic, PII |
 | **Human-in-the-loop** | Let power users run custom queries while maintaining control |
 | **Observability** | Debug tenant-reported issues with full trace visibility |
+| **Front door** | Put rate limits and WAF rules in front of every agent, the same way you do for APIs |
+| **Schema pipeline** | Ship database migrations without breaking the agent: safe changes flow, risky ones wait for review |
 
 The :link[SaaS Lens]{href="https://docs.aws.amazon.com/wellarchitected/latest/saas-lens/saas-lens.html"} of the AWS Well-Architected Framework provides additional guidance on building secure, scalable multi-tenant applications.
 
