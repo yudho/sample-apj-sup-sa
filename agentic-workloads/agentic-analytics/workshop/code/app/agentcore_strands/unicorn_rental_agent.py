@@ -452,6 +452,7 @@ async def agent_invocation(payload, context):
                 
     except Exception as e:
         print(f"❌ Request failed: {str(e)}")
-        yield {"type": "text", "content": f"I'm currently unable to connect to the scheduling system: {str(e)}. Please try again later."}
+        # Same event shape as normal text, so the UI and the voice bot both show it.
+        yield {"event": {"contentBlockDelta": {"delta": {"text": "Sorry, I couldn't reach the analytics tools just now. Please try again in a moment."}}}}
 
 app.run()
