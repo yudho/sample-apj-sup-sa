@@ -35,6 +35,9 @@ ENV_NAME    ?= agentic-analytics
 STACK       ?= agentic-analytics-agentcore
 TEMPLATE    ?= agentcore-topup-stack.yaml
 POLICY_MODE ?= LOG_ONLY
+# Step 7c: `make deploy FRONT_DOOR=true` puts the front-door gateway + WAF in front of
+# the runtime. Left EMPTY so a later bare `make deploy` keeps whatever the stack has.
+FRONT_DOOR  ?=
 # Container image tag the runtime points at. Left EMPTY on purpose: a bare
 # `make deploy` then omits the AgentImageTag override, so CloudFormation keeps
 # the stack's existing tag (and uses the template default 'latest' on first
@@ -101,6 +104,7 @@ deploy: stage-assets
 	      ArtifactsPrefix= \
 	      PolicyMode=$(POLICY_MODE) \
 	      $(if $(strip $(AGENT_IMAGE_TAG)),AgentImageTag=$(AGENT_IMAGE_TAG),) \
+	      $(if $(strip $(FRONT_DOOR)),EnableFrontDoor=$(FRONT_DOOR),) \
 	  --capabilities CAPABILITY_NAMED_IAM \
 	  --region $(REGION)
 
