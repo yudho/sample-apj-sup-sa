@@ -385,6 +385,10 @@ build_params() {
   for k in "${REQUIRED_KEYS[@]}"; do
     echo "ParameterKey=${k},ParameterValue=$(key_val "$k")"
   done
+  # Optional: the schema-change pipeline nests only when its Lambda zip exists.
+  if [ -n "$(key_val SchemaSyncLambdaKey)" ]; then
+    echo "ParameterKey=SchemaSyncLambdaKey,ParameterValue=$(key_val SchemaSyncLambdaKey)"
+  fi
   if [ "$ENABLE_VOICE" = "true" ]; then
     echo "ParameterKey=VoiceAgentCodeS3Key,ParameterValue=$(key_val VoiceAgentCodeS3Key)"
     echo "ParameterKey=EnableVoice,ParameterValue=true"
