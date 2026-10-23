@@ -250,6 +250,16 @@ Resources:
                 Action:
                   - bedrock-agentcore:*
                 Resource: '*'
+              # BusinessContext connector target (Step 6): validate and query the managed KB.
+              - Effect: Allow
+                Action:
+                  - bedrock:GetKnowledgeBase
+                  - bedrock:Retrieve
+                Resource:
+                  Fn::Sub:
+                    - arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KbId}
+                    - KbId:
+                        Fn::ImportValue: !Sub '${EnvironmentName}-KnowledgeBaseId'
               # Step 7b: guardrail conditions in Cedar policies call Bedrock guardrail
               # checks with this role's credentials. They use no account guardrail
               # resource, so the action is granted on '*'; it can only score content.
@@ -880,6 +890,43 @@ Resources:
 #                     Properties:
 #                       sql: { Type: string, Description: 'The SQL query to execute (must be SELECT only)' }
 #                     Required: [sql]
+#   #============================================================================
+#   # Gateway Target — BusinessContext (Bedrock Managed Knowledge Base connector)
+#   #
+#   # Gives the agent a direct Retrieve tool over the business glossary, so a
+#   # question like "how do we define an at-risk customer?" is answered from the
+#   # knowledge base through the same gateway, policy engine and logs as every
+#   # other tool. The KB id is bound here and hidden from the agent; it only sees
+#   # the query text. The custom SQL Lambda still retrieves business context on
+#   # its own while it assembles text-to-SQL context.
+#   #============================================================================
+#   BusinessContextTarget:
+#     Type: AWS::BedrockAgentCore::GatewayTarget
+#     Properties:
+#       GatewayIdentifier: !GetAtt Gateway.GatewayIdentifier
+#       Name: BusinessContext
+#       Description: Business definitions, metrics and rules from the managed knowledge base
+#       TargetConfiguration:
+#         Mcp:
+#           Connector:
+#             Source:
+#               ConnectorId: bedrock-knowledge-bases
+#             Configurations:
+#               - Name: Retrieve
+#                 Description: Search the business glossary (metric definitions, business rules, sample questions). Use for "what does X mean" or "how is X calculated" questions.
+#                 ParameterValues:
+#                   knowledgeBaseId:
+#                     Fn::ImportValue: !Sub '${EnvironmentName}-KnowledgeBaseId'
+#                   retrievalConfiguration:
+#                     managedSearchConfiguration:
+#                       numberOfResults: 5
+#                 ParameterOverrides:
+#                   - Path: $.retrievalQuery.text
+#                     Description: The business term or question to look up, in plain words
+#                     Visible: true
+#       CredentialProviderConfigurations:
+#         - CredentialProviderType: GATEWAY_IAM_ROLE
+
   # ===== UNCOMMENT TO HERE (Step 6) ======
 
   # ===== UNCOMMENT FROM HERE (Step 6b: Web Search connector) ======
