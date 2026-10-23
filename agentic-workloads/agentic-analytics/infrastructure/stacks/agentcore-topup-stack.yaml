@@ -211,6 +211,8 @@ Resources:
       FunctionName: !Ref InterceptorLambda
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   # NOTE: The optional Cube SemanticLayer toolset is intentionally NOT part of
   # this top-up. The semantic-layer lab keeps its own parallel two-agent
@@ -445,6 +447,8 @@ Resources:
       FunctionName: !Ref DataFoundationAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   # psycopg2 layer (created only if not provided)
   Psycopg2Layer:
@@ -734,6 +738,8 @@ Resources:
       FunctionName: !Ref ApiIntegAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # Gateway Target — APIInteg (create_booking write tool)
@@ -881,6 +887,8 @@ Resources:
       FunctionName: !Ref CustomSqlAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # Gateway Target — CustomSQL (text-to-SQL with human approval)

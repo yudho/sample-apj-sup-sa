@@ -769,6 +769,7 @@ Resources:
       FunctionName: !Ref SignalingProxyFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SignalingHttpApi}/*/*
 
 Outputs:

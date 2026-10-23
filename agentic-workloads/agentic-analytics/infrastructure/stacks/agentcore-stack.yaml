@@ -304,6 +304,8 @@ Resources:
       FunctionName: !Ref DataFoundationAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   # psycopg2 layer (created only if not provided)
   Psycopg2Layer:
@@ -372,6 +374,8 @@ Resources:
       FunctionName: !Ref InterceptorLambda
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # APIInteg Lambda (create_booking write tool)
@@ -464,6 +468,8 @@ Resources:
       FunctionName: !Ref ApiIntegAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # CustomSQL Lambda (text-to-SQL with Glue schema + Bedrock KB RAG)
@@ -569,6 +575,8 @@ Resources:
       FunctionName: !Ref CustomSqlAlias
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # SemanticLayer Lambda (Cube semantic layer client)
@@ -618,6 +626,8 @@ Resources:
       FunctionName: !Ref SemanticLayerLambda
       Action: lambda:InvokeFunction
       Principal: bedrock-agentcore.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
 
   #============================================================================
   # Gateway IAM Role

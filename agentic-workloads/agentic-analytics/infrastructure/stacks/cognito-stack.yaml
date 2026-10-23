@@ -165,6 +165,7 @@ Resources:
       FunctionName: !Ref PreTokenLambda
       Action: lambda:InvokeFunction
       Principal: cognito-idp.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
 
   #============================================================================
