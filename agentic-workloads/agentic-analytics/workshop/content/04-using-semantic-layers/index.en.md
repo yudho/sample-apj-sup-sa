@@ -429,7 +429,7 @@ Now that you've built all three, here's when to use each:
 | **Semantic Layer** | Ad-hoc analytics within a defined vocabulary | Cube JSON query | Low: constrained to defined measures/dimensions |
 | **Custom SQL** | Truly novel questions outside any model | Raw SQL | Higher: mitigated by RAG + human approval |
 
-::alert[**The sweet spot:** In production, you'd use Prebaked SQL for the top 20 questions (fast, minimum risk), the Semantic Layer for the next 80% of ad-hoc analytics (flexible, low risk), and Custom SQL as a last resort for truly novel questions (maximum flexibility, human approval required). The SOP (Step 7) can encode this preference hierarchy.]{type="success"}
+::alert[**One way to combine them:** Prebaked SQL for the questions people ask most (fast, fixed queries), the Semantic Layer for ad-hoc analytics over the measures you model, and Custom SQL for questions neither covers (most flexible, human approval required). The SOP (Step 7) can encode this preference hierarchy.]{type="success"}
 
 ## Verification
 
