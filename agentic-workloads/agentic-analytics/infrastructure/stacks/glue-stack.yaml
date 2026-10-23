@@ -194,8 +194,17 @@ Resources:
   GlueDriverBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21
+            comment: Generated content that the stack rewrites; old versions are not kept.
     Properties:
       BucketName: !Sub ${EnvironmentName}-glue-drivers-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true

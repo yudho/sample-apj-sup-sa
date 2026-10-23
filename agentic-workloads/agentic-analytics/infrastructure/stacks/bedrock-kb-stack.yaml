@@ -34,12 +34,21 @@ Resources:
   KBDocsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_21
+            comment: Generated content that the stack rewrites; old versions are not kept.
     Properties:
       # Region in the name avoids S3 global-endpoint stale-region-cache 301s when the
       # same account previously held this bucket name in another region (e.g. a prior
       # demo in us-west-2). Bedrock ingestion uses the global endpoint and won't follow
       # the 301, so a region-distinct name is required for reliable multi-region reuse.
       BucketName: !Sub ${EnvironmentName}-kb-docs-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
