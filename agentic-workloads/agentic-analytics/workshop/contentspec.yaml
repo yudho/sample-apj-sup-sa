@@ -44,6 +44,6 @@ infrastructure:
         - templateParameter: ArtifactsBucket
           defaultValue: "{{.AssetsBucketName}}"
         - templateParameter: ArtifactsPrefix
-          defaultValue: "{{.AssetsBucketPrefix}}"
+          defaultValue: "{{.AssetsBucketPrefix}}v2/"
         - templateParameter: DeployMode
           defaultValue: workshop
