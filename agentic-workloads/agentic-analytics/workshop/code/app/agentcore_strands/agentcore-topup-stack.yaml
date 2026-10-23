@@ -1422,8 +1422,28 @@ Resources:
     Type: AWS::BedrockAgentCore::Memory
     Properties:
       Name: unicorn_rental_agent_memory
-      Description: Short-term conversation memory for unicorn rental analytics agent
+      Description: Conversation memory plus long-term episodes and preferences for the unicorn rental analytics agent
       EventExpiryDuration: 7
+      # Long-term memory, extracted in the background from the conversation events
+      # the agent already writes. Records are scoped per signed-in user (actorId =
+      # the JWT sub), so one user never sees another user's memory.
+      #  - Episodic: what the user asked and how it went ("checked Q3 revenue, then
+      #    drilled into the top breed"), with reflections across episodes.
+      #  - User preference: stable likes ("prefers charts", "reports in SGD").
+      MemoryStrategies:
+        - EpisodicMemoryStrategy:
+            Name: analytics_episodes
+            Description: Past analytics tasks per user and what worked
+            Namespaces:
+              - /analytics/{actorId}/episodes/{sessionId}
+            ReflectionConfiguration:
+              Namespaces:
+                - /analytics/{actorId}/episodes
+        - UserPreferenceMemoryStrategy:
+            Name: analytics_preferences
+            Description: Stable reporting preferences per user
+            Namespaces:
+              - /analytics/{actorId}/preferences
 
   # ===== UNCOMMENT FROM HERE (Step 8: Bedrock Guardrail) ======
 
