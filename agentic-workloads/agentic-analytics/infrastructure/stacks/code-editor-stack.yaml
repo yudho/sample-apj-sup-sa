@@ -487,7 +487,8 @@ Resources:
 
           # Install packages (skip curl - curl-minimal is pre-installed on AL2023)
           dnf update -y -q
-          dnf install -y -q unzip nginx jq git wget python3.11 python3.11-pip nodejs gcc make postgresql16
+          dnf install -y -q unzip nginx jq git wget python3.11 python3.11-pip nodejs22 nodejs22-npm gcc make postgresql16
+          node --version && npm --version   # nodejs22 is the active Node.js via alternatives
 
           # AWS CLI v2 (arch-detected so this works on both arm64 and x86_64)
           cd /tmp
