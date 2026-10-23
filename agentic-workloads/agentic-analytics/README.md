@@ -1,6 +1,6 @@
 # Agentic Analytics for Multi-tenant SaaS with AgentCore
 
-A reference implementation and [AWS Workshop Studio](https://workshops.aws/) deployable for building AI-powered self-service analytics on multi-tenant SaaS. Business users ask questions in plain English — by **text or by voice** — the AI agent selects the right query, enforces security policies, and returns formatted insights, including **generated charts**.
+A reference implementation and [AWS Workshop Studio](https://workshops.aws/) deployable for building AI-powered self-service analytics on multi-tenant SaaS. Business users ask questions in plain English, by **text or by voice**. The AI agent selects the right query, enforces security policies, and returns formatted insights, including **generated charts**.
 
 Built with [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html), [Strands Agents SDK](https://strandsagents.com/docs/), Aurora PostgreSQL, and Cedar policies.
 
@@ -16,8 +16,8 @@ Built with [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentc
 4. **AgentCore Runtime** hosts a Strands agent that interprets the query and selects the right tool(s)
 5. **MCP Gateway** routes tool calls to Lambda functions, enforcing Cedar RBAC policies and propagating the JWT
 6. **Lambda Tools** execute parameterized SQL against Aurora PostgreSQL, with Row-Level Security filtering data by tenant
-7. **Agent** formats the results and streams them back to the UI — as text, a markdown table, and/or a generated chart image
-8. **(Optional) Voice** — the same agent answers spoken questions: a Pipecat pipeline (its own AgentCore Runtime, WebRTC + Amazon KVS managed TURN, Deepgram STT/TTS) calls the analytics agent and speaks the answer back
+7. **Agent** formats the results and streams them back to the UI: as text, a markdown table, and/or a generated chart image
+8. **(Optional) Voice**: the same agent answers spoken questions. A Pipecat pipeline (its own AgentCore Runtime, WebRTC + Amazon KVS managed TURN, Deepgram STT/TTS) calls the analytics agent and speaks the answer back
 
 ### Key Components
 
@@ -29,7 +29,7 @@ Built with [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentc
 | **Voice Runtime** *(optional)* | A second AgentCore Runtime running the Pipecat voice pipeline (WebRTC + KVS TURN, Deepgram STT/TTS) that invokes the analytics agent |
 | **Chart Code Interpreter** | Sandboxed matplotlib rendering → PNG to S3; the agent returns a short presigned `<chart>` tag (no base64 in the stream) |
 | **MCP Gateway** | Authenticated tool routing with Cedar policy enforcement |
-| **Prebaked SQL Toolset** | 27+ analytics tools backed by database Views |
+| **Prebaked SQL Toolset** | 29 analytics tools backed by database Views |
 | **API Integration Toolset** | Write operations (e.g., create booking) with tenant-scoped inserts |
 | **Custom SQL Toolset** | Text-to-SQL with Glue schema (the whole schema when it is small, a table index the model picks from when it is large) + Bedrock KB RAG + human approval |
 | **BusinessContext connector** | Gateway target that queries the managed knowledge base directly (glossary, rules) |
@@ -49,7 +49,7 @@ SET app.current_account_id = '<account_id_from_jwt>';
 SET app.current_user_role = '<role_from_jwt>';
 ```
 
-All tables have RLS policies that filter rows by `account_id`, so `SELECT * FROM bookings` automatically returns only the current tenant's data. No application-level filtering needed — the database enforces isolation.
+All tables have RLS policies that filter rows by `account_id`, so `SELECT * FROM bookings` automatically returns only the current tenant's data. No application-level filtering needed: the database enforces isolation.
 
 **Pre-Token Lambda V2** enriches the Cognito access token with `custom:role` and `custom:account_id` claims, making them available for both RLS and Cedar policy evaluation.
 
@@ -72,9 +72,9 @@ This repository is designed as a deployable for **AWS Workshop Studio**. The wor
 |------|---------------|
 | 0 | Environment setup on EC2 Code Editor |
 | 1 | Basic local agent (exercise) |
-| 2 | Agent infrastructure — Gateway + Runtime |
+| 2 | Agent infrastructure: Gateway + Runtime |
 | 3 | React chat UI connected to AgentCore |
-| 4 | Prebaked SQL toolset (27+ analytics tools) |
+| 4 | Prebaked SQL toolset (29 analytics tools) |
 | 5 | API integration toolset (booking creation) |
 | 6 | Custom SQL with Glue + Bedrock KB RAG + human approval |
 | 6b | Web Search connector (public context, no API key) |
@@ -85,7 +85,7 @@ This repository is designed as a deployable for **AWS Workshop Studio**. The wor
 | 10 | Evaluation: on demand, and continuous online evaluation |
 | 11 | Schema changes: the pipeline that keeps Glue and the KB current, with approval for breaking changes |
 | Optional | Semantic layer with Cube Core |
-| Optional | Voice — talk to your data (Pipecat + WebRTC + KVS TURN, no 3rd-party SFU) |
+| Optional | Voice: talk to your data (Pipecat + WebRTC + KVS TURN, no 3rd-party SFU) |
 
 Workshop content is in the [`workshop/`](workshop/) directory. For hands-on instructions, deploy via Workshop Studio or follow the Hugo markdown in `workshop/content/`.
 
@@ -93,24 +93,24 @@ Workshop content is in the [`workshop/`](workshop/) directory. For hands-on inst
 
 Beyond text chat, the agent can **speak** and **draw**:
 
-- **Charts** — when a question calls for a visual, the agent renders a real chart in a sandboxed Code Interpreter, uploads the PNG to S3, and returns a short presigned `<chart>` tag the UI renders. Image bytes never cross the model stream. Works in both text and voice.
-- **Voice** — an optional second AgentCore Runtime hosts a [Pipecat](https://www.pipecat.ai/) pipeline (Deepgram STT/TTS). Two transports are supported: **`agentcore`** (WebRTC over **Amazon Kinesis Video Streams (KVS) managed TURN** — no third-party media vendor; both the runtime and the browser fetch the same TURN creds, the browser via the signaling proxy's JWT-gated `GET /api/ice`, so ICE can traverse NAT to the VPC runtime) and **`pipecat-cloud`** (Daily's hosted SFU). Either way it invokes the *same* analytics agent over the same JWT, so RBAC/RLS and the conversation memory thread are shared across text and voice. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the voice deploy modes.
+- **Charts**: when a question calls for a visual, the agent renders a real chart in a sandboxed Code Interpreter, uploads the PNG to S3, and returns a short presigned `<chart>` tag the UI renders. Image bytes never cross the model stream. Works in both text and voice.
+- **Voice**: an optional second AgentCore Runtime hosts a [Pipecat](https://www.pipecat.ai/) pipeline (Deepgram STT/TTS). Two transports are supported: **`agentcore`** (WebRTC over **Amazon Kinesis Video Streams (KVS) managed TURN**: no third-party media vendor; both the runtime and the browser fetch the same TURN creds, the browser via the signaling proxy's JWT-gated `GET /api/ice`, so ICE can traverse NAT to the VPC runtime) and **`pipecat-cloud`** (Daily's hosted SFU). Either way it invokes the *same* analytics agent over the same JWT, so RBAC/RLS and the conversation memory thread are shared across text and voice. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the voice deploy modes.
 
 ### Workshop Deployment
 
-The workshop uses CloudFormation to pre-provision base infrastructure (Aurora, Glue, Bedrock KB, Cognito, EC2 Code Editor). Participants then deploy a single **AgentCore top-up CloudFormation stack** and build the agent layer step-by-step — each lab step uncomments one fenced section of the template (or flips one value) and redeploys with `make deploy`. There's no `agentcore` CLI in the runtime lifecycle; the container image is built by CloudFormation via CodeBuild. See [`workshop/contentspec.yaml`](workshop/contentspec.yaml) for the Workshop Studio configuration.
+The workshop uses CloudFormation to pre-provision base infrastructure (Aurora, Glue, Bedrock KB, Cognito, EC2 Code Editor). Participants then deploy a single **AgentCore top-up CloudFormation stack** and build the agent layer step-by-step: each lab step uncomments one fenced section of the template (or flips one value) and redeploys with `make deploy`. There's no `agentcore` CLI in the runtime lifecycle; the container image is built by CloudFormation via CodeBuild. See [`workshop/contentspec.yaml`](workshop/contentspec.yaml) for the Workshop Studio configuration.
 
 ## Demo Deployment (Full Automation)
 
 Demo mode deploys everything including AgentCore Gateway and Amplify UI. Uses the same packaging script as Workshop mode, only `DeployMode` differs.
 
 > **Artifacts bucket:** pick a globally-unique, account-scoped name (e.g.
-> `agentic-analytics-demo-<account-id>`) — a bare `agentic-analytics-demo` may
+> `agentic-analytics-demo-<account-id>`): a bare `agentic-analytics-demo` may
 > already be owned by another account and fail with `AccessDenied`.
 >
 > **npm registry:** the UI build (`package_and_upload.sh`) runs `npm install`. The
 > repo pins the public registry in `app/ui/.npmrc`, so no private/CodeArtifact
-> auth is needed — a developer's global `~/.npmrc` pointing at an authenticated
+> auth is needed: a developer's global `~/.npmrc` pointing at an authenticated
 > mirror won't break the build.
 
 ```bash
@@ -154,9 +154,9 @@ ParameterKey=DeepgramApiKey,ParameterValue=<key>
 ParameterKey=DeepgramVoiceId,ParameterValue=aura-2-apollo-en
 ```
 
-- **`agentcore`** — fully CFN: a second AgentCore Runtime (Pipecat) + WebRTC over
+- **`agentcore`** (fully CloudFormation): a second AgentCore Runtime (Pipecat) + WebRTC over
   Amazon KVS managed TURN + a JWT signaling proxy. One deploy, no third-party SFU.
-- **`pipecat-cloud`** — deploy with `VoiceMode=pipecat-cloud`, then run the post-deploy
+- **`pipecat-cloud`**: deploy with `VoiceMode=pipecat-cloud`, then run the post-deploy
   finisher (Pipecat Cloud is external SaaS that can't be pure CFN):
   ```bash
   PCC_PAT=… PCC_PUBLIC_KEY=… PCC_PRIVATE_KEY=… DEEPGRAM_API_KEY=… DAILY_API_KEY=… \
@@ -165,7 +165,7 @@ ParameterKey=DeepgramVoiceId,ParameterValue=aura-2-apollo-en
 
 Both modes invoke the *same* analytics agent with the signed-in user's JWT, so RBAC/RLS
 and the shared memory thread are identical to text. See [`DEPLOYMENT.md`](DEPLOYMENT.md)
-for details (including the agentcore voice teardown caveat — VPC ENIs reclaim slowly).
+for details (including the agentcore voice teardown caveat: VPC ENIs reclaim slowly).
 
 ## Project Structure
 
@@ -199,13 +199,13 @@ for details (including the agentcore voice teardown caveat — VPC ENIs reclaim 
 └── dev/                         # Maintainer-only tooling (NOT shipped): eval harness, specs, skills, app-index.json
 ```
 
-> **Note on the AgentCore layer:** Gateway, Runtime, Memory, the toolset Lambdas, the Cedar policy engine, and the Bedrock Guardrail are all **CloudFormation resources** in `infrastructure/stacks/agentcore-topup-stack.yaml` (workshop) / `agentcore-stack.yaml` (demo) — not standalone `deploy_*.py` scripts. The pre-token Lambda lives in `cognito-stack.yaml`.
+> **Note on the AgentCore layer:** Gateway, Runtime, Memory, the toolset Lambdas, the Cedar policy engine, and the Bedrock Guardrail are all **CloudFormation resources** in `infrastructure/stacks/agentcore-topup-stack.yaml` (workshop) / `agentcore-stack.yaml` (demo): not standalone `deploy_*.py` scripts. The pre-token Lambda lives in `cognito-stack.yaml`.
 
 ## The Scenario: Timely-Unicorn
 
-**Timely-Unicorn** is a fictional multi-tenant SaaS platform for unicorn rental businesses. Two rental companies — Mythical Unicorns and Mythic Unicorns — each manage their own fleet of unicorns, customers, bookings, and revenue. The synthetic dataset includes ~14,000 bookings, 500 customers, and 100 unicorns across 2 tenant accounts (plus the platform account).
+**Timely-Unicorn** is a fictional multi-tenant SaaS platform for unicorn rental businesses. Two rental companies: Mythical Unicorns and Mythic Unicorns: each manage their own fleet of unicorns, customers, bookings, and revenue. The synthetic dataset includes ~14,000 bookings, 500 customers, and 100 unicorns across 2 tenant accounts (plus the platform account).
 
-Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"* — but they don't know SQL. The AI assistant solves this for all tenants simultaneously, with full data isolation.
+Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"*: but they don't know SQL. The AI assistant solves this for all tenants simultaneously, with full data isolation.
 
 ## License
 
