@@ -399,7 +399,7 @@ async def agent_invocation(payload, context):
         # the gateway rejects calls that have no policy session id.
         tools_headers = {
             "Authorization": f"Bearer {access_token}",
-            "X-Amzn-Bedrock-AgentCore-Policy-Session-Id": runtime_session_id,
+            "X-Amzn-Bedrock-AgentCore-Policy-Session-Id": re.sub(r"[^A-Za-z0-9-]", "-", runtime_session_id),  # gateway rejects "_" (-32600)
         }
 
         def create_transport():
