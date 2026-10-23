@@ -150,6 +150,13 @@ Parameters:
       rule in the engine, every tools call must carry X-Amzn-Bedrock-AgentCore-Policy-Session-Id
       (the agent sends its runtime session id).
 
+  OnlineEvaluationSamplingPercent:
+    Type: Number
+    Default: 10
+    MinValue: 0
+    MaxValue: 100
+    Description: Percent of finished conversations AgentCore Evaluations scores in the background. 0 skips online evaluation.
+
   WafBodyRulesAction:
     Type: String
     Default: COUNT
@@ -170,6 +177,7 @@ Conditions:
   WafBodyRulesBlock: !Equals [!Ref WafBodyRulesAction, 'BLOCK']
   PolicyGuardrailsEnabled: !Equals [!Ref EnablePolicyGuardrails, 'true']
   BookingOrderPolicyEnabled: !Equals [!Ref EnableBookingOrderPolicy, 'true']
+  OnlineEvaluationEnabled: !Not [!Equals [!Ref OnlineEvaluationSamplingPercent, 0]]
   NeedsPsycopg2Layer: !Equals [!Ref Psycopg2LayerArn, '']
   NeedsPyJwtLayer: !Equals [!Ref PyJwtLayerArn, '']
   HasKnowledgeBase: !Not [!Equals [!Ref KnowledgeBaseId, '']]
@@ -2272,6 +2280,88 @@ Resources:
     Properties:
       ResourceArn: !GetAtt FrontDoorGateway.GatewayArn
       WebACLArn: !GetAtt FrontDoorWebAcl.Arn
+
+  #============================================================================
+  # Online evaluation (AgentCore Evaluations)
+  #
+  # Samples finished conversations from the runtime's spans and scores them with
+  # built-in evaluators. Scores land in a results log group and as CloudWatch
+  # metrics (namespace Bedrock-AgentCore/Evaluations), so quality can be watched
+  # and alarmed on like latency or errors.
+  #============================================================================
+  EvaluationRole:
+    Type: AWS::IAM::Role
+    Condition: OnlineEvaluationEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: ReadSpansAndScore
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:StartQuery
+                  - logs:GetQueryResults
+                  - logs:StopQuery
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws/spans*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/evaluations/*
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: Bedrock-AgentCore/Evaluations
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+
+  OnlineEvaluation:
+    Type: AWS::BedrockAgentCore::OnlineEvaluationConfig
+    Condition: OnlineEvaluationEnabled
+    DependsOn: AgentRuntimeEndpoint
+    Properties:
+      OnlineEvaluationConfigName: unicorn_rental_online_eval
+      Description: Answer quality and tool use checks on sampled analytics conversations
+      EvaluationExecutionRoleArn: !GetAtt EvaluationRole.Arn
+      DataSourceConfig:
+        CloudWatchLogs:
+          LogGroupNames:
+            - !Sub /aws/bedrock-agentcore/runtimes/${AgentRuntime.AgentRuntimeId}-DEFAULT
+          ServiceNames:
+            - agentic_analytics_agent.DEFAULT
+      Rule:
+        SamplingConfig:
+          SamplingPercentage: !Ref OnlineEvaluationSamplingPercent
+        SessionConfig:
+          SessionTimeoutMinutes: 15
+      Evaluators:
+        - EvaluatorId: Builtin.Correctness
+        - EvaluatorId: Builtin.Faithfulness
+        - EvaluatorId: Builtin.Helpfulness
+        - EvaluatorId: Builtin.ToolSelectionAccuracy
+        - EvaluatorId: Builtin.GoalSuccessRate
 
 Outputs:
   FrontDoorUrl:
