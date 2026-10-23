@@ -335,7 +335,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                  - bedrock-agent-runtime:Retrieve
+                  - bedrock:Retrieve
                 Resource: '*'
 
   DataFoundationLambda:
@@ -773,7 +773,6 @@ Resources:
                 Action:
                   - bedrock:Retrieve
                   - bedrock:InvokeModel
-                  - bedrock-agent-runtime:Retrieve
                 Resource: '*'
 
   CustomSqlLambda:
