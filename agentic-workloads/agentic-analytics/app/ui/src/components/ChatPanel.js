@@ -185,10 +185,10 @@ const SqlApprovalCard = ({ sql, query_plan, query_steps, explanation, textBefore
       </Paper>
       {explanation && <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{explanation}</Typography>}
       <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" color="success" size="small" startIcon={<Check />} onClick={() => onApprove(sql)} disabled={disabled}>
+        <Button variant="contained" color="success" size="small" startIcon={<Check />} onClick={() => onApprove(sql)} disabled={disabled} aria-label="Approve and run query">
           Approve & Run
         </Button>
-        <Button variant="outlined" color="error" size="small" startIcon={<Close />} onClick={onCancel} disabled={disabled}>
+        <Button variant="outlined" color="error" size="small" startIcon={<Close />} onClick={onCancel} disabled={disabled} aria-label="Cancel query">
           Cancel
         </Button>
       </Box>
