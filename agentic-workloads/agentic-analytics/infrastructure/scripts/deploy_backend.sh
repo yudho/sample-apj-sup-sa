@@ -453,6 +453,14 @@ else
   # bash 3.2 + set -u: expanding an empty array as "${arr[@]}" errors, so guard it.
   DISABLE_RB=()
   [ "$NO_ROLLBACK" = true ] && [ "$ST" = "CREATE_FAILED" ] && DISABLE_RB=(--disable-rollback)
+  # A failed update left with rollback disabled (UPDATE_FAILED) only accepts another
+  # disable-rollback update. Roll it back to the last good state first, then update normally.
+  if [ "$ST" = "UPDATE_FAILED" ]; then
+    log "Stack is UPDATE_FAILED — rolling back to the last good state before updating."
+    aws cloudformation rollback-stack --region "$REGION" --stack-name "$STACK"
+    aws cloudformation wait stack-rollback-complete --region "$REGION" --stack-name "$STACK" \
+      || die "rollback-stack did not complete; inspect stack events."
+  fi
   if aws cloudformation update-stack --region "$REGION" --stack-name "$STACK" \
        --template-url "$TEMPLATE_URL" \
        --parameters $(build_params) \
