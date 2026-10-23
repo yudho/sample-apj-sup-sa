@@ -29,9 +29,13 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REGION="${AWS_REGION:-us-west-2}"
 ENV_NAME="${ENV_NAME:-agentic-analytics}"
 MAIN_STACK="${MAIN_STACK:-agentic-analytics-demo}"
-ARTIFACTS_BUCKET="${ARTIFACTS_BUCKET:-agentic-analytics-artifacts}"
+ARTIFACTS_BUCKET="${ARTIFACTS_BUCKET:?Set ARTIFACTS_BUCKET to your own artifacts bucket, for example agentic-analytics-<account-id>}"
 AGENT_NAME="${PCC_AGENT:-voice-analytics-agent}"
 PROXY_STACK="${PROXY_STACK:-${ENV_NAME}-voice-proxy}"
+# Refuse to package into a bucket this account does not own (bucket-squatting guard).
+aws s3api head-bucket --bucket "$ARTIFACTS_BUCKET" \
+  --expected-bucket-owner "$(aws sts get-caller-identity --query Account --output text)" >/dev/null \
+  || { echo "ERROR: $ARTIFACTS_BUCKET does not exist or is not owned by this account" >&2; exit 1; }
 
 for v in PCC_PAT PCC_PUBLIC_KEY PCC_PRIVATE_KEY DEEPGRAM_API_KEY DAILY_API_KEY; do
   [ -n "${!v:-}" ] || { echo "ERROR: $v is required"; exit 1; }

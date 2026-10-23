@@ -104,7 +104,7 @@ async def main():
     params = resolve_credentials(region=region).to_boto_kwargs()
     async with session.create_client("s3", **params) as s3:
         url = await s3.generate_presigned_url(
-            "get_object", Params={"Bucket": "agentic-analytics-artifacts", "Key": key}, ExpiresIn=3600)
+            "get_object", Params={"Bucket": os.environ["ARTIFACTS_BUCKET"], "Key": key}, ExpiresIn=3600)
     import urllib.request
     with urllib.request.urlopen(url) as r:
         data = r.read()
