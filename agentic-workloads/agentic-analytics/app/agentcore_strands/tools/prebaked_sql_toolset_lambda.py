@@ -1,4 +1,5 @@
 import json
+from contextlib import closing
 import boto3
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -238,17 +239,14 @@ def json_serializer(obj):
     raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 def list_tables(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor() as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor() as cur:
         cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
         tables = [row[0] for row in cur.fetchall()]
-    conn.close()
     return success_response({'success': True, 'tables': tables})
 
 def get_my_account_info(args, rls_context):
     """Return the current tenant's account info. No args needed — uses JWT/RLS."""
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("""
             SELECT a.account_name, a.status, sp.plan_name, sp.monthly_price,
                    a.current_user_count, sp.user_limit, a.current_storage_usage_gb, sp.storage_limit_gb,
@@ -257,37 +255,31 @@ def get_my_account_info(args, rls_context):
             JOIN subscription_plans sp ON a.plan_id = sp.plan_id
         """)
         row = cur.fetchone()
-    conn.close()
     if not row:
         return error_response('No account found for current user')
     return success_response({'success': True, 'account': row})
 
 def get_accounts(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT a.*, sp.plan_name FROM accounts a JOIN subscription_plans sp ON a.plan_id = sp.plan_id")
         accounts = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(accounts), 'accounts': accounts})
 
 def get_unicorns(args, rls_context):
     available_only = args.get('available_only', False)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM unicorns WHERE 1=1"
         params = []
         if available_only:
             sql += " AND is_available = true"
         cur.execute(sql, params)
         unicorns = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(unicorns), 'unicorns': unicorns})
 
 def get_customers(args, rls_context):
     customer_type = args.get('customer_type')
     limit = args.get('limit', 100)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM customers WHERE 1=1"
         params = []
         if customer_type:
@@ -297,15 +289,13 @@ def get_customers(args, rls_context):
         params.append(limit)
         cur.execute(sql, params)
         customers = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(customers), 'customers': customers})
 
 def get_bookings(args, rls_context):
     start_date = args.get('start_date')
     end_date = args.get('end_date')
     limit = args.get('limit', 100)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = """SELECT b.*, u.name as unicorn_name, c.first_name, c.last_name 
                  FROM bookings b 
                  JOIN unicorns u ON b.unicorn_id = u.unicorn_id 
@@ -321,14 +311,12 @@ def get_bookings(args, rls_context):
         params.append(limit)
         cur.execute(sql, params)
         bookings = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(bookings), 'bookings': bookings})
 
 def get_transactions(args, rls_context):
     transaction_type = args.get('transaction_type')
     limit = args.get('limit', 100)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM transactions WHERE 1=1"
         params = []
         if transaction_type:
@@ -338,63 +326,51 @@ def get_transactions(args, rls_context):
         params.append(limit)
         cur.execute(sql, params)
         transactions = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(transactions), 'transactions': transactions})
 
 def get_unicorn_availability(args, rls_context):
     unicorn_id = args.get('unicorn_id')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM unicorn_availability WHERE unicorn_id = %s ORDER BY created_at DESC LIMIT 10"
         cur.execute(sql, [unicorn_id])
         availability = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'availability': availability})
 
 def get_users(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT user_id, account_id, username, email, first_name, last_name, role, is_active FROM users"
         params = []
         cur.execute(sql, params)
         users = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(users), 'users': users})
 
 def get_subscription_plans(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM subscription_plans WHERE is_active = true")
         plans = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'plans': plans})
 
 def search_unicorns(args, rls_context):
     query = args.get('query', '')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM unicorns WHERE (LOWER(name) LIKE %s OR LOWER(breed) LIKE %s OR LOWER(color) LIKE %s)"
         params = [f'%{query.lower()}%'] * 3
         cur.execute(sql, params)
         unicorns = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(unicorns), 'unicorns': unicorns})
 
 def search_customers(args, rls_context):
     query = args.get('query', '')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM customers WHERE (LOWER(first_name) LIKE %s OR LOWER(last_name) LIKE %s OR LOWER(email) LIKE %s OR LOWER(first_name || ' ' || last_name) LIKE %s)"
         params = [f'%{query.lower()}%'] * 4
         sql += " LIMIT 50"
         cur.execute(sql, params)
         customers = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(customers), 'customers': customers})
 
 def get_booking_summary(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = """SELECT COUNT(*) as total_bookings, 
                         SUM(total_cost) as total_revenue,
                         AVG(total_cost) as avg_booking_value,
@@ -404,23 +380,18 @@ def get_booking_summary(args, rls_context):
         params = []
         cur.execute(sql, params)
         summary = cur.fetchone()
-    conn.close()
     return success_response({'success': True, 'summary': summary})
 
 def get_revenue_summary(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM monthly_revenue_summary ORDER BY year_month")
         revenue = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'monthly_revenue': revenue})
 
 def check_db_status(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor() as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor() as cur:
         cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
         tables = [row[0] for row in cur.fetchall()]
-    conn.close()
     required = ['subscription_plans', 'accounts', 'users', 'customers', 'unicorns', 'unicorn_availability', 'bookings', 'transactions']
     missing = [t for t in required if t not in tables]
     return success_response({'db_accessible': True, 'tables': tables, 'missing': missing, 'all_tables_exist': len(missing) == 0})
@@ -429,36 +400,29 @@ def check_db_status(args, rls_context):
 # View-based tools
 def get_daily_bookings_summary(args, rls_context):
     limit = args.get('limit', 100)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM daily_bookings_summary ORDER BY start_datetime DESC LIMIT %s", [limit])
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(data), 'bookings': data})
 
 def get_monthly_revenue_summary(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM monthly_revenue_summary ORDER BY year_month DESC")
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'monthly_revenue': data})
 
 def get_current_unicorn_availability(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM current_unicorn_availability"
         params = []
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(data), 'unicorns': data})
 
 def get_calendar_bookings(args, rls_context):
     start_date = args.get('start_date')
     end_date = args.get('end_date')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM calendar_bookings WHERE 1=1"
         params = []
         if start_date:
@@ -470,13 +434,11 @@ def get_calendar_bookings(args, rls_context):
         sql += " ORDER BY start_date, start_time"
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(data), 'bookings': data})
 
 def get_customer_retention_metrics(args, rls_context):
     segment = args.get('segment')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM customer_retention_metrics"
         params = []
         if segment:
@@ -484,38 +446,30 @@ def get_customer_retention_metrics(args, rls_context):
             params.append(segment)
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(data), 'customers': data})
 
 def get_top_revenue_breeds(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM top_revenue_unicorn_breeds")
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'breeds': data})
 
 def get_top_revenue_customers(args, rls_context):
     limit = args.get('limit', 20)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM top_revenue_customers LIMIT %s", [limit])
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'customers': data})
 
 def get_revenue_by_time_and_day(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM revenue_by_time_and_day")
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'revenue_patterns': data})
 
 def get_unicorns_due_maintenance(args, rls_context):
     urgency = args.get('urgency')
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM unicorns_due_for_maintenance"
         params = []
         if urgency:
@@ -523,48 +477,39 @@ def get_unicorns_due_maintenance(args, rls_context):
             params.append(urgency)
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'count': len(data), 'unicorns': data})
 
 def get_account_subscription_status(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM account_subscription_status")
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'accounts': data})
 
 def get_customer_lifetime_value(args, rls_context):
     limit = args.get('limit', 50)
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM customer_lifetime_value"
         params = []
         sql += " ORDER BY total_revenue DESC LIMIT %s"
         params.append(limit)
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'customers': data})
 
 def get_seasonal_trends(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM seasonal_trends"
         params = []
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'trends': data})
 
 def get_customer_segmentation(args, rls_context):
-    conn = get_db_connection(rls_context)
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = "SELECT * FROM customer_segmentation_by_revenue"
         params = []
         cur.execute(sql, params)
         data = cur.fetchall()
-    conn.close()
     return success_response({'success': True, 'segments': data})
 
 
