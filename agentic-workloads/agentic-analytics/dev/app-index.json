@@ -26,9 +26,10 @@
     "infrastructure/scripts/": "Deployment and utility scripts",
     "dataset/": "Symlink to unicorn-rental-dataset - synthetic data, schema, docs, and validation",
     "workshop/": "Workshop Studio configuration and assets",
-    "workshop/content/": "Workshop guide pages (Steps 0-10 + semantic layer)",
+    "workshop/content/": "Workshop guide pages (Steps 0-10, 6b web search, semantic layer)",
     "workshop/code/": "Workshop code overlay with TODO blanks (agent, exercises, top-up CFN, Makefile)",
-    "dev/": "Maintainer-only files (unshipped): app-index.json, the Strands Evals harness (dev/evaluation/), the project spec (dev/specs/), and maintainer skills (dev/skills/)"
+    "dev/": "Maintainer-only files (unshipped): app-index.json, the Strands Evals harness (dev/evaluation/), the project spec (dev/specs/), and maintainer skills (dev/skills/)",
+    "app/schema_sync/": "Schema-change (DDL) pipeline Lambda and diff logic"
   },
   "files": [
     {
@@ -266,6 +267,34 @@
     {
       "path": "app/agentcore_strands/tests/test_custom_sql_guard.py",
       "summary": "Unit tests (pytest, AWS/DB stubbed) for the custom SQL read-only guard: allowed reads, rejected writes/multi-statement/set_config/pg_* calls, no DB connect on rejection, connection closed on error, READ ONLY + timeout + 100-row cap."
+    },
+    {
+      "path": "app/schema_sync/schema_sync_lambda.py",
+      "summary": "Schema-change pipeline Lambda (actions snapshot/describe/hold/publish): reads pg_catalog (comments, RLS, policies, view SQL), writes schema/current.json + snapshots/pending to S3, drafts descriptions with global Sonnet 5.5, publishes Glue table descriptions and KB cards docs/schema/<name>.md, starts KB ingestion, emits EventBridge agentic-analytics.schema events"
+    },
+    {
+      "path": "app/schema_sync/schema_diff.py",
+      "summary": "Pure diff/classify of two schema snapshots: severity none<additive<breaking<blocked, table/column rename heuristics, rls_gaps (tenant table with account_id but no RLS = blocked)"
+    },
+    {
+      "path": "app/schema_sync/test_schema_diff.py",
+      "summary": "Unit tests for schema_diff (10 cases)"
+    },
+    {
+      "path": "infrastructure/stacks/schema-sync-stack.yaml",
+      "summary": "Nested demo stack for the schema-change pipeline: Lambda + layer, Step Functions (Snapshot, Classify, Describe, WaitForApproval task token, Publish), EventBridge rules on Glue crawler success and a daily cron"
+    },
+    {
+      "path": "app/agentcore_strands/tests/test_schema_context.py",
+      "summary": "Adaptive schema context tests: full schema under SCHEMA_FULL_MAX_CHARS, table index otherwise, tables argument"
+    },
+    {
+      "path": "app/agentcore_strands/tests/test_daily_bookings_summary.py",
+      "summary": "get_daily_bookings_summary tests: group_by=day aggregates, date filters, row cap"
+    },
+    {
+      "path": "workshop/content/02-toolsets/06b-web-search/index.en.md",
+      "summary": "Workshop Step 6b: add the AgentCore Web Search connector target, SOP rules, test"
     }
   ]
 }
