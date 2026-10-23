@@ -635,12 +635,15 @@ Resources:
                   - bedrock-agentcore:*
                 Resource: '*'
               # Guardrail conditions in Cedar policies: the policy engine calls Bedrock
-              # guardrail checks with this role's credentials.
+              # guardrail checks with this role's credentials. These checks use no
+              # account guardrail resource, and a guardrail/* scope is refused at
+              # evaluation ("Insufficient Permissions for Policy Evaluation"), so the
+              # action is granted on '*'. It can only score content, never change data.
               - !If
                 - PolicyGuardrailsEnabled
                 - Effect: Allow
                   Action: bedrock:InvokeGuardrailChecks
-                  Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*
+                  Resource: '*'
                 - !Ref AWS::NoValue
 
   #============================================================================
@@ -1081,7 +1084,7 @@ Resources:
       ValidationMode: IGNORE_ALL_FINDINGS
       Description: Block text-to-SQL questions that look like prompt injection or jailbreak attempts
       Definition:
-        Cedar:
+        Policy:
           Statement: !Sub |
             forbid(
               principal is AgentCore::OAuthUser,
@@ -1089,13 +1092,14 @@ Resources:
               resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
             )
             when guardrails {
-              BedrockGuardrails::PromptAttack(["PROMPT_INJECTION", "JAILBREAK"], [context.input.question])
-                .maxConfidenceScore()
-                .greaterThan(decimal("0.4"))
+              BedrockGuardrails::PromptAttack(["PROMPT_INJECTION", "JAILBREAK"], [context.input.question]).maxConfidenceScore().greaterThan(decimal("0.4"))
             };
 
   # Keep personal data out of the public web: a search query that names a person or
-  # carries an email, phone number or address is refused at the gateway.
+  # carries an email or phone number is refused at the gateway. ADDRESS is left out
+  # because place names ("public holidays Singapore") score as addresses. Measured
+  # on 12 queries: 6/6 public queries allowed, 5/6 personal-data queries blocked
+  # (an invented fantasy name slipped through), so the SOP rule stays the first line.
   ForbidWebSearchPersonalDataPolicy:
     Type: AWS::BedrockAgentCore::Policy
     Condition: PolicyGuardrailsEnabled
@@ -1108,7 +1112,7 @@ Resources:
       ValidationMode: IGNORE_ALL_FINDINGS
       Description: Block web searches whose query contains personal data
       Definition:
-        Cedar:
+        Policy:
           Statement: !Sub |
             forbid(
               principal is AgentCore::OAuthUser,
@@ -1116,8 +1120,7 @@ Resources:
               resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
             )
             when guardrails {
-              BedrockGuardrails::SensitiveInformation(["NAME", "EMAIL", "PHONE", "ADDRESS"], [context.input.query])
-                .count() > 0
+              BedrockGuardrails::SensitiveInformation(["NAME", "EMAIL", "PHONE"], [context.input.query]).maxConfidenceScore().greaterThan(decimal("0.4"))
             };
 
   # Staff run day-to-day bookings; web research is for analysts and admins.
