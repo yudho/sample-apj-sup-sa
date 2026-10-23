@@ -204,9 +204,10 @@ def create_booking(args, rls_context):
             
             # Check unicorn exists and get hourly rate (RLS filters by tenant)
             cur.execute("""
-                SELECT unicorn_id, name, hourly_rate, is_available 
+                SELECT unicorn_id, name, hourly_rate, is_available
                 FROM unicorns WHERE unicorn_id = %s
-            """, [unicorn_id])
+                FOR UPDATE
+            """, [unicorn_id])  # row lock: two concurrent bookings for one unicorn serialize here
             unicorn = cur.fetchone()
             if not unicorn:
                 return error_response(f'Unicorn {unicorn_id} not found')
@@ -233,6 +234,19 @@ def create_booking(args, rls_context):
             if duration_hours <= 0:
                 return error_response('end_datetime must be after start_datetime')
             
+            # Refuse a slot that overlaps an existing, non-cancelled booking of this unicorn.
+            cur.execute("""
+                SELECT booking_reference, start_datetime, end_datetime FROM bookings
+                WHERE unicorn_id = %s AND cancellation_reason IS NULL
+                  AND start_datetime < %s AND end_datetime > %s
+                ORDER BY start_datetime LIMIT 1
+            """, [unicorn_id, end_dt, start_dt])
+            clash = cur.fetchone()
+            if clash:
+                return error_response(
+                    f'{unicorn["name"]} is already booked from {clash["start_datetime"]} to '
+                    f'{clash["end_datetime"]} ({clash["booking_reference"]}). Choose another time or unicorn.')
+
             hourly_rate = float(unicorn['hourly_rate'])
             total_cost = round(hourly_rate * duration_hours, 2)
             

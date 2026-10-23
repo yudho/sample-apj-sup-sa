@@ -243,7 +243,8 @@ def success_response(data):
             data['truncated'] = True
             data['total_rows'] = len(rows)
             data['note'] = (f"Only the first {keep} of {len(rows)} rows are included. "
-                            "Use a narrower filter or an aggregate tool for the full picture.")
+                            "For counts or totals over this range use an aggregate tool or custom SQL; "
+                            "do not split the range into many smaller calls.")
             body = json.dumps(data, default=json_serializer)
             if len(body) <= MAX_BODY_BYTES:
                 break
