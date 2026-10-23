@@ -76,6 +76,30 @@ hidden** (the dashboard is pure text chat).
 is set only when voice is deployed (CFN injects it into `config.js`, or
 `app/ui/.env.local` sets it for laptop dev). Absent → `voiceConfigured()` is false.
 
+## Schema change pipeline
+
+`deploy_backend.sh` packages `app/schema_sync/` and nests `infrastructure/stacks/schema-sync-stack.yaml`
+(`SchemaSyncStack`) in demo mode. The stack output `SchemaSyncStateMachineArn` is the
+`<env>-schema-sync` Step Functions state machine.
+
+- **When it runs:** after every successful Glue crawler run (EventBridge rule), once a day at
+  18:00 UTC, or when you start an execution yourself. The first run publishes the whole schema.
+- **What it does:** snapshot the Postgres catalog, diff it with `schema/current.json` in the
+  artifacts bucket, classify the change (none, additive, breaking, blocked), describe new or
+  changed objects with the agent's model, then write Glue table descriptions and one KB card
+  per table or view (`docs/schema/<name>.md` in the KB docs bucket) and start a KB sync.
+- **Approval:** a breaking change (rename, retype, drop) waits at `WaitForApproval`. The task
+  token is in `s3://<artifacts>/schema/pending/<run_id>.json`; answer with
+  `aws stepfunctions send-task-success --task-token <token> --task-output '{"approved":true}'`
+  (or `send-task-failure` to reject). The workshop Makefile wraps this as `make approve` /
+  `make reject`.
+- **Blocked:** a table with an `account_id` column but no row-level security policy fails the run
+  with `TenantTableWithoutRowLevelSecurity`; nothing is published until RLS is on.
+- **Rebuild:** start an execution with input `{"rebuild": true}` to republish every card and
+  description, for example after cards were edited or deleted by hand.
+- **Model:** `DescribeModelId` defaults to `global.anthropic.claude-sonnet-5-5`. Workshop
+  Studio sandbox accounts deny Haiku 5.5 through the private marketplace.
+
 ## Operational notes
 
 - **CodeBuild builds all images in-cloud.** Custom-resource Lambdas trigger the
