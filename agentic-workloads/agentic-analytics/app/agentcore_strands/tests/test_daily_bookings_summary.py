@@ -47,12 +47,14 @@ def _run(monkeypatch, args, rows):
 
 
 def test_group_by_day_aggregates_and_filters(monkeypatch):
-    rows = [{"day": "2025-12-01", "bookings": 19}, {"day": "2025-12-02", "bookings": 21}]
+    rows = [{"day": "2025-12-01", "bookings": 19, "completed": 18, "rental_hours": 129.5},
+            {"day": "2025-12-02", "bookings": 21, "completed": 21, "rental_hours": 171}]
     body, cur = _run(monkeypatch, {"start_date": "2025-12-01", "end_date": "2025-12-31", "group_by": "day"}, rows)
     sql, params = cur.calls[0]
     assert "GROUP BY 1" in sql and "COUNT(*) AS bookings" in sql
     assert params == ["2025-12-01", "2025-12-01", "2025-12-31", "2025-12-31"]
     assert body["days"] == 2 and body["total_bookings"] == 40 and body["per_day"] == rows
+    assert body["total_completed"] == 39 and body["total_rental_hours"] == 300.5
 
 
 def test_row_list_limit_is_capped(monkeypatch):

@@ -441,7 +441,11 @@ def get_daily_bookings_summary(args, rls_context):
                         "AND (%s::date IS NULL OR start_datetime::date <= %s::date) "
                         "GROUP BY 1 ORDER BY 1", params)
             data = cur.fetchall()
-            return success_response({'success': True, 'days': len(data), 'total_bookings': sum(r['bookings'] for r in data),
+            # Period totals are computed here so the model never has to add up the column.
+            return success_response({'success': True, 'days': len(data),
+                                     'total_bookings': sum(r['bookings'] for r in data),
+                                     'total_completed': sum(r['completed'] for r in data),
+                                     'total_rental_hours': float(sum((r['rental_hours'] or 0) for r in data)),
                                      'per_day': data})
         limit = min(int(args.get('limit', 100)), MAX_ROWS)
         cur.execute("SELECT * FROM daily_bookings_summary "
