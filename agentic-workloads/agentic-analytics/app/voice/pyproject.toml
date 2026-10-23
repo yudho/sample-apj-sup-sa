@@ -2,7 +2,7 @@
 name = "voice-analytics-agent"
 version = "0.1.0"
 description = "Voice analytics agent — Pipecat + Deepgram + AgentCore"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     # 'webrtc' = SmallWebRTCTransport (aiortc) for AgentCore-hosted voice; 'daily' kept
     # for the pipecat-cloud (PCC) fallback mode.
