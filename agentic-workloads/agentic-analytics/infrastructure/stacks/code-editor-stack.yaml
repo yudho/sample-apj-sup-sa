@@ -697,7 +697,7 @@ Resources:
           # denied by the sandbox's private marketplace. Claude Code uses the
           # default AWS SDK credential chain, so the instance role is picked up
           # automatically.
-          npm install -g @anthropic-ai/claude-code 2>&1 || echo "claude-code install failed (non-fatal)"
+          npm install -g @anthropic-ai/claude-code@2.1.309 2>&1 || echo "claude-code install failed (non-fatal)"
           cat >> "/home/$CODE_EDITOR_USER/.bashrc" << CLAUDEEOF
           # Claude Code -> Amazon Bedrock (instance-role auth, no API key)
           export CLAUDE_CODE_USE_BEDROCK=1

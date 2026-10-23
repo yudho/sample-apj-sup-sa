@@ -1,6 +1,6 @@
 # Pipecat Cloud agent image for the Voice Analytics bot.
 # Built on Daily's Pipecat base image (provides the PCC runtime + /start handling).
-FROM dailyco/pipecat-base:latest
+FROM dailyco/pipecat-base:0.2.10-py3.12
 
 # Faster, smaller installs.
 ENV UV_COMPILE_BYTECODE=1

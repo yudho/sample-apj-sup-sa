@@ -246,7 +246,7 @@ if [ "$DEPLOY_MODE" != "workshop" ]; then
     echo "Packaging psycopg2 Lambda layer..."
     LAYER_DIR="$TEMP_DIR/psycopg2_layer/python"
     mkdir -p "$LAYER_DIR"
-    pip3 download psycopg2-binary \
+    pip3 download "psycopg2-binary==2.9.9" \
         --platform manylinux2014_x86_64 \
         --only-binary=:all: \
         --python-version 312 \
