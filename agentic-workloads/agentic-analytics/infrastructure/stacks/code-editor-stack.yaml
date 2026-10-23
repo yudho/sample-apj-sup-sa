@@ -215,6 +215,24 @@ Resources:
   #============================================================================
   CodeEditorRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F3
+            reason: >-
+              Workshop participants deploy CloudFormation stacks (Lambda, IAM roles, AgentCore,
+              Glue, EC2) from this Code Editor instance, so the role needs service-wide actions.
+              It exists only in a single-use Workshop Studio sandbox account.
+          - id: F38
+            reason: >-
+              The stacks participants deploy create their own roles with generated names and
+              pass them to Lambda, AgentCore and Glue, so PassRole cannot be scoped to known ARNs.
+      checkov:
+        skip:
+          - id: CKV_AWS_109
+            comment: Workshop sandbox deployment role, see cfn_nag reason.
+          - id: CKV_AWS_111
+            comment: Workshop sandbox deployment role, see cfn_nag reason.
     Properties:
       RoleName: !Sub ${EnvironmentName}-code-editor-role
       AssumeRolePolicyDocument:
