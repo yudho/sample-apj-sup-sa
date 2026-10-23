@@ -7,7 +7,7 @@ A deployable demo + workshop for agentic AI self-service analytics. Business use
 **Scenario:** Timely-Unicorn — multi-tenant SaaS for unicorn rental businesses. Two tenants (Mythical Unicorns, Mythic Unicorns) plus the platform account.
 
 **Two ways to ask:**
-- **Text chat** — the React UI invokes AgentCore Runtime directly over HTTPS with the user's Cognito JWT as a Bearer token (the runtime's CustomJWTAuthorizer validates it).
+- **Text chat** — the React UI calls the **front-door gateway** (`<FrontDoorUrl>/agent/invocations`) with the user's Cognito JWT. The gateway validates the JWT, applies AWS WAF and a per-user rate limit, then invokes the runtime with its own IAM role.
 - **Voice** — a Pipecat pipeline (Deepgram STT → AgentCore → Deepgram TTS) bridges speech to the *same* agent. Text and voice turns in one session share a single AgentCore Memory thread, so context carries across both.
 
 Both paths invoke the same Strands agent with the same per-user JWT, so RBAC/RLS is identical regardless of modality. A per-request `mode` field (`text` | `voice`) tells the agent how to format its reply (plain markdown vs. a spoken `<speak>` headline + on-screen detail). Charts work in both modes.
@@ -21,8 +21,9 @@ Both paths invoke the same Strands agent with the same per-user JWT, so RBAC/RLS
 
 ```
             ┌─ Text: React UI ──────────────────────────────┐
-User asks ──┤                                                 ├─► AgentCore Runtime (Strands Agent + SOP + Memory)
-            └─ Voice: Mic → Pipecat (Deepgram STT/TTS) ──────┘         → MCP Gateway (Cedar Policy + Interceptor)
+User asks ──┤                                                 ├─► Front-door Gateway (Cognito JWT + AWS WAF + per-user rate limit)
+            └─ Voice: Mic → Pipecat (Deepgram STT/TTS) ──────┘         → AgentCore Runtime, IAM-only (Strands Agent + SOP + Memory)
+                                                                          → MCP Gateway (Cedar Policy + Interceptor)
                                                                           → PrebakedSQL Lambda (29 tools, DB Views)
                                                                           → APIInteg Lambda (create_booking)
                                                                           → CustomSQL Lambda (Glue schema + Bedrock KB RAG)
@@ -30,7 +31,14 @@ User asks ──┤                                                 ├─► Ag
                                                                               → Aurora PostgreSQL (RLS by tenant)
 ```
 
-Both front-ends send the user's Cognito JWT as the `Authorization: Bearer` request header (the runtime's CustomJWTAuthorizer validates it and passes it through to the agent; there is no `gateway_token` payload field) and the SAME app session id as `runtimeSessionId`, so one conversation can interleave text and voice turns against one Memory thread.
+### Front door (demo stack: `infrastructure/stacks/agentcore-stack.yaml`)
+
+- **Gateway:** `FrontDoorGateway` has no `ProtocolType`, so it is an HTTP gateway (only those can carry a runtime target). Its `agent` target uses `GATEWAY_IAM_ROLE` and forwards two headers: `X-Amzn-Bedrock-AgentCore-Runtime-Custom-User-Token` and `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`.
+- **Runtime:** IAM auth, no JWT authorizer. `AgentRuntimeResourcePolicy` denies every principal except the front door's role, so the WAF and rate limit cannot be bypassed.
+- **Clients:** the UI and the voice bot send the JWT as `Authorization: Bearer` (checked by the gateway) and again in the custom user-token header. Behind the gateway, the runtime's `Authorization` header carries the gateway's SigV4 signature, so the agent reads the user token from the custom header and forwards it to the tools gateway, which validates it again. There is no `gateway_token` payload field.
+- **Session:** both front-ends send the SAME app session id as `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`, so one conversation can interleave text and voice turns against one Memory thread.
+- **WAF:** attached with `AWS::WAFv2::WebACLAssociation`; the Gateway resource's own `WebAclArn` property is ignored by CloudFormation today. Per-IP rate, IP reputation and known-bad-input rules BLOCK. The Common and SQLi rule groups follow `WafBodyRulesAction` (default `COUNT`, because prompts are free text).
+- **Direct fallback:** without a front-door URL (early workshop steps, local dev) the clients call the runtime directly and it keeps its own JWT authorizer. The agent reads the custom header first and falls back to `Authorization`.
 
 ### Charts (both modes)
 
