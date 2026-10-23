@@ -876,6 +876,45 @@ Resources:
 #                     Required: [sql]
   # ===== UNCOMMENT TO HERE (Step 6) ======
 
+  # ===== UNCOMMENT FROM HERE (Step 6b: Web Search connector) ======
+#   #============================================================================
+#   # Gateway Target — WebSearch (AgentCore Web Search connector)
+#   #
+#   # Public web context for questions the database cannot answer on its own:
+#   # public holidays, seasonal demand, industry benchmarks. AWS runs the search;
+#   # there is no API key. The gateway role calls it as itself (GATEWAY_IAM_ROLE),
+#   # which needs bedrock-agentcore:InvokeWebSearch on the AWS-owned tool ARN
+#   # arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1 (covered by the
+#   # gateway role's bedrock-agentcore statement). The agent sees one MCP tool,
+#   # WebSearch; Cedar names it WebSearch___WebSearch. The exclude list is
+#   # enforced server-side and the agent cannot relax it.
+#   #============================================================================
+#   WebSearchTarget:
+#     Type: AWS::BedrockAgentCore::GatewayTarget
+#     Properties:
+#       GatewayIdentifier: !GetAtt Gateway.GatewayIdentifier
+#       Name: WebSearch
+#       Description: Public web search for market, holiday and industry context (never tenant data)
+#       TargetConfiguration:
+#         Mcp:
+#           Connector:
+#             Source:
+#               ConnectorId: web-search
+#             Configurations:
+#               - Name: WebSearch
+#                 ParameterValues:
+#                   domainFilter:
+#                     exclude:
+#                       - facebook.com
+#                       - instagram.com
+#                       - tiktok.com
+#                       - reddit.com
+#                       - x.com
+#                       - twitter.com
+#       CredentialProviderConfigurations:
+#         - CredentialProviderType: GATEWAY_IAM_ROLE
+  # ===== UNCOMMENT TO HERE (Step 6b) ======
+
   # ===== UNCOMMENT FROM HERE (Step 7a: Cedar policy engine + RBAC policies) ======
 
 #   # (The Cube SemanticLayer Gateway target lives only in the demo stack; the
@@ -931,6 +970,30 @@ Resources:
 #             when {
 #               principal.hasTag("custom:role") &&
 #               principal.getTag("custom:role") == "analyst"
+#             };
+
+#   # Staff run day-to-day bookings; web research is for analysts and admins.
+#   ForbidWebSearchStaffPolicy:
+#     Type: AWS::BedrockAgentCore::Policy
+#     DependsOn:
+#       - AllowAllToolsPolicy
+#       - WebSearchTarget
+#     Properties:
+#       Name: forbid_websearch_staff
+#       PolicyEngineId: !GetAtt PolicyEngine.PolicyEngineId
+#       ValidationMode: IGNORE_ALL_FINDINGS
+#       Description: Forbid web search for staff role
+#       Definition:
+#         Cedar:
+#           Statement: !Sub |
+#             forbid(
+#               principal is AgentCore::OAuthUser,
+#               action == AgentCore::Action::"WebSearch___WebSearch",
+#               resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
+#             )
+#             when {
+#               principal.hasTag("custom:role") &&
+#               principal.getTag("custom:role") == "staff"
 #             };
 
 #   ForbidCustomSqlStaffPolicy:
