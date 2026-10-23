@@ -102,7 +102,7 @@ PCC_API_KEY="$PCC_PRIVATE_KEY" MIN_AGENTS="${MIN_AGENTS:-0}" AWS_REGION="$REGION
 echo "==> 3/5 JWT start proxy (API Gateway + Cognito authorizer)"
 ( cd "$ROOT/infrastructure/voice-proxy"
   rm -rf build && mkdir -p build && cp index.py build/
-  pip3 install --quiet --target build "python-jose[cryptography]==3.3.0" 2>/dev/null
+  pip3 install --quiet --target build "python-jose[cryptography]==3.5.0" 2>/dev/null
   aws cloudformation package --template-file voice-proxy-stack.yaml \
     --s3-bucket "$ARTIFACTS_BUCKET" --s3-prefix voice-proxy --region "$REGION" \
     --output-template-file build/packaged.yaml >/dev/null
