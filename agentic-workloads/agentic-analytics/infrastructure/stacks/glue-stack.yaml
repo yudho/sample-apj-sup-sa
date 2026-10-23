@@ -112,7 +112,7 @@ Resources:
       DatabaseInput:
         Name: !If [UseDefaultCatalogName, !Ref GlueDatabaseName, !Ref CatalogDatabaseName]
         Description: Timely-Unicorn rental management system data catalog
-        LocationUri: !Sub 's3://${EnvironmentName}-glue-data/'
+        LocationUri: !Sub 's3://${EnvironmentName}-glue-data-${AWS::AccountId}/'
         Parameters:
           classification: postgresql
           source: aurora-postgresql

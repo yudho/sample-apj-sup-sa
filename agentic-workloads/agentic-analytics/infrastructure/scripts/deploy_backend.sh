@@ -33,9 +33,11 @@
 set -euo pipefail
 
 # ── Config (override via env) ────────────────────────────────────────────────
-BUCKET="${BUCKET:-agentic-analytics-demo}"
 STACK="${STACK:-agentic-analytics-demo}"
 REGION="${REGION:-us-west-2}"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+# Account- and Region-specific default, so nobody else can own the bucket name first.
+BUCKET="${BUCKET:-agentic-analytics-demo-${ACCOUNT_ID}-${REGION}}"
 DEMO_ROLE="${DEMO_ROLE:-rental_admin}"   # rental_admin has full access incl. create_booking
 
 # Voice (optional, additive). Set ENABLE_VOICE=true VOICE_MODE=agentcore plus
@@ -301,6 +303,9 @@ if [ "$SKIP_PACKAGE" = true ]; then
 else
   log "Ensuring artifacts bucket exists"
   aws s3 mb "s3://${BUCKET}" --region "$REGION" 2>/dev/null || true
+  # Refuse to upload templates or code to a bucket another account owns.
+  aws s3api head-bucket --bucket "$BUCKET" --expected-bucket-owner "$ACCOUNT_ID" >/dev/null \
+    || die "Bucket ${BUCKET} is missing or not owned by account ${ACCOUNT_ID}"
 
   log "Packaging & uploading artifacts (this builds the UI + Lambdas — a few minutes)"
   AWS_REGION="$REGION" bash "$PKG_SCRIPT" "$BUCKET" | tee "$PKG_LOG"
