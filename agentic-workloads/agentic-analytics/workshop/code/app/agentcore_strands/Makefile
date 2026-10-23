@@ -34,7 +34,9 @@ ARTIFACTS_PREFIX ?= $(call cfg,ARTIFACTS_PREFIX)
 ENV_NAME    ?= agentic-analytics
 STACK       ?= agentic-analytics-agentcore
 TEMPLATE    ?= agentcore-topup-stack.yaml
-POLICY_MODE ?= LOG_ONLY
+# Left EMPTY like FRONT_DOOR: `make deploy POLICY_MODE=ENFORCE` sets it once and a later bare
+# `make deploy` keeps it. (A fixed default here used to flip the gateway back to LOG_ONLY.)
+POLICY_MODE ?=
 # Step 7c: `make deploy FRONT_DOOR=true` puts the front-door gateway + WAF in front of
 # the runtime. Left EMPTY so a later bare `make deploy` keeps whatever the stack has.
 FRONT_DOOR  ?=
@@ -92,7 +94,7 @@ help:
 # once, then point the stack's ArtifactsBucket at it (prefix empty). Charts, code
 # reads, and rebuilds all use this single writable bucket.
 deploy: stage-assets
-	@echo "==> Deploying $(STACK) (PolicyMode=$(POLICY_MODE), region=$(REGION))"
+	@echo "==> Deploying $(STACK) (PolicyMode=$(or $(POLICY_MODE),unchanged), region=$(REGION))"
 	aws cloudformation deploy \
 	  --template-file $(TEMPLATE) \
 	  --stack-name $(STACK) \
@@ -102,7 +104,7 @@ deploy: stage-assets
 	      EnvironmentName=$(ENV_NAME) \
 	      ArtifactsBucket=$(CFN_BUCKET) \
 	      ArtifactsPrefix= \
-	      PolicyMode=$(POLICY_MODE) \
+	      $(if $(strip $(POLICY_MODE)),PolicyMode=$(POLICY_MODE),) \
 	      $(if $(strip $(AGENT_IMAGE_TAG)),AgentImageTag=$(AGENT_IMAGE_TAG),) \
 	      $(if $(strip $(FRONT_DOOR)),EnableFrontDoor=$(FRONT_DOOR),) \
 	  --capabilities CAPABILITY_NAMED_IAM \

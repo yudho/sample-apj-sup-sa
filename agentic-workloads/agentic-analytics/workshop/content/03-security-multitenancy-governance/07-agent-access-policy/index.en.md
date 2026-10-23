@@ -301,7 +301,7 @@ The Cedar policy doesn't just *refuse* the booking tool — it makes it **invisi
 - The Gateway Interceptor must be live — it's in the Step-2 baseline, so confirm the stack deployed cleanly back then.
 
 **Analyst can still create bookings**
-- Verify you ran `make deploy POLICY_MODE=ENFORCE` (not just `make deploy`, which defaults to LOG_ONLY).
+- Verify you ran `make deploy POLICY_MODE=ENFORCE` at least once. The stack remembers the mode, so later plain `make deploy` runs keep it; `make deploy POLICY_MODE=LOG_ONLY` switches back.
 - The user must log in via the Cognito Hosted UI (click Login button). Direct API auth doesn't carry OAuth claims.
 
 **Queries return zero results**
