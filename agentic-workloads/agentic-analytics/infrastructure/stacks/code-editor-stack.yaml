@@ -298,21 +298,23 @@ Resources:
                 Action: rds-data:*
                 Resource: '*'
 
-              # S3
+              # S3: read any bucket (the event assets bucket is not ours); write only
+              # the workshop's buckets (<env>-*) and the bedrock-agentcore-* staging bucket below.
               - Effect: Allow
                 Action:
                   - s3:GetObject
                   - s3:ListBucket
+                Resource: '*'
+              - Effect: Allow
+                Action:
                   - s3:PutObject
                   - s3:DeleteObject
-                Resource: '*'
+                Resource: !Sub arn:aws:s3:::${EnvironmentName}-*/*
 
-              # Bedrock - Full access (Converse, InvokeModel, Guardrails, KB, etc.)
+              # Bedrock (models, guardrails, knowledge bases). Model and inference-profile
+              # ARNs span Regions and AWS-owned accounts, so this stays service-wide.
               - Effect: Allow
                 Action: bedrock:*
-                Resource: '*'
-              - Effect: Allow
-                Action: bedrock-agent-runtime:*
                 Resource: '*'
 
               # AWS Marketplace - Bedrock model subscription verification
@@ -322,14 +324,23 @@ Resources:
                   - aws-marketplace:Subscribe
                 Resource: '*'
 
-              # Glue
+              # Glue: this account's catalog, databases, tables and crawlers.
               - Effect: Allow
                 Action: glue:*
-                Resource: '*'
+                Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:*
 
-              # Lambda - Full access for deploy scripts
+              # Lambda: the workshop's functions and layers (<env>-*, plus the Cube
+              # lab's semantic-layer-*); read-only everywhere else.
               - Effect: Allow
                 Action: lambda:*
+                Resource:
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${EnvironmentName}-*
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:semantic-layer-*
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${EnvironmentName}-*
+              - Effect: Allow
+                Action:
+                  - lambda:Get*
+                  - lambda:List*
                 Resource: '*'
 
               # IAM - participants' stacks create their own roles. Every role the
@@ -362,9 +373,13 @@ Resources:
                   StringEquals:
                     aws:RequestedRegion: !Ref AWS::Region
 
-              # AgentCore - Full access
+              # AgentCore: resources in this account and Region; List calls take no ARN.
               - Effect: Allow
                 Action: bedrock-agentcore:*
+                Resource: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action:
+                  - bedrock-agentcore:List*
                 Resource: '*'
 
               # Voice lab (optional) - the voice stack creates an API Gateway
@@ -373,15 +388,28 @@ Resources:
               # `make voice-deploy` rolls back with AccessDenied on apigateway:POST
               # (SignalingHttpApi) and on the KVS signaling channel.
               - Effect: Allow
+                Action: apigateway:*
+                Resource: !Sub arn:aws:apigateway:${AWS::Region}::/*
+              - Effect: Allow
+                Action: execute-api:*
+                Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action: kinesisvideo:*
+                Resource: !Sub arn:aws:kinesisvideo:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
                 Action:
-                  - apigateway:*
-                  - execute-api:*
-                  - kinesisvideo:*
+                  - kinesisvideo:List*
+                  - kinesisvideo:Describe*
                 Resource: '*'
 
-              # Cognito - Full access for Gateway auth setup
+              # Cognito: this account's user pools (app clients, users, domains).
               - Effect: Allow
                 Action: cognito-idp:*
+                Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
+              - Effect: Allow
+                Action:
+                  - cognito-idp:ListUserPools
+                  - cognito-idp:DescribeUserPoolDomain
                 Resource: '*'
 
               # CloudFormation - Read stack outputs for auto-detection (any stack)
@@ -414,9 +442,14 @@ Resources:
                   - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/agentic-analytics-voice/*
                   - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/awscli-cloudformation-package-deploy-*
 
-              # Amplify - Deploy UI
+              # Amplify: apps in this account and Region; CreateApp/ListApps take no ARN.
               - Effect: Allow
                 Action: amplify:*
+                Resource: !Sub arn:aws:amplify:${AWS::Region}:${AWS::AccountId}:apps/*
+              - Effect: Allow
+                Action:
+                  - amplify:CreateApp
+                  - amplify:ListApps
                 Resource: '*'
 
               # SSM: the workshop's parameters (/<env>/...), public AMI parameters that
@@ -446,14 +479,29 @@ Resources:
                   - ssm:DescribeParameters
                 Resource: '*'
 
-              # ECR - Container registry for AgentCore Runtime
+              # ECR: the agent and voice repositories (<env>-*) and the AgentCore
+              # toolkit's bedrock-agentcore-* repositories.
               - Effect: Allow
                 Action: ecr:*
+                Resource:
+                  - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EnvironmentName}-*
+                  - !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/bedrock-agentcore-*
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:DescribeRepositories
                 Resource: '*'
 
-              # CodeBuild - Build containers for AgentCore Runtime
+              # CodeBuild: the agent and voice image builds.
               - Effect: Allow
                 Action: codebuild:*
+                Resource:
+                  - !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${EnvironmentName}-*
+                  - !Sub arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/bedrock-agentcore-*
+              - Effect: Allow
+                Action:
+                  - codebuild:ListProjects
+                  - codebuild:ListBuilds
                 Resource: '*'
 
               # STS: scripts and the Makefile look up the account id.
@@ -461,9 +509,15 @@ Resources:
                 Action: sts:GetCallerIdentity
                 Resource: '*'
 
-              # CloudWatch Logs
+              # CloudWatch Logs: this account's log groups and deliveries; Describe calls take no ARN.
               - Effect: Allow
                 Action: logs:*
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action:
+                  - logs:Describe*
+                  - logs:StartQuery
+                  - logs:GetQueryResults
                 Resource: '*'
 
               # X-Ray (for traces delivery configuration)
