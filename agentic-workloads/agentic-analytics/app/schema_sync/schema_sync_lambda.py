@@ -141,9 +141,24 @@ def describe_object(name, obj):
     return re.sub(r"\s+", " ", text)[:300]
 
 
+OBJECT_DROPS = ("table_dropped", "view_dropped")
+OBJECT_RENAMES = ("table_renamed", "view_renamed")
+
+
+def touched_objects(changes):
+    """Objects whose card must be (re)written. A dropped column still leaves its table in place."""
+    return {c["object"] for c in changes if c["type"] not in OBJECT_DROPS}
+
+
+def removed_objects(changes):
+    """Objects whose card must be deleted: dropped tables/views and the old name of a renamed one."""
+    return ([c["object"] for c in changes if c["type"] in OBJECT_DROPS]
+            + [c["from"] for c in changes if c["type"] in OBJECT_RENAMES])
+
+
 def action_describe(event):
     snap = _get_json(event["snapshot_key"])
-    touched = {c["object"] for c in event["changes"] if not c["type"].endswith("_dropped")}
+    touched = touched_objects(event["changes"])
     if event.get("baseline"):
         touched = set(snap["objects"])
     descriptions = {}
@@ -200,8 +215,7 @@ def action_publish(event):
             S3.put_object(Bucket=KB_DOCS_BUCKET, Key=f"{CARD_PREFIX}{name}.md",
                           Body=schema_card(name, obj, desc, event["changes"]).encode(), ContentType="text/markdown")
             cards += 1
-    dropped = [c["object"] for c in event["changes"] if c["type"].endswith("_dropped")]
-    dropped += [c["from"] for c in event["changes"] if c["type"] in ("table_renamed", "view_renamed")]
+    dropped = removed_objects(event["changes"])
     for name in dropped:
         if KB_DOCS_BUCKET:
             S3.delete_object(Bucket=KB_DOCS_BUCKET, Key=f"{CARD_PREFIX}{name}.md")
