@@ -445,9 +445,11 @@ async def agent_invocation(payload, context):
         if pending:
             sent_text = True
             yield {"event": {"contentBlockDelta": {"delta": {"text": _rewrite_chart_tags(pending)}}}}
-        # A guardrail block ends the turn without any text delta; tell the user why
-        # instead of returning an empty reply.
-        if not sent_text and getattr(final, "stop_reason", None) == "guardrail_intervened":
+        # A turn can end with no text at all: a guardrail block streams nothing, and so can
+        # other stop reasons. Never return an empty reply; say why, and log the stop reason.
+        if not sent_text:
+            stop = getattr(final, "stop_reason", None)
+            print(f"[empty-turn] stop_reason={stop}")
             yield {"event": {"contentBlockDelta": {"delta": {"text": GUARDRAIL_BLOCKED_MESSAGE}}}}
                 
     except Exception as e:
