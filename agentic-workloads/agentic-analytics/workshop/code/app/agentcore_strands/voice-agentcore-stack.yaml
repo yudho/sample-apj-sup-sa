@@ -118,6 +118,11 @@ Resources:
   #============================================================================
   VoiceECRRepo:
     Type: AWS::ECR::Repository
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_136
+            comment: AES-256 at rest (ECR default). A KMS key forces replacement of this named repository on existing stacks.
     Properties:
       RepositoryName: !Sub ${EnvironmentName}-voice-agent
       # Let delete-stack remove the repo even though CodeBuild pushed images into it.

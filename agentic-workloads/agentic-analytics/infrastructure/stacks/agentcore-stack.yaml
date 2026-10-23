@@ -1389,6 +1389,11 @@ Resources:
   # ---- TRACES → X-Ray (custom resource for both Gateway and Memory) ----
   TracesSetupRole:
     Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: Remaining wildcard is for actions that take no resource ARN (see the comments on each statement).
     Properties:
       RoleName: !Sub ${EnvironmentName}-traces-setup-role
       AssumeRolePolicyDocument:
@@ -1771,6 +1776,11 @@ Resources:
   #============================================================================
   AgentECRRepo:
     Type: AWS::ECR::Repository
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_136
+            comment: AES-256 at rest (ECR default). A KMS key forces replacement of this named repository on existing stacks.
     Properties:
       RepositoryName: !Sub ${EnvironmentName}-agent
       # Let delete-stack remove the repo even though CodeBuild pushed images into it

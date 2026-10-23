@@ -76,6 +76,11 @@ Resources:
   #============================================================================
   AmplifyHostingRole:
     Type: AWS::IAM::Role
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_111
+            comment: Remaining wildcard is for actions that take no resource ARN (see the comments on each statement).
     Properties:
       RoleName: !Sub ${EnvironmentName}-amplify-hosting-role
       AssumeRolePolicyDocument:

@@ -403,6 +403,11 @@ Resources:
   #============================================================================
   DatabaseSecret:
     Type: AWS::SecretsManager::Secret
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_149
+            comment: Encrypted with the AWS managed key for Secrets Manager; a customer managed key adds cost and no control in a single-account sample.
     Properties:
       Name: !Sub ${EnvironmentName}/aurora/credentials
       Description: Aurora PostgreSQL database credentials
@@ -433,6 +438,11 @@ Resources:
 
   AuroraCluster:
     Type: AWS::RDS::DBCluster
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_162
+            comment: 'The app connects with Secrets Manager credentials on purpose: the RLS lesson relies on separate owner and app_user logins.'
     DependsOn:
       - DatabaseSecret
     Properties:

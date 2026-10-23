@@ -142,6 +142,11 @@ Resources:
   #============================================================================
   CodeEditorSecret:
     Type: AWS::SecretsManager::Secret
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_149
+            comment: Encrypted with the AWS managed key for Secrets Manager; a customer managed key adds cost and no control in a single-account sample.
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -236,6 +241,12 @@ Resources:
               pass them to Lambda, AgentCore and Glue, so PassRole cannot be scoped to known ARNs.
       checkov:
         skip:
+          - id: CKV_AWS_107
+            comment: 'Participant''s workshop role: deploys every stack from Code Editor in a single-use Workshop Studio account.'
+          - id: CKV_AWS_108
+            comment: 'Participant''s workshop role: deploys every stack from Code Editor in a single-use Workshop Studio account.'
+          - id: CKV_AWS_110
+            comment: 'Participant''s workshop role: creates the roles of the stacks they deploy.'
           - id: CKV_AWS_109
             comment: Workshop sandbox deployment role, see cfn_nag reason.
           - id: CKV_AWS_111
@@ -745,6 +756,13 @@ Resources:
   #============================================================================
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_86
+            comment: Workshop IDE distribution; no access-log requirement for a single-use sandbox.
+          - id: CKV_AWS_68
+            comment: The origin only accepts CloudFront traffic and the IDE is token-gated.
     DependsOn: CodeEditorInstance
     # checkov:skip=CKV_AWS_174: uses the default *.cloudfront.net viewer cert
     #   (already TLS 1.2+); MinimumProtocolVersion only applies with a custom ACM cert.
