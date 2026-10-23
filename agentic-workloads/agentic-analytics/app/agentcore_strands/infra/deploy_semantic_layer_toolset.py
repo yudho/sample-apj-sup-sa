@@ -71,8 +71,7 @@ def get_cube_private_ip():
 
 def get_cube_api_secret():
     """Resolve the shared Cube API secret. Prefer the per-deploy Secrets Manager
-    secret (CubeApiSecretArn output); fall back to an env override; last resort the
-    legacy workshop default (kept only so old stacks without the secret still work)."""
+    secret (CubeApiSecretArn output) or an env override. There is no built-in default."""
     env_override = os.getenv("CUBE_API_SECRET")
     if env_override:
         return env_override
@@ -83,8 +82,8 @@ def get_cube_api_secret():
             return sm.get_secret_value(SecretId=secret_arn)['SecretString']
         except Exception as e:
             print(f"Warning: could not read Cube API secret from {secret_arn}: {e}")
-    print("Warning: falling back to legacy default Cube API secret.")
-    return "cubejs-workshop-secret-2024"  # nosec B105 - legacy fallback for pre-secret stacks
+    raise SystemExit("Cube API secret not found: deploy the Cube stack (CubeApiSecretArn output) "
+                     "or set CUBE_API_SECRET.")
 
 
 CUBE_API_SECRET = get_cube_api_secret()

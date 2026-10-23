@@ -21,7 +21,9 @@ import urllib.request
 import urllib.error
 
 CUBE_API_URL = os.environ.get('CUBE_API_URL', 'http://localhost:4000')
-CUBE_API_SECRET = os.environ.get('CUBE_API_SECRET', 'cubejs-workshop-secret-2024')
+# Set by the stack from the Cube secret. No default: an unset secret must fail, not fall back
+# to a value anyone can read in this repo.
+CUBE_API_SECRET = os.environ.get('CUBE_API_SECRET', '')
 
 # Global RLS context — set per invocation from JWT claims
 _rls_context = {}
@@ -60,6 +62,8 @@ def _create_cube_api_token():
     We only need iat/exp claims — tenant filtering is done at the query level,
     not via Cube's security context.
     """
+    if not CUBE_API_SECRET:
+        raise RuntimeError("CUBE_API_SECRET is not set")
     # Build JWT manually to avoid PyJWT dependency.
     header = base64.urlsafe_b64encode(
         json.dumps({"alg": "HS256", "typ": "JWT"}).encode()
@@ -271,7 +275,6 @@ def lambda_handler(event, context):
     is stripped automatically.
     """
     global _rls_context
-    print(f"Received event: {json.dumps(event)}")
 
     # Extract RLS context from JWT claims
     _rls_context = _extract_rls_context_from_jwt(context)
@@ -293,7 +296,7 @@ def lambda_handler(event, context):
             tool_name = tool_name.split(delimiter)[-1] if delimiter in tool_name else tool_name
 
         arguments = event.get('arguments', {}) if 'arguments' in event else event
-        print(f"Tool: {tool_name}, Args: {json.dumps(arguments)}, RLS: {json.dumps(_rls_context)}")
+        print(f"Tool: {tool_name}, arg keys: {sorted(arguments)}")
 
         handlers = {
             'cube_meta_tool': cube_meta,
