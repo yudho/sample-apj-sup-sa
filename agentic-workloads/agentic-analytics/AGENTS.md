@@ -26,7 +26,9 @@ User asks ──┤                                                 ├─► Fr
                                                                           → MCP Gateway (Cedar Policy + Interceptor)
                                                                           → PrebakedSQL Lambda (29 tools, DB Views)
                                                                           → APIInteg Lambda (create_booking)
-                                                                          → CustomSQL Lambda (Glue schema + Bedrock KB RAG)
+                                                                          → CustomSQL Lambda (Glue schema + Bedrock KB RAG, read-only SQL guard)
+                                                                          → BusinessContext (Managed KB connector, Retrieve)
+                                                                          → WebSearch (AgentCore Web Search connector)
                                                                           → CodeInterpreter (matplotlib → S3 → <chart> tag)
                                                                               → Aurora PostgreSQL (RLS by tenant)
 ```
@@ -39,6 +41,18 @@ User asks ──┤                                                 ├─► Fr
 - **Session:** both front-ends send the SAME app session id as `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`, so one conversation can interleave text and voice turns against one Memory thread.
 - **WAF:** attached with `AWS::WAFv2::WebACLAssociation`; the Gateway resource's own `WebAclArn` property is ignored by CloudFormation today. Per-IP rate, IP reputation and known-bad-input rules BLOCK. The Common and SQLi rule groups follow `WafBodyRulesAction` (default `COUNT`, because prompts are free text).
 - **Direct fallback:** without a front-door URL (early workshop steps, local dev) the clients call the runtime directly and it keeps its own JWT authorizer. The agent reads the custom header first and falls back to `Authorization`.
+
+### Cedar policies on the tools gateway
+
+- **RBAC:** base permit for authenticated users; forbids for analyst writes, staff custom SQL and staff web search.
+- **Guardrails in policy** (`Definition.Policy`, not `Definition.Cedar`): block text-to-SQL questions scoring > 0.4 for prompt injection or jailbreak; block web searches whose query scores > 0.4 for NAME, EMAIL or PHONE. ADDRESS is left out because place names trip it. The gateway role needs `bedrock:InvokeGuardrailChecks` on `*`.
+- **Temporal rule:** `create_booking_tool` is refused unless `get_unicorn_availability_tool` ran for the same `unicorn_id` in the same policy session within 15 minutes. With any temporal rule in the engine, every tools call must carry `X-Amzn-Bedrock-AgentCore-Policy-Session-Id`; the agent sends its runtime session id. A policy change invalidates open sessions (409), so start a new chat after `make deploy`.
+- Switches: `EnablePolicyGuardrails`, `EnableBookingOrderPolicy` (demo stack); workshop Step 7b.
+
+### Memory and evaluation
+
+- **Memory:** short-term events plus long-term `EpisodicMemoryStrategy` and `UserPreferenceMemoryStrategy`, namespaced per user (`/analytics/{actorId}/...`). The agent pulls up to 3 preferences and 2 past episodes into the system prompt each turn (`_long_term_context`, fails open).
+- **Online evaluation:** `AWS::BedrockAgentCore::OnlineEvaluationConfig` samples finished sessions (default 10%) and scores Correctness, Faithfulness, Helpfulness, ToolSelectionAccuracy and GoalSuccessRate into CloudWatch (`Bedrock-AgentCore/Evaluations`). CloudFormation accepts only `Builtin.*` or custom evaluator ids.
 
 ### Charts (both modes)
 
