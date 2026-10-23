@@ -400,14 +400,14 @@ Follow these steps to verify tenant isolation:
 
 **9a. Log in as the first user:**
 
-1. In the semantic layer UI (Tab 2), log in as :code[lyra.starwhisper@example-mythicalunicorns.com]{showCopyAction=true} / :code[Unicorn123!]{showCopyAction=true}
+1. In the semantic layer UI (Tab 2), log in as :code[lyra.starwhisper@example-mythicalunicorns.com]{showCopyAction=true} with the password from `make users`
 2. Ask: :code[Using the semantic layer, show me total revenue]{showCopyAction=true}
 3. Note the revenue figure returned
 
 **9b. Log in as the second user:**
 
 4. Log out of the semantic layer UI
-5. Log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true} / :code[Unicorn123!]{showCopyAction=true}
+5. Log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true} with the password from `make users`
 6. Ask the same question: :code[Using the semantic layer, show me total revenue]{showCopyAction=true}
 7. The revenue figure should be **different**: the Lambda injected a different `account_id` filter for this user
 

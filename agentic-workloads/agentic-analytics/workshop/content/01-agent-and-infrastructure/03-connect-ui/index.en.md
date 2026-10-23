@@ -104,12 +104,20 @@ You should see the Timely-Unicorn Analytics dashboard with:
 
 ### Step 3.4: Log In
 
+The demo users share one password, generated when your environment was created. Print the users and the password in the Code Editor terminal:
+
+```bash
+(cd /workshop/agentic-analytics/app/agentcore_strands && make users)
+```
+
+Keep this output handy: every later step logs in with these users.
+
 Click the **Login** button. You'll be redirected to the Cognito Hosted UI. Log in as one of the Mythical Unicorns staff:
 
 | Field | Value |
 |-------|-------|
 | Username | `stella.moonbeam@example-mythicalunicorns.com` |
-| Password | `Unicorn123!` |
+| Password | the password from `make users` |
 
 After login, you'll be redirected back to the chat UI. The top-right should now show the logged-in user.
 

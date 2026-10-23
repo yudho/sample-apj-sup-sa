@@ -120,7 +120,7 @@ If you're not logged in to the chat UI, log in as:
 | Field | Value |
 |-------|-------|
 | Username | `orion.moonshadow@example-mythicalunicorns.com` |
-| Password | `Unicorn123!` |
+| Password | the password from `make users` (Step 3.4) |
 
 ::alert[**Use the right user:** In case you intend to run the below queries after deploying the AgentCore Policy and RLS in step 7, you MUST use users with "analyst" or "rental_admin" or "saas_admin" type to be able to use the custom SQL. The user above (Orion Moonshadow) is an analyst role. If you run this step before deploying the components in step 7, the user does not matter.]{type="info"}
 

@@ -80,7 +80,7 @@ Start a new chat (bin icon next to the chat input) and sign in as the rental adm
 | Field | Value |
 |-------|-------|
 | Username | `lyra.starwhisper@example-mythicalunicorns.com` |
-| Password | `Unicorn123!` |
+| Password | the password from `make users` (Step 3.4) |
 
 Ask:
 

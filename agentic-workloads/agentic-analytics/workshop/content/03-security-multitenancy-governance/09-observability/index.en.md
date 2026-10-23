@@ -72,7 +72,7 @@ Make a few agent invocations so there's data to observe. In the chat UI, log in 
 | Field | Value |
 |-------|-------|
 | Username | `orion.moonshadow@example-mythicalunicorns.com` |
-| Password | `Unicorn123!` |
+| Password | the password from `make users` (Step 3.4) |
 
 Then ask these questions (clear chat between each to start fresh sessions):
 

@@ -111,7 +111,7 @@ Switch to the chat UI you set up in Step 3. If you're not logged in, log in as:
 | Field | Value |
 |-------|-------|
 | Username | `stella.moonbeam@example-mythicalunicorns.com` |
-| Password | `Unicorn123!` |
+| Password | the password from `make users` (Step 3.4) |
 
 ::alert[**Start fresh:** It is best to clear the chatbot conversation from the previous step by clicking the small bin icon next to the chat input field or by refreshing the application demo browser tab.]{type="info"}
 

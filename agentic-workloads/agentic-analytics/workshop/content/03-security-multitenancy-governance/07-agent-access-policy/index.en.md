@@ -217,7 +217,7 @@ Cedar enforcement (Step 7.1, deployed) and the RLS switch (Step 7.2, the runtime
 
 ### Step 7.6: Test Tool-Level Access Control
 
-All test users share the same password: :code[Unicorn123!]{showCopyAction=true}
+All test users share one password. Run `make users` in `app/agentcore_strands` if you need it again.
 
 | User | Role | Tenant |
 |------|------|--------|
