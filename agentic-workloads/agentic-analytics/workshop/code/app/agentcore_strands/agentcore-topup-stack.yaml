@@ -2211,6 +2211,89 @@ Resources:
       ResourceArn: !GetAtt FrontDoorGateway.GatewayArn
       WebACLArn: !GetAtt FrontDoorWebAcl.Arn
 
+
+  # ===== UNCOMMENT FROM HERE (Step 10: online evaluation) ======
+#   #============================================================================
+#   # Online evaluation (AgentCore Evaluations)
+#   #
+#   # Samples finished conversations from the runtime's spans and scores them with
+#   # built-in evaluators. Scores land in a results log group and as CloudWatch
+#   # metrics (namespace Bedrock-AgentCore/Evaluations), so quality can be watched
+#   # and alarmed on like latency or errors.
+#   #============================================================================
+#   EvaluationRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: bedrock-agentcore.amazonaws.com
+#             Action: sts:AssumeRole
+#             Condition:
+#               StringEquals:
+#                 aws:SourceAccount: !Ref AWS::AccountId
+#       Policies:
+#         - PolicyName: ReadSpansAndScore
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - logs:DescribeLogGroups
+#                   - logs:StartQuery
+#                   - logs:GetQueryResults
+#                   - logs:StopQuery
+#                 Resource:
+#                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
+#                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws/spans*
+#               - Effect: Allow
+#                 Action:
+#                   - logs:CreateLogGroup
+#                   - logs:CreateLogStream
+#                   - logs:PutLogEvents
+#                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/evaluations/*
+#               - Effect: Allow
+#                 Action: cloudwatch:PutMetricData
+#                 Resource: '*'
+#                 Condition:
+#                   StringEquals:
+#                     cloudwatch:namespace: Bedrock-AgentCore/Evaluations
+#               - Effect: Allow
+#                 Action:
+#                   - bedrock:InvokeModel
+#                   - bedrock:InvokeModelWithResponseStream
+#                 Resource:
+#                   - arn:aws:bedrock:*::foundation-model/*
+#                   - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+
+#   OnlineEvaluation:
+#     Type: AWS::BedrockAgentCore::OnlineEvaluationConfig
+#     DependsOn: AgentRuntimeEndpoint
+#     Properties:
+#       OnlineEvaluationConfigName: unicorn_rental_online_eval
+#       Description: Answer quality and tool use checks on sampled analytics conversations
+#       EvaluationExecutionRoleArn: !GetAtt EvaluationRole.Arn
+#       DataSourceConfig:
+#         CloudWatchLogs:
+#           LogGroupNames:
+#             - !Sub /aws/bedrock-agentcore/runtimes/${AgentRuntime.AgentRuntimeId}-DEFAULT
+#           ServiceNames:
+#             - agentic_analytics_agent.DEFAULT
+#       Rule:
+#         SamplingConfig:
+#           SamplingPercentage: 10
+#         SessionConfig:
+#           SessionTimeoutMinutes: 15
+#       Evaluators:
+#         - EvaluatorId: Builtin.Correctness
+#         - EvaluatorId: Builtin.Faithfulness
+#         - EvaluatorId: Builtin.Helpfulness
+#         - EvaluatorId: Builtin.ToolSelectionAccuracy
+#         - EvaluatorId: Builtin.GoalSuccessRate
+  # ===== UNCOMMENT TO HERE (Step 10) ======
+
 Outputs:
   FrontDoorUrl:
     Condition: FrontDoorEnabled
