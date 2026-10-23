@@ -234,6 +234,14 @@ Resources:
                 changes.$: $.changes
                 descriptions.$: $.descriptions
             OutputPath: $.Payload
+            # A KB data source runs one ingestion job at a time. If the previous run's job is
+            # still going, StartIngestionJob raises ConflictException; Publish is idempotent
+            # (current.json is written last), so wait and run it again.
+            Retry:
+              - ErrorEquals: [ConflictException]
+                IntervalSeconds: 30
+                BackoffRate: 1.5
+                MaxAttempts: 8
             End: true
           NothingToPublish:
             Type: Succeed
