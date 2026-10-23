@@ -338,10 +338,14 @@ Resources:
                   - iam:CreateServiceLinkedRole
                 Resource: '*'
 
-              # EC2 - VPC endpoints, security groups, network interfaces
+              # EC2 - VPC endpoints, security groups, network interfaces for the
+              # stacks participants deploy, in this Region only.
               - Effect: Allow
                 Action: ec2:*
                 Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
 
               # AgentCore - Full access
               - Effect: Allow
