@@ -241,6 +241,12 @@ Resources:
       GroupName: !Sub ${EnvironmentName}-aurora-sg
       GroupDescription: Security group for Aurora PostgreSQL cluster
       VpcId: !Ref VPC
+      # Aurora and the endpoints only answer connections, so no outbound rule is
+      # needed. This rule replaces the default allow-all egress with loopback only.
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 127.0.0.1/32
+          Description: No outbound traffic
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 5432
@@ -319,6 +325,12 @@ Resources:
       GroupName: !Sub ${EnvironmentName}-vpce-sg
       GroupDescription: Security group for VPC endpoints
       VpcId: !Ref VPC
+      # Aurora and the endpoints only answer connections, so no outbound rule is
+      # needed. This rule replaces the default allow-all egress with loopback only.
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 127.0.0.1/32
+          Description: No outbound traffic
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
