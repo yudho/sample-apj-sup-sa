@@ -356,13 +356,14 @@ Resources:
       SSMParameterName: !Sub /${EnvironmentName}/demo/users
 
   #============================================================================
-  # Identity Pool for Demo Mode (unauth SSM access)
+  # Identity Pool: signed-in users only. The UI calls the agent with the user's
+  # JWT, so no guest (unauthenticated) identities are needed.
   #============================================================================
   DemoIdentityPool:
     Type: AWS::Cognito::IdentityPool
     Properties:
       IdentityPoolName: !Sub ${EnvironmentName}-demo-pool
-      AllowUnauthenticatedIdentities: true
+      AllowUnauthenticatedIdentities: false
       CognitoIdentityProviders:
         - ClientId: !Ref UserLoginClient
           ProviderName: !GetAtt UserPool.ProviderName
@@ -392,41 +393,7 @@ Resources:
                 Action:
                   - bedrock-agentcore:InvokeAgentRuntime
                   - bedrock-agentcore:InvokeAgentRuntimeStream
-                Resource: '*'
-
-  DemoUnauthRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${EnvironmentName}-demo-unauth-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: cognito-identity.amazonaws.com
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                cognito-identity.amazonaws.com:aud: !Ref DemoIdentityPool
-              ForAnyValue:StringLike:
-                cognito-identity.amazonaws.com:amr: unauthenticated
-      Policies:
-        - PolicyName: SSMReadDemoUsers
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: ssm:GetParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/demo/*
-        - PolicyName: AgentCoreInvoke
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - bedrock-agentcore:InvokeAgentRuntime
-                  - bedrock-agentcore:InvokeAgentRuntimeStream
-                Resource: '*'
+                Resource: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/*
 
   DemoIdentityPoolRoleAttachment:
     Type: AWS::Cognito::IdentityPoolRoleAttachment
@@ -434,7 +401,6 @@ Resources:
       IdentityPoolId: !Ref DemoIdentityPool
       Roles:
         authenticated: !GetAtt DemoAuthRole.Arn
-        unauthenticated: !GetAtt DemoUnauthRole.Arn
 
 Outputs:
   UserPoolId:
