@@ -248,12 +248,20 @@ Resources:
       KnowledgeBaseId: !Ref KnowledgeBase
       Name: business-context-source
       Description: Markdown business context in the KB docs bucket (docs/ prefix)
+      # Managed knowledge bases connect to S3 through the managed connector
+      # (Type S3 + S3Configuration is only for self-managed knowledge bases).
       DataSourceConfiguration:
-        Type: S3
-        S3Configuration:
-          BucketArn: !GetAtt KBDocsBucket.Arn
-          InclusionPrefixes:
-            - docs/
+        Type: MANAGED_KNOWLEDGE_BASE_CONNECTOR
+        ManagedKnowledgeBaseConnectorConfiguration:
+          ConnectorParameters:
+            type: S3
+            version: '1'
+            connectionConfiguration:
+              bucketName: !Ref KBDocsBucket
+              bucketOwnerAccountId: !Ref AWS::AccountId
+            filterConfiguration:
+              inclusionPrefixes:
+                - docs/
 
   #============================================================================
   # First sync: CloudFormation creates the data source but does not ingest it.
@@ -281,6 +289,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:StartIngestionJob
+                  - bedrock:GetDataSource
                   - bedrock:GetIngestionJob
                 Resource: !GetAtt KnowledgeBase.KnowledgeBaseArn
 
@@ -307,6 +316,15 @@ Resources:
               try:
                   p = event['ResourceProperties']
                   ba = boto3.client('bedrock-agent')
+                  # A managed-KB data source is created asynchronously (CREATING -> AVAILABLE,
+                  # usually 2-5 min); ingestion can only start once it is AVAILABLE.
+                  while context.get_remaining_time_in_millis() > 60000:
+                      ds = ba.get_data_source(knowledgeBaseId=p['KnowledgeBaseId'], dataSourceId=p['DataSourceId'])['dataSource']
+                      if ds['status'] == 'AVAILABLE':
+                          break
+                      if ds['status'] in ('DELETE_UNSUCCESSFUL', 'FAILED'):
+                          raise RuntimeError('data source ' + ds['status'] + ': ' + '; '.join(ds.get('failureReasons') or []))
+                      time.sleep(15)
                   job = ba.start_ingestion_job(knowledgeBaseId=p['KnowledgeBaseId'], dataSourceId=p['DataSourceId'])['ingestionJob']
                   while context.get_remaining_time_in_millis() > 30000:
                       job = ba.get_ingestion_job(knowledgeBaseId=p['KnowledgeBaseId'], dataSourceId=p['DataSourceId'],
