@@ -284,10 +284,20 @@ async def agent_invocation(payload, context):
         runtime_session_id = context.session_id if context and hasattr(context, 'session_id') else "default"
         print(f"[OK] Memory context: actor={actor_id[:12]}..., session={runtime_session_id[:30]}")
 
+        # Every tools-gateway call carries the user's token (Cedar RBAC + database RLS)
+        # and a policy session id. The id ties tool calls of one conversation together
+        # so temporal Cedar rules can check order, e.g. "create a booking only after the
+        # availability check for the same unicorn". Once an engine has a temporal rule,
+        # the gateway rejects calls that have no policy session id.
+        tools_headers = {
+            "Authorization": f"Bearer {access_token}",
+            "X-Amzn-Bedrock-AgentCore-Policy-Session-Id": runtime_session_id,
+        }
+
         def create_transport():
             return streamablehttp_client(
                 GATEWAY_URL,
-                headers={"Authorization": f"Bearer {access_token}"}
+                headers=tools_headers
             )
 
         mcp_client = MCPClient(create_transport)

@@ -80,6 +80,7 @@ Execute when user requests to create a new booking.
 **Constraints:**
 - You MUST resolve relative dates (e.g., "tomorrow") to absolute dates before creating the booking
 - You MUST NOT guess customer or unicorn IDs — resolve them via search tools, from the conversation history, or ask the user
+- You MUST call get_unicorn_availability_tool for the unicorn_id you are about to book, in this conversation and shortly before create_booking_tool. The gateway refuses a booking that was not preceded by this check for the same unicorn; if it does, run the check and try again
 - You MUST NOT ask for confirmation before creating the booking — execute directly
 - If required information is missing and cannot be resolved with available tools or from history, ask the user for it
 - You MAY chain multiple tools to gather the needed information (e.g., search for customer, then search for unicorn, then create booking)
