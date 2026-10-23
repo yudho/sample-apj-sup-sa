@@ -395,7 +395,10 @@ Resources:
 #     Type: AWS::Lambda::Version
 #     Properties:
 #       FunctionName: !Ref DataFoundationLambda
-#       Description: Version fronted by the live alias for provisioned concurrency
+#       # The code key is in the description on purpose: a Version is only re-published when
+#       # one of its own properties changes, and a new S3 key on the function alone does not
+#       # count. Without this the 'live' alias keeps serving the first deployed code.
+#       Description: !Sub 'live alias version for ${DataFoundationLambdaKey}'
 
 #   DataFoundationAlias:
 #     Type: AWS::Lambda::Alias
@@ -681,7 +684,10 @@ Resources:
 #     Type: AWS::Lambda::Version
 #     Properties:
 #       FunctionName: !Ref ApiIntegLambda
-#       Description: Version fronted by the live alias for provisioned concurrency
+#       # The code key is in the description on purpose: a Version is only re-published when
+#       # one of its own properties changes, and a new S3 key on the function alone does not
+#       # count. Without this the 'live' alias keeps serving the first deployed code.
+#       Description: !Sub 'live alias version for ${ApiIntegLambdaKey}'
 
 #   ApiIntegAlias:
 #     Type: AWS::Lambda::Alias
@@ -828,7 +834,10 @@ Resources:
 #     Type: AWS::Lambda::Version
 #     Properties:
 #       FunctionName: !Ref CustomSqlLambda
-#       Description: Version fronted by the live alias for provisioned concurrency
+#       # The code key is in the description on purpose: a Version is only re-published when
+#       # one of its own properties changes, and a new S3 key on the function alone does not
+#       # count. Without this the 'live' alias keeps serving the first deployed code.
+#       Description: !Sub 'live alias version for ${CustomSqlLambdaKey}'
 
 #   CustomSqlAlias:
 #     Type: AWS::Lambda::Alias
