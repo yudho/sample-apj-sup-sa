@@ -78,15 +78,15 @@ This is the same RAG retrieval the agent uses when generating SQL.
 
 Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review:
 
-**Lines 83-122, Text-to-SQL Workflow (Human-in-the-Loop):** This is the most complex workflow in the SOP. Key constraints:
+**Section 4, Text-to-SQL Workflow (Human-in-the-Loop):** This is the most complex workflow in the SOP. Key constraints:
 - *"You MUST call text_to_sql_tool to get schema context first"*: the agent retrieves Glue schema + RAG context before generating SQL
 - *"You MUST present a business-level query plan for approval"*: the user sees a tree-format plan in business language, not raw SQL
 - *"You MUST STOP and wait after presenting the query plan"*: human approval required before execution
 - *"You MUST NOT execute SQL that modifies data"*: SELECT only
 
-**Lines 96-112, Approval Card Format:** The SOP defines the exact JSON format for the approval card, including the tree-format query plan with `└─` connectors. The UI parses this format to render the approval buttons.
+**Approval card format, inside Section 4:** The SOP defines the exact JSON format for the approval card, including the tree-format query plan with `└─` connectors. The UI parses this format to render the approval buttons.
 
-**Line 44, Tool Priority:** *"You MUST NOT use text-to-sql when a specific tool exists."* This prevents the agent from generating SQL for questions that already have prebaked tools: reducing cost, latency, and hallucination risk.
+**Tool priority, Section 2:** *"You MUST NOT use text-to-sql when a specific tool exists"* This prevents the agent from generating SQL for questions that already have prebaked tools: reducing cost, latency, and hallucination risk.
 
 ::alert[**The SOP creates a layered defense against SQL hallucination:** (1) Prebaked tools handle known queries: minimum hallucination risk. (2) For unknown queries, Glue schema + RAG context ground the SQL generation. (3) Human approval catches any remaining errors. (4) Lambda-level validation blocks dangerous patterns. Each layer reduces risk independently.]{type="info"}
 
@@ -174,7 +174,7 @@ The `execute_sql_tool` enforces:
 ## Troubleshooting
 
 **Agent uses Custom SQL for questions that have prebaked tools**
-- The SOP already handles this: it constrains the agent to use specific tools before falling back to Custom SQL (see SOP line 44).
+- The SOP already handles this: it constrains the agent to use specific tools before falling back to Custom SQL (see SOP Section 2).
 
 **Approval card doesn't appear**
 - Ensure the UI is running and connected to the agent.

@@ -92,12 +92,12 @@ This means the agent sees the tool as `APIInteg___create_booking_tool`. The targ
 
 Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review:
 
-**Lines 61-80 — Booking Creation Workflow:** This is the goal-oriented workflow the agent follows when a user asks to create a booking. It defines the 4 required parameters (customer_id, unicorn_id, start_datetime, end_datetime) and how to resolve each one. Key constraints:
-- *"You MUST resolve relative dates to absolute dates before creating the booking"*
+**Section 3, Booking Creation Workflow:** This is the goal-oriented workflow the agent follows when a user asks to create a booking. It defines the 4 required parameters (customer_id, unicorn_id, start_datetime, end_datetime) and how to resolve each one. Key constraints:
+- *"You MUST resolve relative dates (e.g., "tomorrow") to absolute dates before creating the booking"*
 - *"You MUST NOT guess customer or unicorn IDs — resolve them via search tools, from the conversation history, or ask the user"*
 - *"You MUST NOT ask for confirmation before creating the booking — execute directly"*
 
-**Lines 145-155 — Example 2:** A complete booking example showing the tool chain: `current_datetime` → `search_customers_tool` → `search_unicorns_tool` → `create_booking_tool`.
+**Example 2, under Examples:** A complete booking example showing the tool chain: `current_datetime` → `search_customers_tool` → `search_unicorns_tool` → `create_booking_tool`.
 
 ::alert[**SOP + Policy = Defense in Depth.** The Policy Engine hides the tool at the Gateway level (the agent can't call it). The SOP's graceful failure handling means the agent will inform the user if a tool isn't available. Together, they provide both infrastructure-level and application-level access control.]{type="info"}
 

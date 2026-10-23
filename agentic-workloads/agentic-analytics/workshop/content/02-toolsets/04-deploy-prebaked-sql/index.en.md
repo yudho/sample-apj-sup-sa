@@ -92,13 +92,13 @@ The agent's behavior is governed by a Standard Operating Procedure (SOP) — a m
 
 Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review these sections:
 
-**Lines 18-36 — Query Classification:** How the agent categorizes each user question and decides which tool to call. Notice the constraint: *"You MUST identify if the query maps to a specific analytics tool"* — this prevents the agent from guessing.
+**Section 1, Query Classification:** How the agent categorizes each user question and decides which tool to call. Notice the constraint: *"You MUST identify if the query maps to a specific analytics tool"* — this prevents the agent from guessing.
 
-**Lines 38-56 — Tool Selection and Tool Mapping Table:** The mapping from user intent to specific tool. For example, "Top customers" → `get_top_revenue_customers_tool`. This is how the agent knows to call the right prebaked tool instead of generating SQL.
+**Section 2, Tool Selection and the tool mapping table:** The mapping from user intent to specific tool. For example, "Top customers" → `get_top_revenue_customers_tool`. This is how the agent knows to call the right prebaked tool instead of generating SQL.
 
-**Lines 124-135 — Response Formatting:** Constraints like *"You MUST present data in clear, formatted tables"* and *"You MUST provide actionable insights."* This is why the agent returns structured tables with business insights, not raw data dumps (that you will try below)
+**Section 5, Response Formatting:** Constraints like *"You MUST provide actionable insights; highlight trends, anomalies, or areas needing attention"*, plus separate rules for text and voice mode. This is why the agent returns tables with business insights instead of raw rows, as you will see below.
 
-**Lines 180-188 — Constraints Summary:** The hard rules — no emojis, no SQL in responses, use specific tools before falling back to text-to-sql.
+**Constraints Summary (end of the file):** The hard rules — no emojis, no SQL in responses, use specific tools before falling back to text-to-sql.
 
 ::alert[**The SOP is the agent's playbook.** Without it, the LLM guesses which tool to call and how to format responses. With it, behavior is consistent, testable, and reviewable — like code, but in natural language. As you add more toolsets in the next steps, you'll see how the SOP guides the agent's behavior for each one.]{type="info"}
 
