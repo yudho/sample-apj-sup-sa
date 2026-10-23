@@ -438,15 +438,13 @@ Resources:
 
   AuroraCluster:
     Type: AWS::RDS::DBCluster
-    Metadata:
-      checkov:
-        skip:
-          - id: CKV_AWS_162
-            comment: 'The app connects with Secrets Manager credentials on purpose: the RLS lesson relies on separate owner and app_user logins.'
     DependsOn:
       - DatabaseSecret
     Properties:
       DBClusterIdentifier: !Sub ${EnvironmentName}-cluster
+      # IAM database authentication is available; the labs still use the Secrets
+      # Manager logins, because the RLS lesson needs separate owner and app_user users.
+      EnableIAMDatabaseAuthentication: true
       Engine: aurora-postgresql
       # NOTE: pin to a currently-available Aurora PostgreSQL 15.x minor. AWS
       # periodically retires minor versions; when 15.8 was retired, fresh
