@@ -377,6 +377,10 @@ build_params() {
   # Resource-name/export prefix. Without it every deployment is "agentic-analytics",
   # which collides with a second deployment (or a workshop base stack) in the same account.
   echo "ParameterKey=EnvironmentName,ParameterValue=${ENV_NAME}"
+  # Glue catalog database names are account-wide; give non-default environments their own.
+  if [ "$ENV_NAME" != "agentic-analytics" ]; then
+    echo "ParameterKey=GlueCatalogDatabaseName,ParameterValue=$(echo "${ENV_NAME}" | tr '-' '_')_timely_unicorn"
+  fi
   for k in "${REQUIRED_KEYS[@]}"; do
     echo "ParameterKey=${k},ParameterValue=$(key_val "$k")"
   done

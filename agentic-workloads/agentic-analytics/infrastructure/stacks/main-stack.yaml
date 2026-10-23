@@ -2,6 +2,11 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Agentic Analytics - One-Click Deployment (Root Stack)'
 
 Parameters:
+  GlueCatalogDatabaseName:
+    Type: String
+    Default: ''
+    Description: Glue Data Catalog database name. Empty = timely_unicorn. deploy_backend.sh sets it for non-default environments.
+
   EnvironmentName:
     Type: String
     Default: agentic-analytics
@@ -202,6 +207,7 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         AuroraStackName: !Sub ${EnvironmentName}-aurora
+        CatalogDatabaseName: !Ref GlueCatalogDatabaseName
         ArtifactsBucket: !Ref ArtifactsBucket
         ArtifactsPrefix: !Ref ArtifactsPrefix
         TriggerCrawler: 'true'

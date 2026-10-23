@@ -15,7 +15,14 @@ Parameters:
   GlueDatabaseName:
     Type: String
     Default: timely_unicorn
-    Description: Name of the Glue database
+    Description: Name of the Aurora PostgreSQL database the crawler reads (also the default catalog name)
+
+  CatalogDatabaseName:
+    Type: String
+    Default: ''
+    Description: >-
+      Glue Data Catalog database name. Empty = same as GlueDatabaseName. Set it when a second
+      deployment shares the account, because catalog database names are account-wide.
 
   ConnectionVersion:
     Type: String
@@ -45,6 +52,7 @@ Parameters:
 
 Conditions:
   ShouldTriggerCrawler: !Equals [!Ref TriggerCrawler, 'true']
+  UseDefaultCatalogName: !Equals [!Ref CatalogDatabaseName, '']
 
 Resources:
   #============================================================================
@@ -102,7 +110,7 @@ Resources:
     Properties:
       CatalogId: !Ref AWS::AccountId
       DatabaseInput:
-        Name: !Ref GlueDatabaseName
+        Name: !If [UseDefaultCatalogName, !Ref GlueDatabaseName, !Ref CatalogDatabaseName]
         Description: Timely-Unicorn rental management system data catalog
         LocationUri: !Sub 's3://${EnvironmentName}-glue-data/'
         Parameters:
@@ -373,8 +381,8 @@ Resources:
             - Endpoint:
                 Fn::ImportValue: !Sub ${EnvironmentName}-AuroraClusterEndpoint
               DBName: !Ref GlueDatabaseName
-          USERNAME: '{{resolve:secretsmanager:agentic-analytics/aurora/credentials:SecretString:username}}'
-          PASSWORD: '{{resolve:secretsmanager:agentic-analytics/aurora/credentials:SecretString:password}}'
+          USERNAME: !Sub '{{resolve:secretsmanager:${EnvironmentName}/aurora/credentials:SecretString:username}}'
+          PASSWORD: !Sub '{{resolve:secretsmanager:${EnvironmentName}/aurora/credentials:SecretString:password}}'
           JDBC_DRIVER_CLASS_NAME: org.postgresql.Driver
           JDBC_DRIVER_JAR_URI: !Sub s3://${GlueDriverBucket}/drivers/postgresql-42.7.3.jar
         PhysicalConnectionRequirements:
@@ -398,7 +406,7 @@ Resources:
       Name: !Sub ${EnvironmentName}-aurora-crawler
       Description: Crawler to discover tables in Aurora PostgreSQL database
       Role: !GetAtt GlueServiceRole.Arn
-      DatabaseName: !Ref GlueDatabaseName
+      DatabaseName: !Ref GlueDatabase
       Targets:
         JdbcTargets:
           - ConnectionName: !Sub ${EnvironmentName}-aurora-connection-${ConnectionVersion}

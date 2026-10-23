@@ -213,7 +213,9 @@ def get_schema_context(args, rls_context):
     tables = args.get('tables', [])
     # Glue Crawler prefixes table names with {database}_{schema}_ (e.g. timely_unicorn_public_)
     # Strip this prefix so the LLM sees actual PostgreSQL table names
-    glue_prefix = f"{GLUE_DATABASE}_public_"
+    # The crawler names tables <postgres db>_<schema>_<table>; the catalog database
+    # itself may have a different (per-environment) name.
+    glue_prefix = f"{AURORA_DATABASE}_public_"
 
     try:
         all_tables = []
