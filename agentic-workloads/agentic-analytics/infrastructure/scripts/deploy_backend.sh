@@ -446,12 +446,13 @@ if [ "$ST" = "DOES_NOT_EXIST" ]; then
     || die "Stack create failed — resources left in place (disable-rollback). Fix the cause, repackage, then re-run: the script will update-stack to fix forward. Inspect: aws cloudformation describe-stack-events --stack-name $STACK --region $REGION"
 else
   log "Updating existing stack ${STACK}"
-  # NOTE: --disable-rollback REJECTS replacement-type updates ("Replacement type
-  # updates not supported on stack with disable-rollback"). Pass --rollback when an
-  # update replaces a resource (e.g. a new TaskDefinition revision).
+  # --disable-rollback REJECTS replacement-type updates ("Replacement type updates not
+  # supported on stack with disable-rollback"), and every tool-code change replaces the
+  # Lambda Version behind the 'live' alias. So a normal update keeps rollback on; only the
+  # fix-forward of a failed first create (CREATE_FAILED) keeps it off.
   # bash 3.2 + set -u: expanding an empty array as "${arr[@]}" errors, so guard it.
   DISABLE_RB=()
-  [ "$NO_ROLLBACK" = true ] && DISABLE_RB=(--disable-rollback)
+  [ "$NO_ROLLBACK" = true ] && [ "$ST" = "CREATE_FAILED" ] && DISABLE_RB=(--disable-rollback)
   if aws cloudformation update-stack --region "$REGION" --stack-name "$STACK" \
        --template-url "$TEMPLATE_URL" \
        --parameters $(build_params) \
