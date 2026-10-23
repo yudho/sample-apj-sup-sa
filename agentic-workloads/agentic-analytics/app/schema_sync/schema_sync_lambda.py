@@ -100,7 +100,10 @@ def _put_json(bucket, key, data):
 
 def action_snapshot(event):
     new = read_schema()
-    current = _get_json(PREFIX + "current.json")
+    # {"rebuild": true} as the execution input republishes every card and description,
+    # e.g. after cards were edited or deleted by hand.
+    rebuild = bool((event.get("input") or {}).get("rebuild"))
+    current = None if rebuild else _get_json(PREFIX + "current.json")
     baseline = current is None
     result = classify(current or {"objects": {}}, new)
     run_id = event.get("run_id") or new["taken_at"].replace(":", "").replace("-", "")[:15]

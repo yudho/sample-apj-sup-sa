@@ -172,7 +172,9 @@ Resources:
             Resource: arn:aws:states:::lambda:invoke
             Parameters:
               FunctionName: !GetAtt SchemaSyncFunction.Arn
-              Payload: { action: snapshot }
+              Payload:
+                action: snapshot
+                input.$: $
             OutputPath: $.Payload
             Next: Classify
           Classify:
