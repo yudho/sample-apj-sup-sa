@@ -1945,8 +1945,15 @@ Resources:
                   - bedrock:ListFoundationModelAgreementOffers
                   - bedrock:CreateFoundationModelAgreement
                   - aws-marketplace:ViewSubscriptions
-                  - aws-marketplace:Subscribe
                 Resource: '*'
+              # Subscribe only through Bedrock's model-agreement flow, so this role can
+              # accept a Bedrock model's Marketplace offer and nothing else.
+              - Effect: Allow
+                Action: aws-marketplace:Subscribe
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    aws:CalledViaLast: bedrock.amazonaws.com
 
   ModelSubscriptionFunction:
     Type: AWS::Lambda::Function
