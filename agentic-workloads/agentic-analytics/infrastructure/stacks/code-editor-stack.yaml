@@ -293,10 +293,15 @@ Resources:
                   - secretsmanager:PutSecretValue
                 Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${EnvironmentName}-*
 
-              # RDS Data API
+              # RDS Data API: Step 11 runs DDL on the workshop's Aurora cluster.
               - Effect: Allow
-                Action: rds-data:*
-                Resource: '*'
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:${EnvironmentName}-*
 
               # S3: read any bucket (the event assets bucket is not ours); write only
               # the workshop's buckets (<env>-*) and the bedrock-agentcore-* staging bucket below.
@@ -311,10 +316,19 @@ Resources:
                   - s3:DeleteObject
                 Resource: !Sub arn:aws:s3:::${EnvironmentName}-*/*
 
-              # Bedrock (models, guardrails, knowledge bases). Model and inference-profile
-              # ARNs span Regions and AWS-owned accounts, so this stays service-wide.
+              # Bedrock: models and inference profiles, and this account's guardrails and
+              # knowledge bases (the console steps edit the managed KB). Read calls take no ARN.
               - Effect: Allow
                 Action: bedrock:*
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:*
+              - Effect: Allow
+                Action:
+                  - bedrock:List*
+                  - bedrock:Get*
+                  - bedrock:PutUseCaseForModelAccess
+                  - bedrock:CreateFoundationModelAgreement
                 Resource: '*'
 
               # AWS Marketplace - Bedrock model subscription verification
@@ -349,7 +363,34 @@ Resources:
               # plus the Cube lab's semantic-layer-* role and the AgentCore starter
               # toolkit's AmazonBedrockAgentCoreSDK* roles. Nothing else is writable.
               - Effect: Allow
-                Action: iam:*
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRoleDescription
+                  - iam:PutRolePermissionsBoundary
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:CreatePolicy
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicy
+                  - iam:DeletePolicyVersion
+                  - iam:TagPolicy
+                  - iam:UntagPolicy
+                  - iam:SetDefaultPolicyVersion
+                  - iam:TagInstanceProfile
+                  - iam:UntagInstanceProfile
+                  - iam:CreateInstanceProfile
+                  - iam:DeleteInstanceProfile
+                  - iam:AddRoleToInstanceProfile
+                  - iam:RemoveRoleFromInstanceProfile
                 Resource:
                   - !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-*
                   - !Sub arn:aws:iam::${AWS::AccountId}:role/semantic-layer-*
@@ -357,17 +398,70 @@ Resources:
                   - !Sub arn:aws:iam::${AWS::AccountId}:role/service-role/AmazonBedrockAgentCoreSDK*
                   - !Sub arn:aws:iam::${AWS::AccountId}:policy/${EnvironmentName}-*
                   - !Sub arn:aws:iam::${AWS::AccountId}:instance-profile/${EnvironmentName}-*
+              # Roles are passed only to the services the lab stacks use.
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/semantic-layer-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/AmazonBedrockAgentCoreSDK*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/service-role/AmazonBedrockAgentCoreSDK*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - lambda.amazonaws.com
+                      - bedrock-agentcore.amazonaws.com
+                      - bedrock.amazonaws.com
+                      - glue.amazonaws.com
+                      - codebuild.amazonaws.com
+                      - states.amazonaws.com
+                      - events.amazonaws.com
+                      - amplify.amazonaws.com
+                      - apigateway.amazonaws.com
+              # Lab roles never get admin-level managed policies attached.
+              - Effect: Deny
+                Action: iam:AttachRolePolicy
+                Resource: '*'
+                Condition:
+                  ArnLike:
+                    iam:PolicyARN:
+                      - arn:aws:iam::aws:policy/AdministratorAccess
+                      - arn:aws:iam::aws:policy/PowerUserAccess
+                      - arn:aws:iam::aws:policy/IAMFullAccess
               - Effect: Allow
                 Action:
                   - iam:Get*
                   - iam:List*
-                  - iam:CreateServiceLinkedRole
                 Resource: '*'
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/*
 
               # EC2 - VPC endpoints, security groups, network interfaces for the
               # stacks participants deploy, in this Region only.
               - Effect: Allow
-                Action: ec2:*
+                Action:
+                  - ec2:Describe*
+                  - ec2:Get*
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ec2:CreateVpc
+                  - ec2:DeleteVpc
+                  - ec2:ModifyVpcAttribute
+                  - ec2:CreateSubnet
+                  - ec2:DeleteSubnet
+                  - ec2:ModifySubnetAttribute
+                  - ec2:AssociateRouteTable
+                  - ec2:DisassociateRouteTable
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:CreateVpcEndpoint
+                  - ec2:DeleteVpcEndpoints
+                  - ec2:ModifyVpcEndpoint
                 Resource: '*'
                 Condition:
                   StringEquals:
@@ -523,7 +617,16 @@ Resources:
               # X-Ray (for traces delivery configuration)
               - Effect: Allow
                 Action:
-                  - xray:*
+                  - xray:GetTraceSummaries
+                  - xray:BatchGetTraces
+                  - xray:GetTraceGraph
+                  - xray:GetServiceGraph
+                  - xray:GetTraceSegmentDestination
+                  - xray:UpdateTraceSegmentDestination
+                  - xray:GetIndexingRules
+                  - xray:UpdateIndexingRule
+                  - xray:ListResourcePolicies
+                  - xray:PutResourcePolicy
                 Resource: '*'
 
               # Step 11 schema change pipeline: `make deploy` creates the state machine and
