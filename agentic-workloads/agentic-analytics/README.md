@@ -31,9 +31,12 @@ Built with [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentc
 | **MCP Gateway** | Authenticated tool routing with Cedar policy enforcement |
 | **Prebaked SQL Toolset** | 27+ analytics tools backed by database Views |
 | **API Integration Toolset** | Write operations (e.g., create booking) with tenant-scoped inserts |
-| **Custom SQL Toolset** | Text-to-SQL with Glue schema + Bedrock KB RAG + human approval |
+| **Custom SQL Toolset** | Text-to-SQL with Glue schema (the whole schema when it is small, a table index the model picks from when it is large) + Bedrock KB RAG + human approval |
+| **BusinessContext connector** | Gateway target that queries the managed knowledge base directly (glossary, rules) |
+| **Web Search connector** | AgentCore Web Search as a gateway target for public context; social sites excluded at the gateway |
 | **Aurora PostgreSQL** | Multi-tenant data store with Row-Level Security |
 | **Bedrock Managed Knowledge Base** | Business context retrieval for custom SQL; Bedrock runs the vector store and embeddings |
+| **Schema change pipeline** | Step Functions run after every Glue crawl: diff the Postgres catalog, describe changes, wait for approval on breaking ones, refuse tenant tables without RLS, then update Glue descriptions and KB schema cards |
 | **Cognito** | Authentication with custom claims for tenant and role |
 | **CloudWatch + X-Ray** | End-to-end observability via GenAI Observability dashboard |
 
@@ -55,7 +58,9 @@ All tables have RLS policies that filter rows by `account_id`, so `SELECT * FROM
 The AgentCore Gateway uses a Cedar Policy Engine to control which tools each role can access:
 
 - **Default policy**: All authenticated users can access all read-only analytics tools
-- **Role restriction**: Only `admin` users can access write tools (e.g., `create_booking_tool`). Analysts are blocked at the gateway level — the tool is hidden from the agent entirely
+- **Role restrictions**: analysts cannot call `create_booking_tool`; staff cannot run custom SQL or web search. A forbidden tool is hidden from the agent entirely
+- **Guardrails in policy**: text-to-SQL questions that a Bedrock guardrail check scores as prompt injection, and web searches that carry a name, email or phone number, are refused at the gateway
+- **Booking-order rule**: `create_booking_tool` is refused unless the same conversation checked that unicorn's availability in the last 15 minutes (a temporal policy keyed on the policy session id the agent sends)
 
 When the policy engine is in **ENFORCE** mode, unauthorized tool calls are blocked before reaching the Lambda. In **LOG_ONLY** mode, decisions are logged but all calls are allowed (useful for testing).
 
@@ -72,10 +77,13 @@ This repository is designed as a deployable for **AWS Workshop Studio**. The wor
 | 4 | Prebaked SQL toolset (27+ analytics tools) |
 | 5 | API integration toolset (booking creation) |
 | 6 | Custom SQL with Glue + Bedrock KB RAG + human approval |
-| 7 | Multi-tenant isolation (Cedar + JWT → PostgreSQL RLS) |
+| 6b | Web Search connector (public context, no API key) |
+| 7 | Multi-tenant isolation (Cedar + JWT → PostgreSQL RLS), then guardrail checks and a booking-order rule in policy |
+| 7c | Front door: gateway + AWS WAF + per-user rate limit in front of an IAM-only runtime |
 | 8 | Guardrails (topic blocking, PII filtering) |
-| 9 | Observability (CloudWatch + X-Ray tracing) |
-| 10 | Evaluation (LLM-as-a-Judge with Strands Evals) |
+| 9 | Observability (CloudWatch traces, gateway logs, WAF metrics) |
+| 10 | Evaluation: on demand, and continuous online evaluation |
+| 11 | Schema changes: the pipeline that keeps Glue and the KB current, with approval for breaking changes |
 | Optional | Semantic layer with Cube Core |
 | Optional | Voice — talk to your data (Pipecat + WebRTC + KVS TURN, no 3rd-party SFU) |
 
