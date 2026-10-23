@@ -246,10 +246,27 @@ Resources:
                 Action: lambda:InvokeFunction
                 Resource:
                   - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${EnvironmentName}-*
+              # Gateway service-role actions: read its own config, call the policy
+              # engine, and call the AWS-owned Web Search tool.
               - Effect: Allow
                 Action:
-                  - bedrock-agentcore:*
-                Resource: '*'
+                  - bedrock-agentcore:GetGateway
+                  - bedrock-agentcore:InvokeGateway
+                  - bedrock-agentcore:GetConfigurationBundleVersion
+                Resource:
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:configuration-bundle/*
+              - Effect: Allow
+                Action:
+                  - bedrock-agentcore:GetPolicyEngine
+                  - bedrock-agentcore:AuthorizeAction
+                  - bedrock-agentcore:PartiallyAuthorizeActions
+                Resource:
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:policy-engine/*
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
+              - Effect: Allow
+                Action: bedrock-agentcore:InvokeWebSearch
+                Resource: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:aws:tool/web-search.v1
               # BusinessContext connector target (Step 6): validate and query the managed KB.
               - Effect: Allow
                 Action:
