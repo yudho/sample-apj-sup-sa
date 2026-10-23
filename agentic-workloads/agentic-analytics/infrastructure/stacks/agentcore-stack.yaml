@@ -130,7 +130,24 @@ Parameters:
     Type: String
     Default: AgenticAnalyticsMCPGateway
 
+  WafBodyRulesAction:
+    Type: String
+    Default: COUNT
+    AllowedValues: [COUNT, BLOCK]
+    Description: >-
+      What the front-door WAF does when the request-body rule groups (Common, SQL injection)
+      match. COUNT logs only; BLOCK rejects. Prompts are free text, so body rules start in COUNT
+      until the false-positive benchmark says BLOCK is safe. IP-reputation, known-bad-input
+      and per-IP rate rules always BLOCK.
+
+  FrontDoorRequestsPerMinute:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    Description: Requests per minute each signed-in user (JWT sub) may send through the front door.
+
 Conditions:
+  WafBodyRulesBlock: !Equals [!Ref WafBodyRulesAction, 'BLOCK']
   NeedsPsycopg2Layer: !Equals [!Ref Psycopg2LayerArn, '']
   NeedsPyJwtLayer: !Equals [!Ref PyJwtLayerArn, '']
   HasKnowledgeBase: !Not [!Equals [!Ref KnowledgeBaseId, '']]
@@ -1798,20 +1815,14 @@ Resources:
           ContainerUri: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-agent:latest
       NetworkConfiguration:
         NetworkMode: PUBLIC
-      # JWT-native inbound auth: callers (SPA + voice bot) present the signed-in
-      # user's Cognito ACCESS token as `Authorization: Bearer`. The runtime validates
-      # signature/issuer/client_id before invoking the agent — replacing IAM/SigV4.
-      # Cognito access tokens carry no 'aud', so we validate on client_id (AllowedClients),
-      # matching the Gateway authorizer above. The request-header allowlist passes the
-      # Authorization header through so the agent can read claims (context.request_headers).
-      AuthorizerConfiguration:
-        CustomJWTAuthorizer:
-          DiscoveryUrl: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPoolId}/.well-known/openid-configuration
-          AllowedClients:
-            - !Ref CognitoClientId
+      # IAM inbound auth (no AuthorizerConfiguration). Nobody calls the runtime directly:
+      # AgentRuntimeResourcePolicy lets only the front-door gateway's role invoke it.
+      # The front door validates the user's Cognito JWT and forwards it in the custom
+      # user-token header below, which the agent reads (context.request_headers) and
+      # passes on to the tools gateway, where the JWT is validated again.
       RequestHeaderConfiguration:
         RequestHeaderAllowlist:
-          - Authorization
+          - X-Amzn-Bedrock-AgentCore-Runtime-Custom-User-Token
       EnvironmentVariables:
         GATEWAY_URL: !GetAtt Gateway.GatewayUrl
         AWS_REGION: !Ref AWS::Region
@@ -1854,7 +1865,178 @@ Resources:
       Name: agentic_analytics_endpoint
       Description: Production endpoint for Agentic Analytics agent
 
+  #============================================================================
+  # Front door: AgentCore Gateway in front of the runtime, with AWS WAF
+  #
+  #   UI / voice bot --JWT--> FrontDoorGateway (Cognito JWT authorizer, WAF,
+  #   per-user rate limit) --SigV4 as FrontDoorGatewayRole--> AgentRuntime
+  #
+  # The runtime uses IAM auth and its resource policy denies every principal except
+  # the front door's role, so the WAF and rate limit cannot be bypassed by calling
+  # the runtime directly. The gateway has no ProtocolType: that makes it an HTTP
+  # gateway, which is the kind that can carry a runtime target (an MCP gateway cannot).
+  #============================================================================
+  FrontDoorGatewayRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-frontdoor-gateway-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
+      Policies:
+        - PolicyName: InvokeAgentRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource:
+                  - !GetAtt AgentRuntime.AgentRuntimeArn
+                  - !Sub ${AgentRuntime.AgentRuntimeArn}/*
+
+  FrontDoorGateway:
+    Type: AWS::BedrockAgentCore::Gateway
+    Properties:
+      Name: !Sub ${EnvironmentName}-frontdoor
+      Description: Public entry point to the agent runtime (JWT auth, WAF, per-user rate limit)
+      RoleArn: !GetAtt FrontDoorGatewayRole.Arn
+      AuthorizerType: CUSTOM_JWT
+      AuthorizerConfiguration:
+        CustomJWTAuthorizer:
+          DiscoveryUrl: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPoolId}/.well-known/openid-configuration
+          AllowedClients:
+            - !Ref CognitoClientId
+
+  AgentRuntimeResourcePolicy:
+    Type: AWS::BedrockAgentCore::ResourcePolicy
+    Properties:
+      ResourceArn: !GetAtt AgentRuntime.AgentRuntimeArn
+      Policy: !Sub |
+        {"Version": "2012-10-17", "Statement": [
+          {"Sid": "AllowFrontDoorGateway", "Effect": "Allow",
+           "Principal": {"AWS": "${FrontDoorGatewayRole.Arn}"},
+           "Action": "bedrock-agentcore:InvokeAgentRuntime",
+           "Resource": "${AgentRuntime.AgentRuntimeArn}"},
+          {"Sid": "DenyEveryoneElse", "Effect": "Deny",
+           "Principal": {"AWS": "*"},
+           "Action": "bedrock-agentcore:InvokeAgentRuntime",
+           "Resource": "${AgentRuntime.AgentRuntimeArn}",
+           "Condition": {"ArnNotEquals": {"aws:PrincipalArn": "${FrontDoorGatewayRole.Arn}"}}}]}
+
+  FrontDoorAgentTarget:
+    Type: AWS::BedrockAgentCore::GatewayTarget
+    DependsOn: AgentRuntimeResourcePolicy
+    Properties:
+      GatewayIdentifier: !GetAtt FrontDoorGateway.GatewayIdentifier
+      Name: agent
+      Description: The analytics agent runtime
+      TargetConfiguration:
+        Http:
+          AgentcoreRuntime:
+            Arn: !GetAtt AgentRuntime.AgentRuntimeArn
+            Qualifier: DEFAULT
+      CredentialProviderConfigurations:
+        - CredentialProviderType: GATEWAY_IAM_ROLE
+      # Forward the user's token and the app's session id. Without the session-id
+      # header the gateway would pick its own, and text and voice turns would stop
+      # sharing one memory thread.
+      MetadataConfiguration:
+        AllowedRequestHeaders:
+          - X-Amzn-Bedrock-AgentCore-Runtime-Custom-User-Token
+          - X-Amzn-Bedrock-AgentCore-Runtime-Session-Id
+
+  FrontDoorRateLimit:
+    Type: AWS::BedrockAgentCore::GatewayRateLimit
+    Properties:
+      GatewayIdentifier: !GetAtt FrontDoorGateway.GatewayIdentifier
+      Description: Requests per minute per signed-in user
+      DimensionKeys: ['$.context.jwt.sub']
+      Entries:
+        - Dimensions:
+            '$.context.jwt.sub': '*'
+          Requests:
+            - Rate: !Ref FrontDoorRequestsPerMinute
+              Period: minute
+
+  # The Gateway resource's own WebAclArn property is not applied by CloudFormation
+  # today, so the web ACL is attached with an explicit association.
+  FrontDoorWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${EnvironmentName}-frontdoor
+      Scope: REGIONAL
+      Description: Front-door protection for the agent runtime
+      DefaultAction:
+        Allow: {}
+      CustomResponseBodies:
+        Blocked:
+          ContentType: APPLICATION_JSON
+          Content: '{"success":false,"error":"Request blocked by WAF"}'
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${EnvironmentName}-frontdoor
+      Rules:
+        - Name: RatePerIp
+          Priority: 0
+          Action:
+            Block:
+              CustomResponse: {ResponseCode: 429, CustomResponseBodyKey: Blocked}
+          Statement:
+            RateBasedStatement:
+              Limit: 300
+              EvaluationWindowSec: 300
+              AggregateKeyType: IP
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: rate-per-ip}
+        - Name: IpReputation
+          Priority: 1
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesAmazonIpReputationList}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: ip-reputation}
+        - Name: KnownBadInputs
+          Priority: 2
+          OverrideAction: {None: {}}
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesKnownBadInputsRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: known-bad-inputs}
+        - Name: CommonRules
+          Priority: 3
+          OverrideAction: !If [WafBodyRulesBlock, {None: {}}, {Count: {}}]
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesCommonRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: common-rules}
+        - Name: SqlInjection
+          Priority: 4
+          OverrideAction: !If [WafBodyRulesBlock, {None: {}}, {Count: {}}]
+          Statement:
+            ManagedRuleGroupStatement: {VendorName: AWS, Name: AWSManagedRulesSQLiRuleSet}
+          VisibilityConfig: {SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: sql-injection}
+
+  FrontDoorWebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !GetAtt FrontDoorGateway.GatewayArn
+      WebACLArn: !GetAtt FrontDoorWebAcl.Arn
+
 Outputs:
+  FrontDoorUrl:
+    Description: Front-door gateway URL; the UI and voice bot POST to <FrontDoorUrl>/agent/invocations
+    Value: !GetAtt FrontDoorGateway.GatewayUrl
+
+  FrontDoorWebAclArn:
+    Description: WAF web ACL attached to the front door
+    Value: !GetAtt FrontDoorWebAcl.Arn
+
   DataFoundationLambdaArn:
     Description: DataFoundation Lambda ARN
     Value: !GetAtt DataFoundationLambda.Arn
