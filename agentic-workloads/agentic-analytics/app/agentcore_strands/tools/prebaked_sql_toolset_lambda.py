@@ -317,18 +317,21 @@ def get_customers(args, rls_context):
 def get_bookings(args, rls_context):
     start_date = args.get('start_date')
     end_date = args.get('end_date')
-    limit = args.get('limit', 100)
+    limit = min(int(args.get('limit', 100)), MAX_ROWS)
     with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         sql = """SELECT b.*, u.name as unicorn_name, c.first_name, c.last_name 
                  FROM bookings b 
                  JOIN unicorns u ON b.unicorn_id = u.unicorn_id 
                  JOIN customers c ON b.customer_id = c.customer_id WHERE 1=1"""
         params = []
+        # Both bounds are inclusive dates on the booking's start date, like the daily summary
+        # and calendar tools. Comparing end_datetime to a bare date meant midnight and dropped
+        # the whole end day, so a one-day range returned nothing.
         if start_date:
-            sql += " AND b.start_datetime >= %s"
+            sql += " AND b.start_datetime::date >= %s"
             params.append(start_date)
         if end_date:
-            sql += " AND b.end_datetime <= %s"
+            sql += " AND b.start_datetime::date <= %s"
             params.append(end_date)
         sql += " ORDER BY b.start_datetime DESC LIMIT %s"
         params.append(limit)

@@ -61,3 +61,13 @@ def test_row_list_limit_is_capped(monkeypatch):
     assert "GROUP BY" not in sql
     assert params[-1] == m.MAX_ROWS
     assert body["count"] == 0
+
+
+def test_get_bookings_one_day_range_is_inclusive(monkeypatch):
+    cur = FakeCursor([])
+    monkeypatch.setattr(m, "get_db_connection", lambda rls: FakeConn(cur))
+    m.get_bookings({"start_date": "2027-01-21", "end_date": "2027-01-21", "limit": 999}, {})
+    sql, params = cur.calls[0]
+    assert "start_datetime::date >= %s" in sql and "start_datetime::date <= %s" in sql
+    assert "end_datetime <=" not in sql
+    assert params == ["2027-01-21", "2027-01-21", m.MAX_ROWS]

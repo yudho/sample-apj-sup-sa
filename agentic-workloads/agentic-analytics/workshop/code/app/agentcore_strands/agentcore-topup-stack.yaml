@@ -487,7 +487,7 @@ Resources:
 #                       customer_type: { Type: string }
 #                       limit: { Type: integer }
 #                 - Name: get_bookings_tool
-#                   Description: Get bookings with date range
+#                   Description: Get booking rows whose start date is between start_date and end_date (YYYY-MM-DD, both inclusive; max 200 rows)
 #                   InputSchema:
 #                     Type: object
 #                     Properties:
