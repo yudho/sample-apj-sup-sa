@@ -118,7 +118,7 @@ make approve                      # Step 11: approve the run waiting at WaitForA
 # Each lab step = uncomment one fenced block (or flip one toggle) + `make deploy`.
 
 # UI (dev mode)
-cd app/ui && npm install && npm start    # Port 3001, PUBLIC_URL=/app
+cd app/ui && npm install && npm start    # Vite dev server on 127.0.0.1:3001, base /app/
 
 # Voice bot — laptop dev (Pipecat pipeline + local UI)
 cd app/voice && uv sync && uv run bot.py --transport daily

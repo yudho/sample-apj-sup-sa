@@ -73,22 +73,19 @@ npm install
 npm start
 ```
 
-Expected output:
+The UI is built with :link[Vite]{href="https://vite.dev/"}. Expected output:
 
 ```
-Compiled successfully!
+  VITE v8.3.5  ready in 300 ms
 
-You can now view the app in the browser.
-  Local:            http://localhost:3001
+  ➜  Local:   http://127.0.0.1:3001/app/
 ```
 
-Wait a moment: the `npm start` above should open a new browser tab with the UI. Check whether your browser is prompting you to allow a pop-up.
-
-Alternatively, open a new browser tab and navigate to your Code Editor URL, replacing the path with `/app`:
+Leave this terminal running. The dev server reloads the page when you edit a file under `src/`.
 
 ### Step 3.3: Access the UI
 
-The UI should be visible in a new tab now. The URL looks like the following.
+Open a new browser tab at your Code Editor URL, with the path replaced by `/app`:
 
 ```
 https://<your-cloudfront-domain>/app
@@ -96,7 +93,7 @@ https://<your-cloudfront-domain>/app
 
 For example it will be https://xxxxxxxxxxxxxx.cloudfront.net/app
 
-::alert[The `/app` path is pre-configured in the Code Editor's Nginx proxy to forward requests to the React dev server on port 3001. No port forwarding setup is needed.]{type="info"}
+::alert[The `/app` path is pre-configured in the Code Editor's Nginx proxy to forward requests to the Vite dev server on port 3001. No port forwarding setup is needed.]{type="info"}
 
 ::alert[**Login callback is pre-registered for you.** Your CloudFront `/app` URL was automatically added to the Cognito app client's allowed callback/logout list when the environment was provisioned (along with `http://localhost:3001/app` for local dev), so Login just works. The redirect the app sends is `window.location.origin + /app`. *If* you ever reach the UI by some other host/path and see `redirect_mismatch`, add that exact `…/app` URL under the user pool client's **Allowed callback URLs** (Cognito console → User pool → App client → Hosted UI). In the standard workshop flow you won't need to.]{type="info"}
 
@@ -131,7 +128,7 @@ The agent should respond conversationally, describing its capabilities. It won't
 
 ## Verification
 
-- `npm start` compiles without errors
+- `npm start` prints `VITE ... ready` with no errors
 - The chat UI loads at `https://<cloudfront-domain>/app`
 - You can type a message and receive a streaming response
 - The agent responds conversationally (no data queries yet: tools come in Step 4)
@@ -148,7 +145,7 @@ The agent should respond conversationally, describing its capabilities. It won't
 **`/app` shows 502 Bad Gateway**
 - The React dev server may not be running. Run `npm start` in the `app/ui` directory.
 
-::alert[Always use `npm start` to start the UI server: never call `react-scripts start` directly. The `package.json` has `PORT=3001` and `PUBLIC_URL=/app` baked into the start script. Calling `react-scripts` directly skips these, causing assets to load from wrong paths (blank page).]{type="warning"}
+::alert[Start the UI with `npm start` from `app/ui`. It reads `vite.config.js`, which sets port 3001 and the `/app` base path the Nginx proxy expects. Assets load from the wrong path (blank page) if the server runs on another port or base.]{type="warning"}
 
 **Responses are empty or the agent doesn't respond**
 - Check the browser console (F12 → Console) for errors.
