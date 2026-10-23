@@ -79,6 +79,8 @@ echo "  topup: custom_sql_toolset (CustomSqlLambdaKey)"
 zip -j "$ASSETS_DIR/lambdas/custom_sql_toolset.zip" custom_sql_toolset_lambda.py > /dev/null
 echo "  topup: gateway_interceptor (InterceptorLambdaKey)"
 zip -j "$ASSETS_DIR/lambdas/gateway_interceptor.zip" "$PROJECT_ROOT/app/agentcore_strands/infra/interceptor_lambda.py" > /dev/null
+echo "  topup: schema_sync (Step 11 schema change pipeline)"
+zip -j "$ASSETS_DIR/lambdas/schema_sync.zip" "$PROJECT_ROOT/app/schema_sync/schema_sync_lambda.py" "$PROJECT_ROOT/app/schema_sync/schema_diff.py" > /dev/null
 
 # psycopg2 layer for the SQL Lambdas (NeedsPsycopg2Layer self-create path expects
 # layers/psycopg2-py312.zip). Build a python3.12 manylinux wheel layer.

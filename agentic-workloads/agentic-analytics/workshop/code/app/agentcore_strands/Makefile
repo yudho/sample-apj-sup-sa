@@ -114,7 +114,7 @@ stage-assets:
 	  { echo "==> creating deploy bucket $(CFN_BUCKET)"; aws s3 mb s3://$(CFN_BUCKET) --region $(REGION); }
 	@echo "==> staging pre-baked assets into s3://$(CFN_BUCKET)/ (from the event assets bucket)"
 	@for k in lambda/datafoundation_lambda.zip lambdas/gateway_interceptor.zip \
-	          lambdas/api_integration_toolset.zip lambdas/custom_sql_toolset.zip \
+	          lambdas/api_integration_toolset.zip lambdas/custom_sql_toolset.zip lambdas/schema_sync.zip \
 	          layers/psycopg2-py312.zip layers/pyjwt-py312.zip agent/agent_code.zip; do \
 	  aws s3 cp "s3://$(ARTIFACTS_BUCKET)/$(ARTIFACTS_PREFIX)$$k" "s3://$(CFN_BUCKET)/$$k" --region $(REGION) >/dev/null 2>&1 \
 	    && echo "    staged $$k" || echo "    [skip] $$k not in assets (ok if unused)"; \
