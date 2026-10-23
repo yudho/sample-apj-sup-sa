@@ -5,6 +5,7 @@ Includes execute_sql_tool for human-in-the-loop approval workflow.
 """
 
 import json
+import re
 import os
 import boto3
 import psycopg2
@@ -215,8 +216,9 @@ def get_schema_context(args, rls_context):
     glue_prefix = f"{GLUE_DATABASE}_public_"
 
     try:
-        response = glue_client.get_tables(DatabaseName=GLUE_DATABASE)
-        all_tables = response.get('TableList', [])
+        all_tables = []
+        for page in glue_client.get_paginator('get_tables').paginate(DatabaseName=GLUE_DATABASE):
+            all_tables.extend(page.get('TableList', []))
 
         result = {}
         for table in all_tables:
@@ -306,40 +308,138 @@ QUERY GUIDELINES:
     }
 
 
+# ---------------------------------------------------------------------------
+# Read-only SQL guard
+#
+# The database is the real enforcement point: every query runs inside a
+# READ ONLY transaction with a statement timeout, so INSERT/UPDATE/DELETE/DDL
+# (including data-modifying CTEs) fail in PostgreSQL itself. The checks below
+# close the gaps a read-only transaction leaves open:
+#   - exactly one statement, so "SELECT 1; COMMIT; DROP ..." cannot end the
+#     read-only transaction and run something after it;
+#   - it starts with SELECT or WITH;
+#   - no call to functions that change session state or touch the server,
+#     above all set_config(), which could rewrite the RLS session variables
+#     (app.current_account_id) from inside a SELECT and read another tenant.
+# String literals, quoted identifiers and comments are blanked before the
+# keyword checks, so a column like "updated_at" or a literal 'DROP' is fine.
+# ---------------------------------------------------------------------------
+SQL_STATEMENT_TIMEOUT_MS = int(os.environ.get('SQL_STATEMENT_TIMEOUT_MS', '15000'))
+MAX_RESULT_ROWS = 100
+_BLOCKED_FUNCTIONS = (
+    'set_config', 'pg_read_file', 'pg_read_binary_file', 'pg_ls_dir', 'pg_stat_file',
+    'lo_import', 'lo_export', 'lo_get', 'lo_put', 'dblink', 'dblink_exec',
+    'pg_terminate_backend', 'pg_cancel_backend', 'pg_reload_conf', 'pg_sleep',
+    'pg_advisory_lock', 'pg_advisory_xact_lock', 'query_to_xml', 'query_to_json',
+)
+_IDENT_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_$]*')
+
+
+def _mask_sql(sql):
+    """Return (masked_sql, quoted_identifiers): literals and comments become spaces."""
+    out, idents, i, n = [], [], 0, len(sql)
+    while i < n:
+        c = sql[i]
+        if c == '-' and sql.startswith('--', i):
+            j = sql.find('\n', i)
+            j = n if j == -1 else j
+            out.append(' ' * (j - i)); i = j
+        elif c == '/' and sql.startswith('/*', i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if sql.startswith('/*', j):
+                    depth += 1; j += 2
+                elif sql.startswith('*/', j):
+                    depth -= 1; j += 2
+                else:
+                    j += 1
+            if depth:
+                raise ValueError('Unterminated comment')
+            out.append(' ' * (j - i)); i = j
+        elif c in ("'", '"'):
+            j = i + 1
+            while True:
+                k = sql.find(c, j)
+                if k == -1:
+                    raise ValueError('Unterminated quoted string or identifier')
+                if k + 1 < n and sql[k + 1] == c:  # doubled quote = escaped quote
+                    j = k + 2
+                    continue
+                break
+            if c == '"':
+                idents.append(sql[i + 1:k].replace('""', '"'))
+            out.append(' ' * (k + 1 - i)); i = k + 1
+        elif c == '$':
+            m = re.match(r'\$([A-Za-z_][A-Za-z0-9_]*)?\$', sql[i:])
+            if m:
+                tag = m.group(0)
+                k = sql.find(tag, i + len(tag))
+                if k == -1:
+                    raise ValueError('Unterminated dollar-quoted string')
+                out.append(' ' * (k + len(tag) - i)); i = k + len(tag)
+            else:
+                out.append(c); i += 1
+        else:
+            out.append(c); i += 1
+    return ''.join(out), idents
+
+
+def validate_readonly_sql(sql):
+    """Return an error message if the SQL is not a single read-only query, else None."""
+    if not sql or not sql.strip():
+        return 'sql is required'
+    try:
+        masked, quoted = _mask_sql(sql)
+    except ValueError as e:
+        return str(e)
+    body = masked.strip()
+    if body.endswith(';'):
+        body = body[:-1].rstrip()
+    if ';' in body:
+        return 'Only one SQL statement is allowed'
+    words = [w.lower() for w in _IDENT_RE.findall(body)]
+    if not words or words[0] not in ('select', 'with'):
+        return 'Only SELECT queries (optionally starting with WITH) are allowed'
+    names = set(words) | {q.lower() for q in quoted}
+    for fn in _BLOCKED_FUNCTIONS:
+        if fn in names:
+            return f'Function not allowed in queries: {fn}'
+    return None
+
+
 def execute_sql(args, rls_context):
-    """Execute approved SQL query against the database"""
+    """Execute an approved read-only SQL query against the database."""
     sql = args.get('sql', '')
-    
-    if not sql:
-        return {'statusCode': 400, 'body': json.dumps({'error': 'sql is required'})}
-    
-    # Security: Only allow SELECT statements
-    sql_upper = sql.strip().upper()
-    if not sql_upper.startswith('SELECT'):
-        return {'statusCode': 400, 'body': json.dumps({'error': 'Only SELECT queries are allowed'})}
-    
-    # Security: Block dangerous patterns
-    dangerous = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'ALTER', 'TRUNCATE', 'GRANT', 'REVOKE', ';--']
-    for pattern in dangerous:
-        if pattern in sql_upper:
-            return {'statusCode': 400, 'body': json.dumps({'error': f'Forbidden SQL pattern: {pattern}'})}
-    
+    error = validate_readonly_sql(sql)
+    if error:
+        return {'statusCode': 400, 'body': json.dumps({'success': False, 'error': error})}
+
+    conn = None
     try:
         conn = get_db_connection(rls_context)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Scope both settings to this transaction only.
+            cur.execute("SET TRANSACTION READ ONLY")
+            cur.execute("SET LOCAL statement_timeout = %s", [SQL_STATEMENT_TIMEOUT_MS])
             cur.execute(sql)
-            rows = cur.fetchall()
+            rows = cur.fetchmany(MAX_RESULT_ROWS + 1) if cur.description else []
             columns = [desc[0] for desc in cur.description] if cur.description else []
-        conn.close()
-        
+        conn.rollback()
+        truncated = len(rows) > MAX_RESULT_ROWS
+        rows = rows[:MAX_RESULT_ROWS]
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'success': True,
                 'columns': columns,
                 'row_count': len(rows),
-                'data': rows[:100]  # Limit to 100 rows
+                'truncated': truncated,
+                'data': rows,
             }, default=json_serializer)
         }
     except Exception as e:
-        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
+        print(f"execute_sql failed: {type(e).__name__}: {e}")
+        return {'statusCode': 500, 'body': json.dumps({'success': False, 'error': str(e)})}
+    finally:
+        if conn is not None:
+            conn.close()
