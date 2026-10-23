@@ -63,16 +63,24 @@ def test_invoke_returns_spoken_text():
     region = os.environ["AWS_REGION"]
     arn = os.environ["AWS_AGENT_ARN"]
     qualifier = os.getenv("AWS_AGENT_QUALIFIER", "agentic_analytics_endpoint")
-    invoke_url = (
-        f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/"
-        f"{quote(arn, safe='')}/invocations?qualifier={quote(qualifier, safe='')}"
-    )
+    # Behind the front door (demo stack) the runtime is IAM-only: call the gateway's
+    # runtime target and pass the user token in the custom header too.
+    front_door = (os.getenv("AWS_AGENT_FRONTDOOR_URL") or "").rstrip("/")
+    if front_door:
+        invoke_url = f"{front_door}/agent/invocations"
+    else:
+        invoke_url = (
+            f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/"
+            f"{quote(arn, safe='')}/invocations?qualifier={quote(qualifier, safe='')}"
+        )
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
         "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": "itest-" + "p" * 33,
     }
+    if front_door:
+        headers["X-Amzn-Bedrock-AgentCore-Runtime-Custom-User-Token"] = token
     payload = {"prompt": VOICE_PROMPT, "mode": "voice"}
     req = urllib.request.Request(
         invoke_url, data=json.dumps(payload).encode(), headers=headers, method="POST"
