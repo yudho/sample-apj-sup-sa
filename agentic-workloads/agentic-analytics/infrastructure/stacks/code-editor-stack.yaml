@@ -317,9 +317,25 @@ Resources:
                 Action: lambda:*
                 Resource: '*'
 
-              # IAM - Full access for creating roles/policies
+              # IAM - participants' stacks create their own roles. Every role the
+              # workshop creates is named ${EnvironmentName}-* (CloudFormation
+              # auto-names start with the stack name, which also starts with it),
+              # plus the Cube lab's semantic-layer-* role and the AgentCore starter
+              # toolkit's AmazonBedrockAgentCoreSDK* roles. Nothing else is writable.
               - Effect: Allow
                 Action: iam:*
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/semantic-layer-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/AmazonBedrockAgentCoreSDK*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/service-role/AmazonBedrockAgentCoreSDK*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:policy/${EnvironmentName}-*
+                  - !Sub arn:aws:iam::${AWS::AccountId}:instance-profile/${EnvironmentName}-*
+              - Effect: Allow
+                Action:
+                  - iam:Get*
+                  - iam:List*
+                  - iam:CreateServiceLinkedRole
                 Resource: '*'
 
               # EC2 - VPC endpoints, security groups, network interfaces
