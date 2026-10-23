@@ -28,10 +28,5 @@ global_settings:
       path: app/voice/pcc-deploy.toml
       reason: secret_set is the name of a Pipecat Cloud secret set; the keys live in that service.
     - rule_id: SECRET-SECRET-KEYWORD
-      path: dev/evaluation/run_evaluation.py
-      reason: >-
-        Unicorn123! is the published password of the synthetic demo users created by the
-        stack (see README test users). It protects no real data.
-    - rule_id: SECRET-SECRET-KEYWORD
       path: specs/research/pipecat-cloud-deploy-and-ui-integration.md
       reason: Research note showing a placeholder variable name, no value.

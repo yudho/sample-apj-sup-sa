@@ -164,7 +164,9 @@ cd infrastructure/scripts && bash package_for_workshop.sh
 - **GitHub** (this sample lives under): `aws-samples/sample-apj-sup-sa` → `agentic-workloads/agentic-analytics/`
 - **Workshop Studio**: published from the `workshop/` directory (see `workshop/contentspec.yaml`)
 
-## Test Users (password: Unicorn123!)
+## Test Users
+
+All demo users share one password, generated at deploy time and stored in the SecureString parameter `/<env>/demo/users`. Workshop: `make users`. Demo: printed at the end of `deploy_backend.sh`.
 
 | User | Role | Tenant |
 |------|------|--------|

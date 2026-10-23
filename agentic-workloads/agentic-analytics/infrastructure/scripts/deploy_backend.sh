@@ -561,6 +561,9 @@ cat <<EOF
   Agent ARN     : ${AGENT_ARN}
   Cognito pool  : ${COGNITO_USER_POOL_ID}  (client ${COGNITO_CLIENT_ID})
   Demo user     : ${DEMO_USERNAME}  (${DEMO_ROLE}, laptop-dev fallback)
+  Demo password : ${DEMO_PASSWORD}  (shared by all demo users; generated at deploy)
+  All users     : aws ssm get-parameter --name /${ENV_NAME}/demo/users --with-decryption \
+                    --region ${REGION} --query Parameter.Value --output text | jq .
   Amplify UI    : ${AMPLIFY_URL}   (text chat + voice)
 
   Run the voice bot (option 1 — Pipecat Playground):
