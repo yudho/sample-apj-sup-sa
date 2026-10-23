@@ -12,6 +12,7 @@
 #                     don't redeploy via `make deploy`)
 #    make outputs  - print the stack outputs (Gateway URL, Runtime ARN, ...)
 #    make status   - show the stack's current status
+#    make users    - list the demo users with their role and password
 #    make help     - this message
 #
 #  Everything reads config.env (seeded for you on the Code Editor). Override on
@@ -81,7 +82,7 @@ ifeq ($(strip $(REGION)),)
   $(error AWS_REGION not found in config.env — run from app/agentcore_strands/ where config.env lives)
 endif
 
-.PHONY: help deploy build outputs status voice-deploy schema-sync approve reject
+.PHONY: help deploy build outputs status users voice-deploy schema-sync approve reject
 
 help:
 	@sed -n '2,18p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
@@ -131,6 +132,12 @@ outputs:
 status:
 	@aws cloudformation describe-stacks --stack-name $(STACK) --region $(REGION) \
 	  --query 'Stacks[0].StackStatus' --output text
+
+# The demo users share one password, generated when your environment was created.
+users:
+	@aws ssm get-parameter --name /$(ENV_NAME)/demo/users --with-decryption --region $(REGION) \
+	  --query Parameter.Value --output text \
+	  | jq -r '["EMAIL","ROLE","PASSWORD"], (.[] | [.email, .role, .password]) | @tsv' | column -t
 
 # ---- Step 11: schema change pipeline ----------------------------------------
 # `make schema-sync` starts a run by hand (the Glue crawler also starts one when it
