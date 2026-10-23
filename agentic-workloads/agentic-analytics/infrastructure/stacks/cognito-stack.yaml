@@ -316,7 +316,7 @@ Resources:
                               MessageAction='SUPPRESS'
                           )
                           cognito.admin_set_user_password(UserPoolId=pool_id, Username=email, Password=password, Permanent=True)
-                          print(f"Created user: {email}")
+                          print(f"Created user ({role})")
                       except cognito.exceptions.UsernameExistsException:
                           cognito.admin_update_user_attributes(
                               UserPoolId=pool_id,
@@ -327,7 +327,7 @@ Resources:
                               ]
                           )
                           cognito.admin_set_user_password(UserPoolId=pool_id, Username=email, Password=password, Permanent=True)
-                          print(f"Updated user: {email}")
+                          print(f"Updated user ({role})")
                       
                       users.append({'email': email, 'password': password, 'role': role, 'account_id': account_id, 'display_name': display_name})
                   

@@ -728,7 +728,7 @@ Resources:
           CLAUDEEOF
 
           # Python venv setup
-          sudo -u "$CODE_EDITOR_USER" python3.11 -m pip install --user --upgrade pip
+          sudo -u "$CODE_EDITOR_USER" python3.11 -m pip install --user pip==26.2.2
           cd "$HOME_FOLDER/agentic-analytics/app/agentcore_strands"
           sudo -u "$CODE_EDITOR_USER" python3.11 -m venv "$HOME_FOLDER/.venv"
           sudo -u "$CODE_EDITOR_USER" "$HOME_FOLDER/.venv/bin/pip" install -r requirements.txt || true

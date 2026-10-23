@@ -176,7 +176,7 @@ def lambda_handler(event, context):
                 'role': claims.get('custom:role'),
                 'sub': claims.get('sub')
             }
-            print(f"User: {user_info['username']}, Role: {user_info['role']}")
+            print(f"Role: {user_info['role']}")
     
     if not auth_header:
         print("No Authorization header in request")
