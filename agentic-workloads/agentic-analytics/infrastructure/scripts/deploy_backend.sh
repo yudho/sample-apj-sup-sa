@@ -478,7 +478,7 @@ AGENT_ARN="arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_I
 FRONTDOOR_URL="$(get_out FrontDoorUrl)"
 
 # Demo user creds live in SSM (seeded by the Cognito stack). Pick by role.
-USERS_JSON="$(aws ssm get-parameter --region "$REGION" --name "/agentic-analytics/demo/users" \
+USERS_JSON="$(aws ssm get-parameter --region "$REGION" --name "/${ENV_NAME}/demo/users" \
   --with-decryption --query "Parameter.Value" --output text)"
 DEMO_USERNAME="$(echo "$USERS_JSON" | jq -r --arg r "$DEMO_ROLE" 'map(select(.role==$r)) | .[0].email // empty')"
 DEMO_PASSWORD="$(echo "$USERS_JSON" | jq -r --arg r "$DEMO_ROLE" 'map(select(.role==$r)) | .[0].password // empty')"

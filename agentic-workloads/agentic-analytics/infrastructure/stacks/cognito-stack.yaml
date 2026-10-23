@@ -332,7 +332,7 @@ Resources:
       UserPoolId: !Ref UserPool
       ArtifactsBucket: !Ref ArtifactsBucket
       UsersCSVKey: !Ref UsersCSVKey
-      SSMParameterName: /agentic-analytics/demo/users
+      SSMParameterName: !Sub /${EnvironmentName}/demo/users
 
   #============================================================================
   # Identity Pool for Demo Mode (unauth SSM access)
@@ -396,7 +396,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: ssm:GetParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agentic-analytics/demo/*
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/demo/*
         - PolicyName: AgentCoreInvoke
           PolicyDocument:
             Version: '2012-10-17'
