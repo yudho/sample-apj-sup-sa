@@ -130,6 +130,16 @@ Parameters:
     Type: String
     Default: AgenticAnalyticsMCPGateway
 
+  EnablePolicyGuardrails:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      Add Cedar policies that call Bedrock guardrail checks at the tools gateway: block
+      prompt-injection attempts in custom SQL questions, and block web searches that contain
+      personal data. Guardrails in policies are available in us-east-1, us-east-2, us-west-2,
+      ap-southeast-2, ap-northeast-1, eu-west-2 and eu-north-1; set 'false' elsewhere.
+
   WafBodyRulesAction:
     Type: String
     Default: COUNT
@@ -148,6 +158,7 @@ Parameters:
 
 Conditions:
   WafBodyRulesBlock: !Equals [!Ref WafBodyRulesAction, 'BLOCK']
+  PolicyGuardrailsEnabled: !Equals [!Ref EnablePolicyGuardrails, 'true']
   NeedsPsycopg2Layer: !Equals [!Ref Psycopg2LayerArn, '']
   NeedsPyJwtLayer: !Equals [!Ref PyJwtLayerArn, '']
   HasKnowledgeBase: !Not [!Equals [!Ref KnowledgeBaseId, '']]
@@ -623,6 +634,14 @@ Resources:
                 Action:
                   - bedrock-agentcore:*
                 Resource: '*'
+              # Guardrail conditions in Cedar policies: the policy engine calls Bedrock
+              # guardrail checks with this role's credentials.
+              - !If
+                - PolicyGuardrailsEnabled
+                - Effect: Allow
+                  Action: bedrock:InvokeGuardrailChecks
+                  Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*
+                - !Ref AWS::NoValue
 
   #============================================================================
   # AgentCore Gateway (native CFN)
@@ -1044,6 +1063,61 @@ Resources:
             when {
               principal.hasTag("custom:role") &&
               principal.getTag("custom:role") == "analyst"
+            };
+
+  # Guardrails in policy: the gateway screens tool inputs with Bedrock guardrail
+  # checks before the tool runs. forbid subtracts from the base permit above.
+  # Scores are discrete (0, 0.2, ... 1.0); 0.4 is the documented default for
+  # prompt-attack detection.
+  ForbidCustomSqlPromptAttackPolicy:
+    Type: AWS::BedrockAgentCore::Policy
+    Condition: PolicyGuardrailsEnabled
+    DependsOn:
+      - AllowAllToolsPolicy
+      - CustomSqlTarget
+    Properties:
+      Name: forbid_text2sql_prompt_attack
+      PolicyEngineId: !GetAtt PolicyEngine.PolicyEngineId
+      ValidationMode: IGNORE_ALL_FINDINGS
+      Description: Block text-to-SQL questions that look like prompt injection or jailbreak attempts
+      Definition:
+        Cedar:
+          Statement: !Sub |
+            forbid(
+              principal is AgentCore::OAuthUser,
+              action == AgentCore::Action::"CustomSQL___text_to_sql_tool",
+              resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
+            )
+            when guardrails {
+              BedrockGuardrails::PromptAttack(["PROMPT_INJECTION", "JAILBREAK"], [context.input.question])
+                .maxConfidenceScore()
+                .greaterThan(decimal("0.4"))
+            };
+
+  # Keep personal data out of the public web: a search query that names a person or
+  # carries an email, phone number or address is refused at the gateway.
+  ForbidWebSearchPersonalDataPolicy:
+    Type: AWS::BedrockAgentCore::Policy
+    Condition: PolicyGuardrailsEnabled
+    DependsOn:
+      - AllowAllToolsPolicy
+      - WebSearchTarget
+    Properties:
+      Name: forbid_websearch_personal_data
+      PolicyEngineId: !GetAtt PolicyEngine.PolicyEngineId
+      ValidationMode: IGNORE_ALL_FINDINGS
+      Description: Block web searches whose query contains personal data
+      Definition:
+        Cedar:
+          Statement: !Sub |
+            forbid(
+              principal is AgentCore::OAuthUser,
+              action == AgentCore::Action::"WebSearch___WebSearch",
+              resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
+            )
+            when guardrails {
+              BedrockGuardrails::SensitiveInformation(["NAME", "EMAIL", "PHONE", "ADDRESS"], [context.input.query])
+                .count() > 0
             };
 
   # Staff run day-to-day bookings; web research is for analysts and admins.
