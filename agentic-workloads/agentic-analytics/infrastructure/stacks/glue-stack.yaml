@@ -194,11 +194,6 @@ Resources:
   GlueDriverBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
-    Metadata:
-      checkov:
-        skip:
-          - id: CKV_AWS_21
-            comment: Generated content that the stack rewrites; old versions are not kept.
     Properties:
       BucketName: !Sub ${EnvironmentName}-glue-drivers-${AWS::AccountId}
       BucketEncryption:
@@ -212,6 +207,14 @@ Resources:
         RestrictPublicBuckets: true
       LoggingConfiguration:
         LogFilePrefix: !Sub ${EnvironmentName}-glue-drivers-logs/
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
 
   GlueDriverBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -229,7 +232,7 @@ Resources:
               - !Sub arn:aws:s3:::${GlueDriverBucket}/*
             Condition:
               Bool:
-                aws:SecureTransport: 'false'
+                aws:SecureTransport: false
 
   EmptyGlueDriverBucketRole:
     Type: AWS::IAM::Role
