@@ -181,7 +181,7 @@ The `execute_sql_tool` enforces:
 
 You deployed the Custom SQL toolset — the third integration pattern. The agent combines full schema from Glue with business context from RAG to generate SQL, then asks for human approval before executing. The business-context.md document is the key to reducing hallucination — it provides the "why" behind the schema that the LLM needs to generate correct queries.
 
-Next, you'll add role-based access control → [Step 7: Agent Access Policy](../../03-security-multitenancy-governance/07-agent-access-policy/)
+Next, you'll give the agent public web context → [Step 6b: Web Search](../06b-web-search/)
 
 ## Reference Materials
 
