@@ -364,8 +364,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                  - bedrock:Retrieve
-                Resource: '*'
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+              - Effect: Allow
+                Action: bedrock:Retrieve
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
 
   DataFoundationLambda:
     Type: AWS::Lambda::Function
@@ -813,9 +817,13 @@ Resources:
                 Resource: '*'
               - Effect: Allow
                 Action:
-                  - bedrock:Retrieve
                   - bedrock:InvokeModel
-                Resource: '*'
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+              - Effect: Allow
+                Action: bedrock:Retrieve
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
 
   CustomSqlLambda:
     Type: AWS::Lambda::Function
@@ -1587,8 +1595,12 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
-                  - bedrock:ApplyGuardrail
-                Resource: '*'
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+              - Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*
               - Effect: Allow
                 Action:
                   - bedrock-agentcore:CreateEvent
