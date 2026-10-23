@@ -42,7 +42,7 @@ make deploy
 ```
 
 ::::expand{header="💡 Not sure you uncommented it cleanly? Click to see the whole Step-4 block"}
-The fenced block, once uncommented, defines `DataFoundationLambdaRole`, `DataFoundationLambda`, `DataFoundationLambdaPermission`, the conditional `Psycopg2Layer`, and the `DataToolsTarget` Gateway target. If `make deploy` errors with a YAML/indentation complaint, the safest fix is to copy the exact block from the workshop solution or re-clone the file: every line in the block is indented two spaces under `Resources:`.
+The fenced block, once uncommented, defines `DataFoundationLambdaRole`, `DataFoundationLambda`, `DataFoundationLambdaPermission`, the conditional `Psycopg2Layer`, and the `DataToolsTarget` Gateway target. If `make deploy` errors with a YAML/indentation complaint, the quickest fix is to copy the exact block from the workshop solution or re-clone the file: every line in the block is indented two spaces under `Resources:`.
 ::::
 
 `make deploy` updates the stack in a couple of minutes. When it finishes, the Gateway has a new target named `PrebakedSQL` with 20+ tools.

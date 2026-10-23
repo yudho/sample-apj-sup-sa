@@ -57,7 +57,7 @@ Their staff and analysts need answers: *"Who are my top 3 customers this month"*
 
 | Lab | What You Build | Why It Matters |
 |------|---------------|---------------|
-| Semantic Layer (Cube Core) | A structured ad-hoc analytics layer | Queries limited to predefined measures and dimensions: more room than Prebaked SQL, fewer ways to go wrong than free-form SQL |
+| Semantic Layer (Cube Core) | A structured ad-hoc analytics layer | Questions map to the measures and dimensions you define in Cube models: wider than the Prebaked SQL tools, narrower than free-form SQL |
 | Voice | A spoken interface to the same agent | Hands-free analytics over WebRTC, reusing your secured agent |
 
 ## Target Audience
