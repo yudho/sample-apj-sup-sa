@@ -201,7 +201,7 @@ Resources:
                 Action:
                   - ssm:PutParameter
                   - ssm:DeleteParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agentic-analytics/*
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/demo/*
               - Effect: Allow
                 Action:
                   - kms:Encrypt
@@ -254,7 +254,7 @@ Resources:
               if event['RequestType'] == 'Delete':
                   try:
                       ssm = boto3.client('ssm')
-                      ssm.delete_parameter(Name=props.get('SSMParameterName', '/agentic-analytics/demo/users'))
+                      ssm.delete_parameter(Name=props['SSMParameterName'])
                   except: pass
                   send_response(event, context, 'SUCCESS')
                   return
@@ -267,7 +267,7 @@ Resources:
                   pool_id = props['UserPoolId']
                   bucket = props['ArtifactsBucket']
                   csv_key = props.get('UsersCSVKey', 'data/users.csv')
-                  ssm_param = props.get('SSMParameterName', '/agentic-analytics/demo/users')
+                  ssm_param = props['SSMParameterName']
                   
                   # Download CSV
                   response = s3.get_object(Bucket=bucket, Key=csv_key)
