@@ -427,15 +427,10 @@ def check_db_status(args, rls_context):
 def get_daily_bookings_summary(args, rls_context):
     # group_by='day' returns one aggregate row per start date, so a month fits in ~31 rows
     # instead of hundreds of booking rows that the response cap would truncate.
-    start_date = args.get('start_date')
-    end_date = args.get('end_date')
-    where, params = " WHERE 1=1", []
-    if start_date:
-        where += " AND start_datetime::date >= %s"
-        params.append(start_date)
-    if end_date:
-        where += " AND start_datetime::date <= %s"
-        params.append(end_date)
+    start_date = args.get('start_date') or None
+    end_date = args.get('end_date') or None
+    # Constant SQL; optional bounds are NULL-tolerant parameters, not string-built clauses.
+    params = [start_date, start_date, end_date, end_date]
     with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         if args.get('group_by') == 'day':
             cur.execute("SELECT start_datetime::date AS day, COUNT(*) AS bookings, "
@@ -443,13 +438,18 @@ def get_daily_bookings_summary(args, rls_context):
                         "COUNT(DISTINCT customer_name) AS customers, "
                         "COUNT(DISTINCT unicorn_name) AS unicorns, "
                         "ROUND(SUM(duration_hours), 1) AS rental_hours "
-                        "FROM daily_bookings_summary" + where + " GROUP BY 1 ORDER BY 1", params)
+                        "FROM daily_bookings_summary "
+                        "WHERE (%s::date IS NULL OR start_datetime::date >= %s::date) "
+                        "AND (%s::date IS NULL OR start_datetime::date <= %s::date) "
+                        "GROUP BY 1 ORDER BY 1", params)
             data = cur.fetchall()
             return success_response({'success': True, 'days': len(data), 'total_bookings': sum(r['bookings'] for r in data),
                                      'per_day': data})
         limit = min(int(args.get('limit', 100)), MAX_ROWS)
-        cur.execute("SELECT * FROM daily_bookings_summary" + where + " ORDER BY start_datetime DESC LIMIT %s",
-                    params + [limit])
+        cur.execute("SELECT * FROM daily_bookings_summary "
+                    "WHERE (%s::date IS NULL OR start_datetime::date >= %s::date) "
+                    "AND (%s::date IS NULL OR start_datetime::date <= %s::date) "
+                    "ORDER BY start_datetime DESC LIMIT %s", params + [limit])
         data = cur.fetchall()
     return success_response({'success': True, 'count': len(data), 'bookings': data})
 

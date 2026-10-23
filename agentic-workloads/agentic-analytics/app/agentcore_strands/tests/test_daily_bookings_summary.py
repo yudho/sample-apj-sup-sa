@@ -51,7 +51,7 @@ def test_group_by_day_aggregates_and_filters(monkeypatch):
     body, cur = _run(monkeypatch, {"start_date": "2025-12-01", "end_date": "2025-12-31", "group_by": "day"}, rows)
     sql, params = cur.calls[0]
     assert "GROUP BY 1" in sql and "COUNT(*) AS bookings" in sql
-    assert params == ["2025-12-01", "2025-12-31"]
+    assert params == ["2025-12-01", "2025-12-01", "2025-12-31", "2025-12-31"]
     assert body["days"] == 2 and body["total_bookings"] == 40 and body["per_day"] == rows
 
 
