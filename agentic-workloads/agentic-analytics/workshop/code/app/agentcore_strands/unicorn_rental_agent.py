@@ -262,18 +262,26 @@ print("[OK] AgenticAnalytics AgentCore ready for requests")
 async def agent_invocation(payload, context):
     """Handler for agent invocation with streaming support"""
     user_message = payload.get("prompt", "No prompt found in input, please provide a prompt")
-    # JWT-native inbound auth: the runtime's CustomJWTAuthorizer has already validated
-    # the caller's Cognito access token before we run, and passes it through via the
-    # runtime's RequestHeaderConfiguration allowlist. We read it from
-    # context.request_headers['Authorization'] — this is THE user identity, forwarded to
-    # the MCP Gateway for RBAC/RLS. (The UI sends it as a Bearer header, not in the payload.)
+    # Who is asking: the signed-in user's Cognito access token.
+    # Behind the front-door gateway (demo stack) the runtime uses IAM auth, so the
+    # gateway validates the JWT and forwards it in the custom user-token header; the
+    # Authorization header the runtime sees is the gateway's own SigV4 signature.
+    # When the runtime is called directly with its own JWT authorizer (workshop
+    # steps before the front door is added), the token is in Authorization.
+    # Either way it is forwarded to the tools gateway, which validates it again
+    # and drives Cedar RBAC + database RLS.
+    USER_TOKEN_HEADER = "x-amzn-bedrock-agentcore-runtime-custom-user-token"
+
     def _bearer_from_headers(ctx):
-        headers = getattr(ctx, "request_headers", None) or {} if ctx else {}
-        # Header name casing can vary; match case-insensitively.
-        auth = headers.get("Authorization") or headers.get("authorization")
-        if auth and auth.startswith("Bearer "):
-            return auth[len("Bearer "):].strip()
-        return auth.strip() if auth else None
+        raw = (getattr(ctx, "request_headers", None) or {}) if ctx else {}
+        headers = {str(k).lower(): v for k, v in raw.items()}
+        token = headers.get(USER_TOKEN_HEADER)
+        if not token:
+            auth = headers.get("authorization") or ""
+            token = auth[len("Bearer "):] if auth.startswith("Bearer ") else None
+        if token and token.startswith("Bearer "):
+            token = token[len("Bearer "):]
+        return token.strip() if token else None
 
     gateway_token = _bearer_from_headers(context)
 
@@ -289,8 +297,9 @@ async def agent_invocation(payload, context):
             # Should be unreachable: the runtime's JWT authorizer rejects unauthenticated
             # calls before we run. This guards against a misconfigured request-header
             # allowlist (token validated but not passed through).
-            raise ValueError("No Authorization header on the request — check the runtime's "
-                             "RequestHeaderConfiguration allowlist includes 'Authorization'")
+            raise ValueError("No user token on the request: check that the runtime's "
+                             "RequestHeaderConfiguration allowlist includes the custom user-token "
+                             "header (front door) or Authorization (direct JWT runtime)")
         access_token = gateway_token
         print(f"[OK] Using validated inbound JWT for gateway auth")
         
