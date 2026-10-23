@@ -166,7 +166,7 @@ cd infrastructure/scripts && bash package_for_workshop.sh
 
 ## Test Users
 
-All demo users share one password, generated at deploy time and stored in the SecureString parameter `/<env>/demo/users`. Workshop: `make users`. Demo: printed at the end of `deploy_backend.sh`.
+All demo users share one password, generated at deploy time and stored in the SecureString parameter `/<env>/demo/users`. Workshop: `make users`. Demo: the SSM command printed at the end of `deploy_backend.sh`.
 
 | User | Role | Tenant |
 |------|------|--------|

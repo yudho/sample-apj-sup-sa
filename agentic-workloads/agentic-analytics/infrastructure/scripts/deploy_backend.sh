@@ -550,10 +550,13 @@ COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
 # Hosted modes (fargate/pipecat-cloud) forward the SIGNED-IN user's own token and
 # never use these. For laptop dev with no browser sign-in, ALLOW_DEMO_FALLBACK=true
 # lets auth.py mint a token via Cognito ROPC for the demo user (role=${DEMO_ROLE}).
+# This file holds a password: it is git-ignored and written with mode 600.
 ALLOW_DEMO_FALLBACK=true
 DEMO_USERNAME=${DEMO_USERNAME}
 DEMO_PASSWORD=${DEMO_PASSWORD}
 EOF
+
+chmod 600 "$ENV_FILE"
 
 if [ -z "$DAILY_API_KEY" ] || [ -z "$DEEPGRAM_API_KEY" ]; then
   warn "DAILY_API_KEY / DEEPGRAM_API_KEY are blank in ${ENV_FILE} — fill them before running the bot."
@@ -566,8 +569,7 @@ cat <<EOF
   Agent ARN     : ${AGENT_ARN}
   Cognito pool  : ${COGNITO_USER_POOL_ID}  (client ${COGNITO_CLIENT_ID})
   Demo user     : ${DEMO_USERNAME}  (${DEMO_ROLE}, laptop-dev fallback)
-  Demo password : ${DEMO_PASSWORD}  (shared by all demo users; generated at deploy)
-  All users     : aws ssm get-parameter --name /${ENV_NAME}/demo/users --with-decryption \
+  Passwords     : aws ssm get-parameter --name /${ENV_NAME}/demo/users --with-decryption \
                     --region ${REGION} --query Parameter.Value --output text | jq .
   Amplify UI    : ${AMPLIFY_URL}   (text chat + voice)
 

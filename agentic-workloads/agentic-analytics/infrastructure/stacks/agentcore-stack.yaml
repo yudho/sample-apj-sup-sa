@@ -1414,7 +1414,8 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Logs delivery management — same surface as logs:DeliveryDestination handler
+              # Delivery sources, destinations and deliveries this stack creates
+              # (named ${EnvironmentName}-gw-* and ${EnvironmentName}-mem-*).
               - Effect: Allow
                 Action:
                   - logs:PutDeliverySource
@@ -1429,28 +1430,35 @@ Resources:
                   - logs:CreateDelivery
                   - logs:DeleteDelivery
                   - logs:GetDelivery
+                  - logs:TagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:delivery-source:${EnvironmentName}-*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:delivery-destination:${EnvironmentName}-*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:delivery:*
+              # List calls and the vended-log permission check do not take a resource ARN.
+              - Effect: Allow
+                Action:
                   - logs:DescribeDeliveries
                   - logs:DescribeDeliverySources
                   - logs:DescribeDeliveryDestinations
                   - logs:AllowVendedLogDeliveryForResource
-                  - logs:TagResource
-                  - logs:ListTagsForResource
                 Resource: '*'
-              # Source-resource permission — required by put_delivery_source for vended logs
+              # The traces source is this stack's gateway or memory.
               - Effect: Allow
                 Action:
                   - bedrock-agentcore:AllowVendedLogDeliveryForResource
-                Resource: '*'
-              # X-Ray destination permissions (workshop's deploy_observability.py runs
-              # as Admin, which has these implicitly; our Lambda needs them explicit)
+                Resource:
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/*
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:memory/*
+              # An X-Ray delivery destination needs the X-Ray resource policy; these
+              # actions have no resource-level permissions.
               - Effect: Allow
                 Action:
                   - xray:PutResourcePolicy
                   - xray:GetResourcePolicy
                   - xray:DeleteResourcePolicy
                   - xray:ListResourcePolicies
-                  - xray:PutTraceSegments
-                  - xray:GetTraceSummaries
                 Resource: '*'
 
   TracesSetupFunction:
