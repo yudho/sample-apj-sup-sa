@@ -2311,6 +2311,255 @@ Resources:
 #         - EvaluatorId: Builtin.GoalSuccessRate
   # ===== UNCOMMENT TO HERE (Step 10) ======
 
+  # ===== UNCOMMENT FROM HERE (Step 11: schema change pipeline) ======
+# #============================================================================
+# # Step 11: schema change pipeline
+# #
+# # Snapshot the Postgres catalog, diff it with the last published one, describe
+# # what changed with the agent's model, wait for approval when a change can break
+# # queries, then publish Glue descriptions and one KB card per table or view.
+# # A tenant table (it has account_id) without row-level security stops the run.
+# # Runs after every Glue crawler success. Needs Step 4 (psycopg2 layer).
+# #============================================================================
+# SchemaSyncRole:
+#   Type: AWS::IAM::Role
+#   Properties:
+#     RoleName: !Sub ${EnvironmentName}-schema-sync-role
+#     AssumeRolePolicyDocument:
+#       Version: '2012-10-17'
+#       Statement:
+#         - Effect: Allow
+#           Principal: { Service: lambda.amazonaws.com }
+#           Action: sts:AssumeRole
+#     ManagedPolicyArns:
+#       - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+#     Policies:
+#       - PolicyName: SchemaSync
+#         PolicyDocument:
+#           Version: '2012-10-17'
+#           Statement:
+#             - Effect: Allow
+#               Action: secretsmanager:GetSecretValue
+#               Resource: {'Fn::ImportValue': !Sub '${EnvironmentName}-DatabaseSecretArn'}
+#             - Effect: Allow
+#               Action: [s3:GetObject, s3:PutObject]
+#               Resource: !Sub arn:aws:s3:::${ArtifactsBucket}/${ArtifactsPrefix}schema/*
+#             - Effect: Allow
+#               Action: s3:ListBucket
+#               Resource: !Sub arn:aws:s3:::${ArtifactsBucket}
+#               Condition:
+#                 StringLike: { 's3:prefix': !Sub '${ArtifactsPrefix}schema/*' }
+#             - Effect: Allow
+#               Action: [s3:PutObject, s3:DeleteObject]
+#               Resource: !Sub
+#                 - arn:aws:s3:::${Bucket}/docs/schema/*
+#                 - Bucket: {'Fn::ImportValue': !Sub '${EnvironmentName}-KBDocsBucketName'}
+#             - Effect: Allow
+#               Action: [glue:GetTable, glue:UpdateTable]
+#               Resource:
+#                 - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog
+#                 - !Sub
+#                   - arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${Db}
+#                   - Db: {'Fn::ImportValue': !Sub '${EnvironmentName}-GlueDatabaseName'}
+#                 - !Sub
+#                   - arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${Db}/*
+#                   - Db: {'Fn::ImportValue': !Sub '${EnvironmentName}-GlueDatabaseName'}
+#             - Effect: Allow
+#               Action: bedrock:InvokeModel
+#               Resource:
+#                 - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/${AgentModelId}
+#                 - !Sub
+#                   - arn:aws:bedrock:*::foundation-model/${BaseModel}*
+#                   - BaseModel: !Select [1, !Split ['global.', !Ref AgentModelId]]
+#             - Effect: Allow
+#               Action: bedrock:StartIngestionJob
+#               Resource: !Sub
+#                 - arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${Kb}
+#                 - Kb: {'Fn::ImportValue': !Sub '${EnvironmentName}-KnowledgeBaseId'}
+#             - Effect: Allow
+#               Action: events:PutEvents
+#               Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+#
+# SchemaSyncFunction:
+#   Type: AWS::Lambda::Function
+#   Properties:
+#     FunctionName: !Sub ${EnvironmentName}-schema-sync
+#     Description: Schema change pipeline steps (snapshot, describe, hold, publish)
+#     Runtime: python3.12
+#     Handler: schema_sync_lambda.lambda_handler
+#     Role: !GetAtt SchemaSyncRole.Arn
+#     Timeout: 300
+#     MemorySize: 512
+#     ReservedConcurrentExecutions: 2
+#     Layers: [!If [NeedsPsycopg2Layer, !Ref Psycopg2Layer, !Ref Psycopg2LayerArn]]
+#     Code:
+#       S3Bucket: !Ref ArtifactsBucket
+#       S3Key: !Sub ${ArtifactsPrefix}lambdas/schema_sync.zip
+#     VpcConfig:
+#       SubnetIds:
+#         - {'Fn::ImportValue': !Sub '${EnvironmentName}-PrivateSubnet1Id'}
+#         - {'Fn::ImportValue': !Sub '${EnvironmentName}-PrivateSubnet2Id'}
+#       SecurityGroupIds:
+#         - {'Fn::ImportValue': !Sub '${EnvironmentName}-LambdaSecurityGroupId'}
+#     Environment:
+#       Variables:
+#         ARTIFACTS_BUCKET: !Ref ArtifactsBucket
+#         KB_DOCS_BUCKET: {'Fn::ImportValue': !Sub '${EnvironmentName}-KBDocsBucketName'}
+#         KNOWLEDGE_BASE_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-KnowledgeBaseId'}
+#         KB_DATA_SOURCE_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-KnowledgeBaseDataSourceId'}
+#         GLUE_DATABASE: {'Fn::ImportValue': !Sub '${EnvironmentName}-GlueDatabaseName'}
+#         AURORA_DATABASE: timely_unicorn
+#         AURORA_ENDPOINT: {'Fn::ImportValue': !Sub '${EnvironmentName}-AuroraClusterEndpoint'}
+#         DB_SECRET_ARN: {'Fn::ImportValue': !Sub '${EnvironmentName}-DatabaseSecretArn'}
+#         DESCRIBE_MODEL_ID: !Ref AgentModelId
+#
+# StateMachineRole:
+#   Type: AWS::IAM::Role
+#   Properties:
+#     AssumeRolePolicyDocument:
+#       Version: '2012-10-17'
+#       Statement:
+#         - Effect: Allow
+#           Principal: { Service: states.amazonaws.com }
+#           Action: sts:AssumeRole
+#     Policies:
+#       - PolicyName: InvokeSchemaSync
+#         PolicyDocument:
+#           Version: '2012-10-17'
+#           Statement:
+#             - Effect: Allow
+#               Action: lambda:InvokeFunction
+#               Resource: !GetAtt SchemaSyncFunction.Arn
+#
+# SchemaSyncStateMachine:
+#   Type: AWS::StepFunctions::StateMachine
+#   Properties:
+#     StateMachineName: !Sub ${EnvironmentName}-schema-sync
+#     RoleArn: !GetAtt StateMachineRole.Arn
+#     Definition:
+#       Comment: Detect schema changes, describe them, ask for approval when they break things, publish.
+#       StartAt: Snapshot
+#       States:
+#         Snapshot:
+#           Type: Task
+#           Resource: arn:aws:states:::lambda:invoke
+#           Parameters:
+#             FunctionName: !GetAtt SchemaSyncFunction.Arn
+#             Payload:
+#               action: snapshot
+#               input.$: $
+#           OutputPath: $.Payload
+#           Next: Classify
+#         Classify:
+#           Type: Choice
+#           Choices:
+#             - Variable: $.severity
+#               StringEquals: blocked
+#               Next: BlockedNoRowLevelSecurity
+#             - Variable: $.severity
+#               StringEquals: none
+#               Next: NothingToPublish
+#           Default: Describe
+#         Describe:
+#           Type: Task
+#           Resource: arn:aws:states:::lambda:invoke
+#           Parameters:
+#             FunctionName: !GetAtt SchemaSyncFunction.Arn
+#             Payload:
+#               action: describe
+#               run_id.$: $.run_id
+#               snapshot_key.$: $.snapshot_key
+#               baseline.$: $.baseline
+#               severity.$: $.severity
+#               changes.$: $.changes
+#               summary.$: $.summary
+#           OutputPath: $.Payload
+#           Next: NeedsApproval
+#         NeedsApproval:
+#           Type: Choice
+#           Choices:
+#             - Variable: $.severity
+#               StringEquals: breaking
+#               Next: WaitForApproval
+#           Default: Publish
+#         WaitForApproval:
+#           Type: Task
+#           Resource: arn:aws:states:::lambda:invoke.waitForTaskToken
+#           TimeoutSeconds: 86400
+#           Parameters:
+#             FunctionName: !GetAtt SchemaSyncFunction.Arn
+#             Payload:
+#               action: hold
+#               task_token.$: $$.Task.Token
+#               run_id.$: $.run_id
+#               summary.$: $.summary
+#               changes.$: $.changes
+#           ResultPath: $.approval
+#           Next: Publish
+#         Publish:
+#           Type: Task
+#           Resource: arn:aws:states:::lambda:invoke
+#           Parameters:
+#             FunctionName: !GetAtt SchemaSyncFunction.Arn
+#             Payload:
+#               action: publish
+#               run_id.$: $.run_id
+#               snapshot_key.$: $.snapshot_key
+#               severity.$: $.severity
+#               changes.$: $.changes
+#               descriptions.$: $.descriptions
+#           OutputPath: $.Payload
+#           # A KB data source runs one ingestion job at a time. If the previous run's job is
+#           # still going, StartIngestionJob raises ConflictException; Publish is idempotent
+#           # (current.json is written last), so wait and run it again.
+#           Retry:
+#             - ErrorEquals: [ConflictException]
+#               IntervalSeconds: 30
+#               BackoffRate: 1.5
+#               MaxAttempts: 8
+#           End: true
+#         NothingToPublish:
+#           Type: Succeed
+#         BlockedNoRowLevelSecurity:
+#           Type: Fail
+#           Error: TenantTableWithoutRowLevelSecurity
+#           Cause: A tenant table (it has account_id) has no row-level security policy. Add RLS, then run the pipeline again.
+#
+# EventsRole:
+#   Type: AWS::IAM::Role
+#   Properties:
+#     AssumeRolePolicyDocument:
+#       Version: '2012-10-17'
+#       Statement:
+#         - Effect: Allow
+#           Principal: { Service: events.amazonaws.com }
+#           Action: sts:AssumeRole
+#     Policies:
+#       - PolicyName: StartSchemaSync
+#         PolicyDocument:
+#           Version: '2012-10-17'
+#           Statement:
+#             - Effect: Allow
+#               Action: states:StartExecution
+#               Resource: !Ref SchemaSyncStateMachine
+#
+# CrawlerSucceededRule:
+#   Type: AWS::Events::Rule
+#   Properties:
+#     Description: Run the schema pipeline after the Glue crawler finishes
+#     EventPattern:
+#       source: [aws.glue]
+#       detail-type: [Glue Crawler State Change]
+#       detail:
+#         crawlerName:
+#           - {'Fn::ImportValue': !Sub '${EnvironmentName}-GlueCrawlerName'}
+#         state: [Succeeded]
+#     Targets:
+#       - Id: schema-sync
+#         Arn: !Ref SchemaSyncStateMachine
+#         RoleArn: !GetAtt EventsRole.Arn
+  # ===== UNCOMMENT TO HERE (Step 11) ======
+
 Outputs:
   FrontDoorUrl:
     Condition: FrontDoorEnabled
