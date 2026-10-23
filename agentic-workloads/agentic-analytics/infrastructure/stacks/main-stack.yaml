@@ -77,7 +77,8 @@ Parameters:
 
   PolicyMode:
     Type: String
-    Default: LOG_ONLY
+    # ENFORCE so the demo actually blocks what the Cedar policies forbid; LOG_ONLY is for policy debugging.
+    Default: ENFORCE
     AllowedValues:
       - LOG_ONLY
       - ENFORCE
