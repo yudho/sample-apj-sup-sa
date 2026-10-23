@@ -225,8 +225,30 @@ def lambda_handler(event, context):
     except Exception as e:
         return error_response(str(e))
 
+# List tools (calendar, bookings, customers...) can return thousands of rows. A month of
+# calendar bookings is ~280 KB, which overflows the agent turn and fails the request, so
+# row lists are capped here, by count and by serialized size, and the reply says so.
+MAX_ROWS = int(os.environ.get('MAX_TOOL_ROWS', '200'))
+MAX_BODY_BYTES = int(os.environ.get('MAX_TOOL_BODY_BYTES', '60000'))
+
+
 def success_response(data):
-    return {'statusCode': 200, 'body': json.dumps(data, default=json_serializer)}
+    lists = [k for k, v in data.items() if isinstance(v, list)] if isinstance(data, dict) else []
+    body = json.dumps(data, default=json_serializer)
+    for key in lists:
+        rows = data[key]
+        keep = min(len(rows), MAX_ROWS)
+        while keep > 1 and (keep < len(rows) or len(body) > MAX_BODY_BYTES):
+            data[key] = rows[:keep]
+            data['truncated'] = True
+            data['total_rows'] = len(rows)
+            data['note'] = (f"Only the first {keep} of {len(rows)} rows are included. "
+                            "Use a narrower filter or an aggregate tool for the full picture.")
+            body = json.dumps(data, default=json_serializer)
+            if len(body) <= MAX_BODY_BYTES:
+                break
+            keep //= 2
+    return {'statusCode': 200, 'body': body}
 
 def error_response(message):
     return {'statusCode': 500, 'body': json.dumps({'success': False, 'error': message})}
