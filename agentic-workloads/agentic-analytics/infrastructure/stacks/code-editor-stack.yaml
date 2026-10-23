@@ -381,6 +381,24 @@ Resources:
                   - xray:*
                 Resource: '*'
 
+              # Step 11 schema change pipeline: `make deploy` creates the state machine and
+              # the crawler-succeeded rule; `make schema-sync` / `make approve` drive it.
+              - Effect: Allow
+                Action: states:*
+                Resource:
+                  - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:*
+                  - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:*
+              - Effect: Allow
+                Action:
+                  - states:SendTaskSuccess
+                  - states:SendTaskFailure
+                  - states:SendTaskHeartbeat
+                  - states:ListStateMachines
+                Resource: '*'
+              - Effect: Allow
+                Action: events:*
+                Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*
+
               # S3 - CodeBuild source bucket for AgentCore Runtime builds
               - Effect: Allow
                 Action: s3:*
