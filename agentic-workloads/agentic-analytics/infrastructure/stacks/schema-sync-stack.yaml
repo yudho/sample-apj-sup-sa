@@ -38,7 +38,10 @@ Parameters:
     Type: String
   DescribeModelId:
     Type: String
-    Default: global.anthropic.claude-haiku-5-5
+    # Sonnet, not Haiku: Workshop Studio sandbox accounts deny Haiku 5.5 through the private
+    # marketplace, while the agent's Sonnet subscription already exists. Must be a global.* profile.
+    Default: global.anthropic.claude-sonnet-5-5
+    AllowedPattern: '^global\..+'
   ApprovalTimeoutSeconds:
     Type: Number
     Default: 86400
@@ -97,7 +100,9 @@ Resources:
                 Action: bedrock:InvokeModel
                 Resource:
                   - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/${DescribeModelId}
-                  - arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-5-5*
+                  - !Sub
+                    - arn:aws:bedrock:*::foundation-model/${BaseModel}*
+                    - BaseModel: !Select [1, !Split ['global.', !Ref DescribeModelId]]
               - Effect: Allow
                 Action: bedrock:StartIngestionJob
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseId}
