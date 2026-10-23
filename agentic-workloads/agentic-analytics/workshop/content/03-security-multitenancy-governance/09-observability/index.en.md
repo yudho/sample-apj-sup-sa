@@ -13,7 +13,7 @@ By the end of this step, you will:
 
 ## Why Observability?
 
-Your agent has implemented many techniques and components by now: but as the platform team, you need to answer: "How do we know the agent is giving correct answers? What if a tenant reports a wrong revenue number?"
+Your agent has implemented many techniques and components by now, but as the platform team, you need to answer: "How do we know the agent is giving correct answers? What if a tenant reports a wrong revenue number?"
 
 :link[AgentCore Observability]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability.html"} automatically captures every agent interaction as :link[OpenTelemetry]{href="https://opentelemetry.io/"} traces. Everything flows to :link[CloudWatch GenAI Observability]{href="https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/GenAI-observability.html"}.
 

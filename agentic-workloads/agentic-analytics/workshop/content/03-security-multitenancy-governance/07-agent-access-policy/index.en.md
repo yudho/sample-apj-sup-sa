@@ -16,7 +16,7 @@ By the end of this step, you will:
 
 Your current analytics assistant up to the previous step has two security gaps:
 
-1. **Any user can use any tool.** Analyst Orion Moonshadow can create bookings: but analysts should only read data, not modify it.
+1. **Any user can use any tool.** Analyst Orion Moonshadow can create bookings, but analysts should only read data, not modify it.
 2. **Any user can see all tenants' data.** A user at Mythical Unicorns can see Mythic Unicorns' customers and revenue. In a multi-tenant SaaS platform, this is a data breach.
 
 You need two layers of security:
@@ -182,7 +182,7 @@ This pattern is the same in all three Lambda toolsets. The `rls_context` is extr
 
 ### Step 7.4: Examine the Gateway Interceptor
 
-The Lambda tools now know how to SET session variables from JWT claims: but the JWT needs to reach the Lambda first. By default, the Gateway authenticates the request but does **not** forward the Authorization header to Lambda targets.
+The Lambda tools now know how to SET session variables from JWT claims, but the JWT needs to reach the Lambda first. By default, the Gateway authenticates the request but does **not** forward the Authorization header to Lambda targets.
 
 The :link[Gateway Interceptor]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-headers.html"} solves this. It's already part of your stack's baseline: the `InterceptorLambda` and the Gateway's `InterceptorConfigurations` came live with the very first `make deploy` in Step 2. It's a Lambda function that runs on every Gateway request and injects headers into the target call. The `Authorization` header from the interceptor response is :link[automatically propagated to the target]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-headers.html#gateway-headers-interceptor-propagation"}.
 
@@ -252,7 +252,7 @@ This is the most important test in the workshop. Log in as users from **differen
 2. Log out, log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true}
 3. Ask the **exact same question**: **write down her #1 customer's name.**
 
-::alert[**What you should see: and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL: but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation no application bug can undo. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
+::alert[**What you should see: and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL, but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation no application bug can undo. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
 
 ### Step 7.8: The Invisibility Test: *Part A payoff*
 

@@ -18,7 +18,7 @@ Most SaaS platforms already have APIs for booking, billing, notifications and in
 3. **Ask for missing information** if the user didn't provide everything
 4. **Call the API** and return the result
 
-::alert[**Two simplifications in this workshop:** (1) Instead of connecting to an existing API, we deploy the API Lambda in this step as opposed of having it predeployed: but the spirit is to connect to existing deployed API. (2) Instead of calling API Gateway or ALB, the Gateway calls the Lambda directly for simplicity. AgentCore Gateway supports integration with multiple targets, including API Gateway, OpenAPI, Smithy models, MCP servers, and Lambda functions. See the full list :link[here]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-supported-targets.html"}]{type="info"}
+::alert[**Two simplifications in this workshop:** (1) Instead of connecting to an existing API, we deploy the API Lambda in this step instead of having it predeployed, but in a real system you would connect to an API that already exists. (2) Instead of calling API Gateway or ALB, the Gateway calls the Lambda directly for simplicity. AgentCore Gateway supports integration with multiple targets, including API Gateway, OpenAPI, Smithy models, MCP servers, and Lambda functions. See the full list :link[here]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-supported-targets.html"}]{type="info"}
 
 ## How AgentCore Gateway Connects to APIs
 

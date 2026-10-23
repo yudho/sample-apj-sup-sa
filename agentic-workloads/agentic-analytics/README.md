@@ -205,7 +205,7 @@ for details (including the agentcore voice teardown caveat: VPC ENIs reclaim slo
 
 **Timely-Unicorn** is a fictional multi-tenant SaaS platform for unicorn rental businesses. Two rental companies: Mythical Unicorns and Mythic Unicorns: each manage their own fleet of unicorns, customers, bookings, and revenue. The synthetic dataset includes ~14,000 bookings, 500 customers, and 100 unicorns across 2 tenant accounts (plus the platform account).
 
-Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"*: but they don't know SQL. The AI assistant solves this for all tenants simultaneously, with full data isolation.
+Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"*, but they don't know SQL. The AI assistant solves this for all tenants simultaneously, with full data isolation.
 
 ## License
 

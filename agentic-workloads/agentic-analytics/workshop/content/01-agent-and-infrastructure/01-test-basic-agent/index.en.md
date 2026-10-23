@@ -14,7 +14,7 @@ By the end of this step, you will:
 
 ## Why Build a Local Agent First?
 
-Your tenants need answers. Lyra Starwhisper at Mythical Unicorns wants to know her top customers by revenue: but she'd have to email the data team and wait half a day. As the Timely-Unicorn SaaS platform team, let's build something better for her and all of the future tenants with the same need.
+Your tenants need answers. Lyra Starwhisper at Mythical Unicorns wants to know her top customers by revenue, but she'd have to email the data team and wait half a day. As the Timely-Unicorn SaaS platform team, let's build something better for her and all of the future tenants with the same need.
 
 Before deploying to the cloud, it's important to understand how an AI agent works at its core. :link[Strands Agents]{href="https://strandsagents.com/docs/" external=true} is an open-source SDK from AWS that takes a :link[model-driven approach]{href="https://aws.amazon.com/blogs/opensource/strands-agents-and-the-model-driven-approach/" external=true}: instead of writing complex routing logic, you define tools and a prompt, and the LLM decides which tools to call and in what order.
 
