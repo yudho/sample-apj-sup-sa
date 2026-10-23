@@ -12,7 +12,7 @@ By the end of this step, you will:
 
 ## Why Prebaked SQL?
 
-This is the **first of three toolsets** you'll deploy. The Prebaked SQL pattern is the safest approach for analytics: your database team creates Views for common queries, each View maps to a tool, and the LLM's only job is to pick the right tool and extract arguments.
+This is the **first of three toolsets** you'll deploy. In the Prebaked SQL pattern the LLM never writes SQL: your database team creates Views for common queries, each View maps to a tool, and the LLM's only job is to pick the right tool and extract arguments.
 
 ::alert[**Minimum hallucination risk.** The LLM never sees or generates SQL. It reads the tool description (e.g., `get_top_revenue_customers_tool: "Get top customers by revenue"`), decides whether to call it given the user's request, extracts the tool arguments from given information, and calls the tool. Your database team controls the SQL; the LLM controls the routing and information passing.]{type="success"}
 
@@ -176,7 +176,7 @@ Notice: the function queries the `top_revenue_customers` **View**, not a raw tab
 
 ## Summary
 
-You deployed the Prebaked SQL toolset: 29 analytics tools backed by database Views. You examined how the deploy script registers tool schemas to the Gateway, how the SOP guides the agent's tool selection, and traced a query end-to-end in CloudWatch. This is the safest pattern for production analytics: zero SQL hallucination risk.
+You deployed the Prebaked SQL toolset: 29 analytics tools backed by database Views. You examined how the deploy script registers tool schemas to the Gateway, how the SOP guides the agent's tool selection, and traced a query end-to-end in CloudWatch. Because the LLM never writes SQL here, these tools cannot generate wrong SQL; the agent can still pick the wrong tool or argument, which is what the evaluation in Step 10 measures.
 
 Next, you'll connect the agent to existing business APIs → [Step 5: Integrate with Existing APIs](../05-integrate-existing-apis/)
 

@@ -128,7 +128,7 @@ package source in the local venv.
   wait READY → update endpoint). This SUPERSEDES the old manual deploy steps.
 - **Don't switch to Deepgram Voice Agent API** — would throw away the Strands
   agent + analytics tools + Cognito/Cedar/RLS plumbing. Reaffirmed.
-- **Deepgram credits:** $200 covers ~2,000+ full demo sessions. Don't ask for more.
+- **Deepgram credits:** check usage in the Deepgram console before a demo day; the free credit covers routine demos.
 - **Don't use SageMaker mode** to "save credits" — requires Deepgram enterprise contract. Stick with PAYG cloud.
 
 ## How to deploy (use `scripts/deploy_backend.sh`)

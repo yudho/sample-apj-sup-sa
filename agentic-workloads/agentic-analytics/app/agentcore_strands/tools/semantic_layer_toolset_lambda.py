@@ -26,7 +26,6 @@ CUBE_API_URL = os.environ.get('CUBE_API_URL', 'http://localhost:4000')
 CUBE_API_SECRET = os.environ.get('CUBE_API_SECRET', '')
 
 # Global RLS context — set per invocation from JWT claims
-_rls_context = {}
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +202,8 @@ def _inject_account_id_filter(query, account_id):
       3. Block queries that reference only the 'accounts' cube (internal).
     """
     if not account_id:
-        return query
+        # Fail closed: without a tenant from the caller's token, run nothing.
+        raise PermissionError("No tenant in the caller's token; refusing to query")
 
     if 'filters' not in query:
         query['filters'] = []
@@ -227,6 +227,9 @@ def _inject_account_id_filter(query, account_id):
     # Filter out the 'accounts' cube — it's internal.
     data_cubes = [c for c in cube_names if c != 'accounts']
 
+    if not data_cubes:
+        raise PermissionError("Query must reference at least one tenant data cube")
+
     # Add account_id filter for every referenced data cube.
     for cube_name in data_cubes:
         query['filters'].append({
@@ -238,7 +241,7 @@ def _inject_account_id_filter(query, account_id):
     return query
 
 
-def cube_query(args):
+def cube_query(args, rls_context):
     """Execute a Cube JSON query via POST /cubejs-api/v1/load.
 
     Expects ``args['query']`` to be a Cube query object (dict or JSON string)
@@ -249,7 +252,7 @@ def cube_query(args):
         query = json.loads(query)
 
     # Inject tenant filter
-    account_id = _rls_context.get('account_id')
+    account_id = rls_context.get('account_id')
     query = _inject_account_id_filter(query, account_id)
 
     # Cube /v1/load expects {"query": <query_object>} as the POST body.
@@ -274,10 +277,8 @@ def lambda_handler(event, context):
     then fall back to ``event['name']``.  The ``TargetName___`` prefix
     is stripped automatically.
     """
-    global _rls_context
-
-    # Extract RLS context from JWT claims
-    _rls_context = _extract_rls_context_from_jwt(context)
+    # Request-scoped: never keep tenant identity in a module global (Lambda reuses containers).
+    rls_context = _extract_rls_context_from_jwt(context)
 
     try:
         delimiter = "___"
@@ -298,13 +299,10 @@ def lambda_handler(event, context):
         arguments = event.get('arguments', {}) if 'arguments' in event else event
         print(f"Tool: {tool_name}, arg keys: {sorted(arguments)}")
 
-        handlers = {
-            'cube_meta_tool': cube_meta,
-            'cube_query_tool': cube_query,
-        }
-
-        if tool_name in handlers:
-            return handlers[tool_name](arguments)
+        if tool_name == 'cube_meta_tool':
+            return cube_meta(arguments)
+        if tool_name == 'cube_query_tool':
+            return cube_query(arguments, rls_context)
 
         return error_response(f'Unknown tool: {tool_name}')
 
