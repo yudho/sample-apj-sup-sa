@@ -869,6 +869,10 @@ Resources:
                     Type: object
                     Properties:
                       question: { Type: string, Description: Natural language analytics question }
+                      tables:
+                        Type: array
+                        Items: { Type: string }
+                        Description: 'Tables or views to include in full. Leave empty first; if the reply is a table index (schema too large), call again with the ones you need.'
                     Required: [question]
                 - Name: get_schema_context_tool
                   Description: Get database table schemas from Glue catalog. Use to understand available tables and columns.

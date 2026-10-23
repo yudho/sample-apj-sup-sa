@@ -208,6 +208,10 @@ def lambda_handler(event, context):
     return {'statusCode': 500, 'body': json.dumps({'error': f'Unknown tool: {tool_name}'})}
 
 
+# Above this size text_to_sql_tool returns a table index instead of the full schema.
+SCHEMA_FULL_MAX_CHARS = int(os.environ.get('SCHEMA_FULL_MAX_CHARS', '32000'))
+
+
 def get_schema_context(args, rls_context):
     """Get table schemas from Glue Data Catalog"""
     tables = args.get('tables', [])
@@ -271,22 +275,35 @@ def text_to_sql_with_rag(args, rls_context):
     if not question:
         return {'statusCode': 400, 'body': json.dumps({'error': 'question is required'})}
     
-    # Step 1: Get full schema from Glue (all tables)
-    schema_result = get_schema_context({'tables': []}, rls_context)
+    # Step 1: schema from Glue. Adaptive (see notes/12): the whole schema when it is small;
+    # above SCHEMA_FULL_MAX_CHARS only an index of table names and descriptions, and the
+    # model calls this tool again with `tables` set to the ones it picked. Benchmarked on a
+    # 181-table catalogue: 0.90 execution accuracy at 11.6k tokens vs 0.85 at 50.9k for the
+    # full schema.
+    requested = args.get('tables') or []
+    schema_result = get_schema_context({'tables': requested}, rls_context)
     schemas = json.loads(schema_result['body'])['schemas']
-    
+
     # Step 2: RAG retrieve business context
     rag_results = rag_retrieve(question)
-    
+
     # Step 3: Assemble context for LLM
     schema_text = []
     for table, info in schemas.items():
         cols = ', '.join([f"{c['name']} ({c['type']})" for c in info['columns']])
         schema_text.append(f"Table {table}: {info['description']}\nColumns: {cols}")
-    
+    schema_mode = 'full' if not requested else 'selected'
+    if not requested and len('\n'.join(schema_text)) > SCHEMA_FULL_MAX_CHARS:
+        schema_mode = 'index'
+        schema_text = [f"- {t}: {info['description'] or 'no description'} ({len(info['columns'])} columns)"
+                       for t, info in schemas.items()]
+        schema_text.insert(0, "The schema is too large to send whole. This is the table index only. "
+                              "Pick the tables and views you need, then call text_to_sql_tool again "
+                              "with the same question and `tables` set to them to get their columns.")
+
     rag_text = '\n'.join([f"- {r['content']}" for r in rag_results])
-    
-    context = f"""DATABASE SCHEMA:
+
+    context = f"""DATABASE SCHEMA ({schema_mode}):
 {chr(10).join(schema_text)}
 
 BUSINESS CONTEXT FROM KNOWLEDGE BASE:
@@ -305,6 +322,7 @@ QUERY GUIDELINES:
             'question': question,
             'context': context,
             'tables_count': len(schemas),
+            'schema_mode': schema_mode,
             'rag_sources': len(rag_results),
         })
     }
