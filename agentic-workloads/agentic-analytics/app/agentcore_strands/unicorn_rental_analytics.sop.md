@@ -61,6 +61,7 @@ Select and execute the appropriate tool(s) based on query classification.
 | Create booking | create_booking_tool (get IDs first if needed) |
 | Unicorn availability | get_current_unicorn_availability_tool |
 | Customer segments | get_customer_segmentation_tool |
+| Meaning of a business term or metric ("what counts as at-risk?", "how is utilisation calculated?") | BusinessContext Retrieve tool |
 
 ### 3. Booking Creation Workflow
 Execute when user requests to create a new booking.
