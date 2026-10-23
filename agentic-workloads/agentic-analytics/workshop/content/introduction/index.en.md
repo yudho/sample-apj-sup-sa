@@ -59,7 +59,7 @@ AgentCore Gateway supports calling Lambda, API Gateway, or any OpenAPI endpoint.
 
 ### 2. Prebaked SQL (PrebakedSQL toolset): Reliable, Minimum Hallucination Risk
 
-For the questions your users ask every day, such as "top customers", "revenue trends", "unicorn utilization": you don't need the LLM to generate SQL at all. Instead:
+For the questions your users ask every day, such as "top customers", "revenue trends", "unicorn utilization", you don't need the LLM to generate SQL at all. Instead:
 
 1. Your database team creates **Views** for commonly requested queries
 2. Each view maps to a **tool** with a clear name and description (e.g., `get_top_revenue_customers_tool`)
@@ -72,7 +72,7 @@ This method can complement the above existing API integration by adding more dat
 
 ### 3. Custom SQL (CustomSQL toolset): Most Flexible, with Guardrails
 
-For questions that don't map to any prebaked tool, such as "average booking duration by unicorn breed": the agent generates SQL dynamically. This uses text-to-SQL technique that takes in schema and context to convert natural language query into SQL statement. This is powerful but risky, so we add multiple hallucination mitigation layers:
+For questions that don't map to any prebaked tool, such as "average booking duration by unicorn breed", the agent generates SQL dynamically. This uses text-to-SQL technique that takes in schema and context to convert natural language query into SQL statement. This is powerful but risky, so we add multiple hallucination mitigation layers:
 
 1. **Full schema from :link[AWS Glue Data Catalog]{href="https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html"}**: the agent knows every table and column
 2. **Business context from :link[Bedrock Knowledge Base]{href="https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html"} (RAG)**: not just schema, but *what the data means*. Our `business-context.md` includes column descriptions ("a full-day booking = 8 hours"), business rules, and sample SQL for complex joins. RAG retrieves the most relevant chunks for each question.
