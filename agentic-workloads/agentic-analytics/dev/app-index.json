@@ -53,7 +53,7 @@
     },
     {
       "path": "infrastructure/stacks/agentcore-stack.yaml",
-      "summary": "CloudFormation stack for AgentCore Gateway deployment with custom resource Lambda. Supports workshop mode with CognitoUserPoolId/CognitoClientId params to use existing Cognito"
+      "summary": "Demo-mode AgentCore layer, all native CloudFormation: tools MCP Gateway + targets (prebaked/API/custom SQL/semantic), Cedar policy engine, Memory, Guardrail, Code Interpreter, agent Runtime (IAM-only), and the front door: FrontDoorGateway (HTTP gateway, Cognito JWT) with a runtime target (GATEWAY_IAM_ROLE, forwards custom user-token + session-id headers), AgentRuntimeResourcePolicy (only the front door may invoke), GatewayRateLimit per JWT sub, WAF web ACL + WebACLAssociation. Outputs FrontDoorUrl."
     },
     {
       "path": "infrastructure/stacks/agentcore-topup-stack.yaml",
@@ -141,7 +141,7 @@
     },
     {
       "path": "app/ui/src/services/awsAgentCore.js",
-      "summary": "AWS SDK integration for BedrockAgentCoreClient, invokeAgent with streaming, session management, gateway token passing. Tool detection via structured toolUse events only (no regex fallback)."
+      "summary": "Browser agent client: plain HTTPS fetch with the user's Cognito JWT (no SDK/SigV4). Calls <FRONTDOOR_URL>/agent/invocations with the JWT in Authorization and the custom user-token header, or the runtime directly when no front door is configured. Streams SSE, keeps a 33+ char runtime session id per chat, maps 401/403 WAF/403/429 to readable errors."
     },
     {
       "path": "app/ui/src/services/authService.js",
@@ -241,7 +241,7 @@
     },
     {
       "path": "app/agentcore_strands/tools/custom_sql_toolset_lambda.py",
-      "summary": "Lambda for custom SQL with full Glue schema (all tables, prefix stripped) + Bedrock KB RAG + human approval. rls_context passed as parameter."
+      "summary": "Custom SQL Lambda: Glue schema (paginated, prefix stripped) + Bedrock KB business context for text-to-SQL, and execute_sql guarded by validate_readonly_sql (one statement, SELECT/WITH only, literals/comments masked, blocked functions incl. set_config) running in a READ ONLY transaction with statement_timeout; connection always closed. rls_context from the verified JWT."
     },
     {
       "path": "LICENSE",
@@ -258,6 +258,14 @@
     {
       "path": "dev/skills/overlay-management/SKILL.md",
       "summary": "Agent Skill: rules for managing workshop code overlays (TODO files that override app/ in packaged ZIP)"
+    },
+    {
+      "path": "app/voice/analytics_processor.py",
+      "summary": "Pipecat processor that sends each voice turn to the analytics agent with the speaking user's JWT: through AWS_AGENT_FRONTDOOR_URL (/agent/invocations + custom user-token header) when set, else the runtime directly; stable runtime session id for shared Memory; parses SSE, handles <speak> and <chart> tags."
+    },
+    {
+      "path": "app/agentcore_strands/tests/test_custom_sql_guard.py",
+      "summary": "Unit tests (pytest, AWS/DB stubbed) for the custom SQL read-only guard: allowed reads, rejected writes/multi-statement/set_config/pg_* calls, no DB connect on rejection, connection closed on error, READ ONLY + timeout + 100-row cap."
     }
   ]
 }
