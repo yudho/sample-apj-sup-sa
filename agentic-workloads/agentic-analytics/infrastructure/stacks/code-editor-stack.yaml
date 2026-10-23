@@ -262,21 +262,36 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
       Policies:
         - PolicyName: WorkshopPermissions
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Secrets Manager
+              # SANDBOX ONLY. This role lets a workshop participant deploy every lab
+              # stack from Code Editor in a single-use Workshop Studio account, so
+              # several services keep service-wide actions. Do not reuse it outside a
+              # disposable account; narrow each grant to the actions and ARNs you use.
+
+              # The role cannot change its own permissions or instance profile.
+              - Effect: Deny
+                Action: iam:*
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-code-editor-role
+                  - !Sub arn:aws:iam::${AWS::AccountId}:instance-profile/*-CodeEditorInstanceProfile-*
+
+              # Secrets Manager: read this account's secrets (Aurora, Cube), write only
+              # the workshop's own.
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
                   - secretsmanager:DescribeSecret
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*
+              - Effect: Allow
+                Action:
                   - secretsmanager:CreateSecret
                   - secretsmanager:PutSecretValue
-                Resource: '*'
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${EnvironmentName}-*
 
               # RDS Data API
               - Effect: Allow
@@ -404,11 +419,31 @@ Resources:
                 Action: amplify:*
                 Resource: '*'
 
-              # SSM - Parameter store
+              # SSM: the workshop's parameters (/<env>/...), public AMI parameters that
+              # CloudFormation resolves, and Run Command on this account's instances
+              # (Cube lab model sync). Session Manager comes from AmazonSSMManagedInstanceCore.
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
+                  - ssm:GetParameters
                   - ssm:PutParameter
+                  - ssm:DeleteParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/*
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub arn:aws:ssm:${AWS::Region}::parameter/aws/service/*
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - !Sub arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript
+              - Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                  - ssm:DescribeParameters
                 Resource: '*'
 
               # ECR - Container registry for AgentCore Runtime
@@ -421,9 +456,9 @@ Resources:
                 Action: codebuild:*
                 Resource: '*'
 
-              # STS - Service bearer tokens
+              # STS: scripts and the Makefile look up the account id.
               - Effect: Allow
-                Action: sts:*
+                Action: sts:GetCallerIdentity
                 Resource: '*'
 
               # CloudWatch Logs
