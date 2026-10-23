@@ -50,6 +50,11 @@ Parameters:
     Default: ''
     Description: Cognito Identity Pool ID
 
+  FrontDoorUrl:
+    Type: String
+    Default: ''
+    Description: Front-door gateway URL (AgentCore stack output FrontDoorUrl). The UI calls <url>/agent/invocations.
+
   AgentCoreRuntimeEndpoint:
     Type: String
     Default: ''
@@ -150,6 +155,7 @@ Resources:
         REACT_APP_COGNITO_DOMAIN: !Ref CognitoDomain
         REACT_APP_COGNITO_IDENTITY_POOL_ID: !Ref CognitoIdentityPoolId
         REACT_APP_AGENTCORE_RUNTIME_ENDPOINT: !Ref AgentCoreRuntimeEndpoint
+        REACT_APP_FRONTDOOR_URL: !Ref FrontDoorUrl
         REACT_APP_VOICE_SIGNALING_URL: !Ref VoiceSignalingUrl
 
 Outputs:

@@ -24,13 +24,34 @@ const AWS_REGION = RC.AWS_REGION || process.env.REACT_APP_AWS_REGION || 'us-east
 const AGENT_RUNTIME_ARN = (endpointSplit && endpointSplit.runtimeArn) || RC.AGENT_RUNTIME_ARN || process.env.REACT_APP_AGENT_RUNTIME_ARN || '';
 const AGENT_QUALIFIER = (endpointSplit && endpointSplit.qualifier) || RC.AGENT_QUALIFIER || process.env.REACT_APP_AGENT_QUALIFIER || 'DEFAULT';
 
-// Build the InvokeAgentRuntime HTTPS endpoint for the OAuth/JWT path:
-//   POST https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<url-encoded-ARN>/invocations?qualifier=<q>
+// Front door: an AgentCore Gateway (Cognito JWT authorizer + AWS WAF + per-user rate
+// limit) in front of an IAM-only runtime. When FRONTDOOR_URL is set (demo stack, and the
+// workshop once the front-door step is done) the browser calls the gateway's runtime
+// target, <FRONTDOOR_URL>/agent/invocations. Otherwise it calls the runtime directly,
+// which then has its own JWT authorizer (early workshop steps, local dev).
+const FRONTDOOR_URL = (RC.FRONTDOOR_URL || process.env.REACT_APP_FRONTDOOR_URL || '').replace(/\/+$/, '');
+const USER_TOKEN_HEADER = 'X-Amzn-Bedrock-AgentCore-Runtime-Custom-User-Token';
+
+// Direct path: POST https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<url-encoded-ARN>/invocations?qualifier=<q>
 // The runtime's CustomJWTAuthorizer validates the Bearer token; no SigV4, no Identity Pool.
 const buildInvokeUrl = () => {
+  if (FRONTDOOR_URL) return `${FRONTDOOR_URL}/agent/invocations`;
   const enc = encodeURIComponent(AGENT_RUNTIME_ARN);
   const q = encodeURIComponent(AGENT_QUALIFIER || 'DEFAULT');
   return `https://bedrock-agentcore.${AWS_REGION}.amazonaws.com/runtimes/${enc}/invocations?qualifier=${q}`;
+};
+
+// Turn a failed invoke into a message a business user can act on. The raw detail is
+// kept in the console for troubleshooting.
+const describeInvokeError = (status, detail) => {
+  console.warn('Agent invoke failed', status, (detail || '').slice(0, 500));
+  if (status === 401) return 'Your sign-in has expired. Sign out and sign in again.';
+  if (status === 429) return 'You are sending requests faster than the per-user limit allows. Wait a minute and try again.';
+  if (status === 403 && /blocked by waf/i.test(detail || '')) {
+    return 'The request was blocked by the web application firewall. Rephrase the question without code or SQL fragments and try again.';
+  }
+  if (status === 403) return 'You are not allowed to call the agent. Check that you are signed in with a workshop user.';
+  return `Agent invoke failed: HTTP ${status}${detail ? ' - ' + detail.slice(0, 200) : ''}`;
 };
 
 // Store runtime sessions to reuse them
@@ -301,14 +322,16 @@ export const invokeAgent = async ({
         // AgentCore session header (33+ chars). The SDK set this from runtimeSessionId;
         // over raw HTTPS we send it explicitly.
         'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id': runtimeSessionId,
+        // Behind the front door the runtime sees the gateway's SigV4 Authorization, so
+        // the gateway forwards the user's token to the agent in this header instead.
+        ...(FRONTDOOR_URL ? { [USER_TOKEN_HEADER]: bearer } : {}),
       },
       body: JSON.stringify(payloadData),
     });
 
     if (!response.ok) {
-      // 401/403 → token invalid/expired (authorizer rejected). Surface clearly.
       const detail = await response.text().catch(() => '');
-      throw new Error(`Agent invoke failed: HTTP ${response.status}${detail ? ' — ' + detail.slice(0, 200) : ''}`);
+      throw new Error(describeInvokeError(response.status, detail));
     }
 
     const streamReader = (enableStreaming && response.body && typeof response.body.getReader === 'function')
@@ -404,7 +427,7 @@ export const clearSession = (sessionId) => {
 export const validateAWSConfig = () => {
   const missingConfigs = [];
   
-  if (!AGENT_RUNTIME_ARN) missingConfigs.push('REACT_APP_AGENT_RUNTIME_ARN');
+  if (!AGENT_RUNTIME_ARN && !FRONTDOOR_URL) missingConfigs.push('REACT_APP_FRONTDOOR_URL or REACT_APP_AGENT_RUNTIME_ARN');
   if (!AWS_REGION) missingConfigs.push('REACT_APP_AWS_REGION');
   
   if (missingConfigs.length > 0) {
@@ -421,6 +444,7 @@ export const getAWSConfig = () => ({
   region: AWS_REGION,
   agentRuntimeArn: AGENT_RUNTIME_ARN,
   qualifier: AGENT_QUALIFIER,
-  authMode: 'jwt-bearer',
+  frontDoorUrl: FRONTDOOR_URL,
+  authMode: FRONTDOOR_URL ? 'jwt-front-door' : 'jwt-bearer',
   configured: validateAWSConfig()
 });

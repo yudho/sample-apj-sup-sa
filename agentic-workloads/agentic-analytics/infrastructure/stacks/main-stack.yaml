@@ -391,6 +391,7 @@ Resources:
         CognitoDomain: !GetAtt CognitoStack.Outputs.CognitoDomain
         CognitoIdentityPoolId: !GetAtt CognitoStack.Outputs.IdentityPoolId
         AgentCoreRuntimeEndpoint: !GetAtt AgentCoreStack.Outputs.AgentRuntimeEndpointArn
+        FrontDoorUrl: !GetAtt AgentCoreStack.Outputs.FrontDoorUrl
         # Empty unless voice (agentcore) is enabled → UI hides the Voice button when blank.
         # The WebRTC signaling proxy base URL; the SPA POSTs SDP offers / PATCHes ICE
         # to {this}/api/offer (the proxy forwards to the runtime + unwraps the SSE answer).
