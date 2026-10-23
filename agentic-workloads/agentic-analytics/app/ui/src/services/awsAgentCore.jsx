@@ -5,6 +5,9 @@
 // you can't use the AWS SDK to call InvokeAgentRuntime. Instead, make an HTTPS request."
 import { fetchAccessToken } from './authService';
 
+// Diagnostics only in the dev server; never log prompts, replies or tokens.
+const debugLog = (...args) => { if (process.env.NODE_ENV === 'development') console.debug(...args); };
+
 // AWS Configuration
 // Runtime config (window.__APP_CONFIG__) overrides build-time env vars in demo mode.
 const RC = (typeof window !== 'undefined' && window.__APP_CONFIG__) || {};
@@ -71,7 +74,7 @@ const getOrCreateRuntimeSessionId = (sessionId) => {
   
   // Store it for reuse
   runtimeSessions.set(sessionId, runtimeSessionId);
-  console.log('Created new runtime session:', runtimeSessionId, 'for session:', sessionId);
+  debugLog('Created new runtime session:', runtimeSessionId, 'for session:', sessionId);
 
   return runtimeSessionId;
 };
@@ -102,7 +105,7 @@ const recordToolUse = (toolName, state, debugSource) => {
   if (!toolName || !state.onToolUse || state.detectedTools.has(toolName)) {
     return;
   }
-  console.log('AgentCore: Detected tool', toolName, 'via', debugSource);
+  debugLog('AgentCore: Detected tool', toolName, 'via', debugSource);
   state.detectedTools.add(toolName);
   state.onToolUse(toolName);
 };
@@ -116,7 +119,6 @@ const detectToolUsageFromText = (text, state) => {
     return;
   }
 
-  console.log('AgentCore: Checking text for tools:', text.substring(0, 150));
   for (const pattern of TOOL_NAME_PATTERNS) {
     const match = text.match(pattern);
     if (match && match[1]) {
@@ -192,7 +194,6 @@ const detectToolUsageFromParsed = (parsed, state, rawContent) => {
 };
 
 const handleSSEDataContent = (dataContent, state) => {
-  console.log('Processing SSE data:', dataContent.substring(0, 100));
 
   try {
     const parsed = JSON.parse(dataContent);
@@ -201,12 +202,11 @@ const handleSSEDataContent = (dataContent, state) => {
       const chunk = parsed.event.contentBlockDelta.delta.text;
       state.fullText += chunk;
       state.hasStreamed = true;
-      console.log('Streaming chunk:', chunk);
       if (state.onChunk) {
         state.onChunk(chunk);
       }
     } else if (parsed.message?.content?.[0]?.text) {
-      console.log('Final complete message received');
+      debugLog('Final complete message received');
       const finalMessage = parsed.message.content[0].text;
       state.finalText = finalMessage;
       if (!state.hasStreamed) {
@@ -256,7 +256,7 @@ const parseSSEResponse = (sseText, onChunk, onToolUse) => {
   const state = createSSEState({ onChunk, onToolUse });
   const eventBlocks = sseText.split(/\r?\n\r?\n/);
 
-  console.log('Parsing SSE response, total blocks:', eventBlocks.length);
+  debugLog('Parsing SSE response, total blocks:', eventBlocks.length);
 
   for (const eventBlock of eventBlocks) {
     if (eventBlock.trim().length === 0) {
@@ -265,7 +265,7 @@ const parseSSEResponse = (sseText, onChunk, onToolUse) => {
     processSSEEventBlock(eventBlock, state);
   }
 
-  console.log(
+  debugLog(
     'Parsing complete. HasStreamed:',
     state.hasStreamed,
     'FullText length:',
@@ -289,7 +289,7 @@ export const invokeAgent = async ({
   onToolUse = null,
   enableStreaming = true
 }) => {
-  console.log('[AgentCore] invokeAgent JWT-native (bearer HTTPS) rev 4');
+  debugLog('[AgentCore] invokeAgent JWT-native (bearer HTTPS) rev 4');
 
   // JWT-native: the user's Cognito ACCESS token is the Bearer credential the runtime
   // authorizer validates. Prefer the passed gatewayToken; otherwise fetch a fresh one.
@@ -306,9 +306,8 @@ export const invokeAgent = async ({
   // The agent expects "prompt"; mode selects text vs voice formatting. The token is NO
   // longer in the payload — it's the Authorization header (validated at the runtime edge).
   const payloadData = { prompt: message, mode: 'text' };
-  console.log('Sending payload:', payloadData, '(auth via Bearer header)');
 
-  console.log('Invoking agent with session:', runtimeSessionId);
+  debugLog('Invoking agent with session:', runtimeSessionId);
 
   try {
     // Plain HTTPS POST to InvokeAgentRuntime with the Bearer token. fetch() streams the
@@ -339,7 +338,7 @@ export const invokeAgent = async ({
       : null;
 
     if (streamReader) {
-      console.log('Streaming agent response via fetch ReadableStream reader');
+      debugLog('Streaming agent response via fetch ReadableStream reader');
 
       const state = createSSEState({ onChunk: onStreamChunk, onToolUse });
       const decoder = new TextDecoder();
@@ -390,7 +389,7 @@ export const invokeAgent = async ({
     // Non-streaming fallback (enableStreaming=false or no readable body): read the
     // whole body as text and parse it.
     const rawResponse = await response.text();
-    console.log('Raw response received, length:', rawResponse.length);
+    debugLog('Raw response received, length:', rawResponse.length);
 
     const textResponse = parseSSEResponse(rawResponse, onStreamChunk, onToolUse);
 
@@ -418,7 +417,7 @@ export const invokeAgent = async ({
 // Function to clear a session (useful for starting a new conversation)
 export const clearSession = (sessionId) => {
   if (runtimeSessions.has(sessionId)) {
-    console.log('Clearing runtime session for:', sessionId);
+    debugLog('Clearing runtime session for:', sessionId);
     runtimeSessions.delete(sessionId);
   }
 };

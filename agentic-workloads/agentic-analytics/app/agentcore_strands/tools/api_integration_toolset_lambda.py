@@ -153,7 +153,6 @@ def error_response(message):
     return {'statusCode': 400, 'body': json.dumps({'success': False, 'error': message})}
 
 def lambda_handler(event, context):
-    print(f"Received event: {json.dumps(event)}")
     
     # Extract RLS context from JWT claims
     rls_context = _extract_rls_context_from_jwt(context)
@@ -172,7 +171,7 @@ def lambda_handler(event, context):
             tool_name = tool_name.split(delimiter)[-1] if delimiter in tool_name else tool_name
         
         arguments = event.get('arguments', {}) if 'arguments' in event else event
-        print(f"Tool: {tool_name}, Args: {arguments}")
+        print(f"Tool: {tool_name}, arg keys: {sorted(arguments)}")
         
         if tool_name == 'create_booking_tool':
             return create_booking(arguments, rls_context)

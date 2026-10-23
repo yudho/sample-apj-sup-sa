@@ -326,9 +326,10 @@ async def agent_invocation(payload, context):
 
     gateway_token = _bearer_from_headers(context)
 
-    print("AgentCore Context:\n-------\n", context)
+    # The request context carries the caller's headers (tokens); log only the session id.
+    print(f"AgentCore session: {getattr(context, 'session_id', None)}")
     print(f"Inbound JWT present: {'Yes' if gateway_token else 'No'}")
-    print("Processing Query:\n*******\n", user_message)
+    print(f"Processing query ({len(user_message)} chars)")
 
     # Pass-through for now; modify here to enrich the prompt (e.g., inject context, tenant info)
     enhanced_prompt = user_message

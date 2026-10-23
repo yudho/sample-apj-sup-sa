@@ -269,7 +269,7 @@ Resources:
                   return None
 
           def lambda_handler(event, context):
-              print(f"Event: {json.dumps(event)}")
+              print(f"Event: {event.get('RequestType')} {event.get('LogicalResourceId')}")
               props = event['ResourceProperties']
               
               if event['RequestType'] == 'Delete':

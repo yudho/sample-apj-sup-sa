@@ -163,11 +163,9 @@ def get_db_connection(rls_context=None):
     return conn
 
 def lambda_handler(event, context):
-    print(f"Received event: {json.dumps(event)}")
     
     # Extract RLS context from JWT claims
     rls_context = _extract_rls_context_from_jwt(context)
-    print(f"DEBUG RLS context: {rls_context}")
     
     try:
         delimiter = "___"
@@ -182,7 +180,7 @@ def lambda_handler(event, context):
             tool_name = tool_name.split(delimiter)[-1] if delimiter in tool_name else tool_name
         
         arguments = event.get('arguments', {}) if 'arguments' in event else event
-        print(f"Tool: {tool_name}, Args: {arguments}")
+        print(f"Tool: {tool_name}, arg keys: {sorted(arguments)}")
         
         handlers = {
             'list_tables_tool': list_tables,

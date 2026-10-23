@@ -170,7 +170,8 @@ def lambda_handler(event, context):
         CognitoUserPoolId: User pool whose client to patch with the Amplify URL
         CognitoUserClientId: Client ID to patch
     """
-    print(f"Event: {json.dumps(event)}")
+    # The event holds a presigned ResponseURL; log only what identifies the request.
+    print(f"Event: {event.get('RequestType')} {event.get('LogicalResourceId')}")
 
     request_type = event.get('RequestType', 'Create')
     props = event.get('ResourceProperties', {})
