@@ -66,20 +66,20 @@ Why not just tell the agent in the prompt "don't let analysts book"? Because a p
 
 ### Step 7.1: Add Cedar Policies (TODO 7.1) — *Part A: tool access*
 
-::alert[**Complete Steps 4, 5, and 6 first.** Two of the Cedar policies guard tools from those steps — `ForbidWriteAnalystPolicy` depends on the Step-5 booking target and `ForbidCustomSqlStaffPolicy` on the Step-6 Custom SQL target. If you uncomment Step 7a before those targets exist, `make deploy` fails with `Unresolved resource dependencies [ApiIntegTarget]` (or `[CustomSqlTarget]`). Deploy the toolset steps in order, then return here.]{type="warning"}
+::alert[**Complete Steps 4, 5, 6 and 6b first.** Three of the Cedar policies guard tools from those steps: `ForbidWriteAnalystPolicy` needs the Step 5 booking target, `ForbidCustomSqlStaffPolicy` the Step 6 Custom SQL target, and `ForbidWebSearchStaffPolicy` the Step 6b Web Search target. If one of them is missing, `make deploy` fails with `Unresolved resource dependencies [ApiIntegTarget]` (or `[CustomSqlTarget]`, `[WebSearchTarget]`). Deploy the toolset steps in order, then return here.]{type="warning"}
 
 :link[AgentCore Policy]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html"} uses :link[Cedar]{href="https://www.cedarpolicy.com/"}, a policy language created by AWS. Cedar policies are **deterministic** — unlike prompt-based restrictions, they use formal logic for safeguarding against prompt injection.
 
 Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-stack.yaml]{showCopyAction=true}. **Step 7a has TWO fences you must uncomment** — both are labelled `Step 7a`:
 
-1. The **Policy Engine + Cedar policies** block (the `PolicyEngine` resource and the three `AWS::BedrockAgentCore::Policy` resources).
+1. The **Policy Engine + Cedar policies** block (the `PolicyEngine` resource and four `AWS::BedrockAgentCore::Policy` resources).
 2. The **3-line `PolicyEngineConfiguration` block on the Gateway** (this wires the Gateway to the policy engine — they must come live together, or the Gateway would reference a policy engine that doesn't exist).
 
 ::alert[**Tip — uncomment each block at once.** Don't delete each `#` by hand, especially for the larger policy-engine block. The Code Editor is VS Code: click the first line *inside* a fence, then **Shift+click** the last line inside it to select the block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Do this for **both** Step-7a fences. Select only the lines **between** the markers — not the marker lines themselves.]{type="info"}
 
 ::::expand{header="💡 Need help with TODO 7.1? Click to see exactly what to uncomment"}
 Uncomment **both** Step-7a fences:
-- The `# ===== UNCOMMENT FROM HERE (Step 7a: Cedar policy engine ...)` fence — the `PolicyEngine`, `AllowAllToolsPolicy`, `ForbidWriteAnalystPolicy`, and `ForbidCustomSqlStaffPolicy` resources.
+- The `# ===== UNCOMMENT FROM HERE (Step 7a: Cedar policy engine ...)` fence — the `PolicyEngine`, `AllowAllToolsPolicy`, `ForbidWriteAnalystPolicy`, `ForbidWebSearchStaffPolicy` and `ForbidCustomSqlStaffPolicy` resources.
 - The small `# --- Step 7a: ALSO uncomment these 3 lines ...` block on the `Gateway` resource — the `PolicyEngineConfiguration:` / `Arn:` / `Mode:` lines.
 
 If you uncomment only the policies but not the Gateway block, the policies exist but aren't enforced. If you uncomment only the Gateway block but not the policies, `make deploy` fails because the Gateway references a `PolicyEngine` that isn't there. Uncomment both.
@@ -98,7 +98,7 @@ Once that succeeds, switch to **enforcement** by redeploying with the policy mod
 make deploy POLICY_MODE=ENFORCE
 ```
 
-The three policies (already written in the template) are:
+The four policies (already written in the template) are:
 
 ```cedar
 // 1. Base permit — allow all tools for any authenticated principal
@@ -114,6 +114,12 @@ when { principal.getTag("custom:role") == "analyst" };
 forbid(principal is AgentCore::OAuthUser,
   action in [AgentCore::Action::"CustomSQL___text_to_sql_tool",
              AgentCore::Action::"CustomSQL___execute_sql_tool"],
+  resource == AgentCore::Gateway::"<arn>")
+when { principal.getTag("custom:role") == "staff" };
+
+// 4. Forbid web search for staff
+forbid(principal is AgentCore::OAuthUser,
+  action == AgentCore::Action::"WebSearch___WebSearch",
   resource == AgentCore::Gateway::"<arn>")
 when { principal.getTag("custom:role") == "staff" };
 ```
@@ -286,7 +292,7 @@ The Cedar policy doesn't just *refuse* the booking tool — it makes it **invisi
 
 ## Verification
 
-- After uncommenting both Step-7a fences and `make deploy`, the stack has a Policy Engine with 3 Cedar policies
+- After uncommenting both Step-7a fences and `make deploy`, the stack has a Policy Engine with 4 Cedar policies (7 after Step 7b)
 - `make deploy POLICY_MODE=ENFORCE` switches the Gateway to enforcement mode
 - Flipping `/agentic-analytics/rls-mode` to `enabled` switches all three SQL Lambdas to the `app_user` secret (within ~60s, no redeploy)
 - Admin (Lyra) can create bookings; analyst (Orion) cannot see the tool
