@@ -11,9 +11,3 @@ root.render(
   </React.StrictMode>
 );
 
-// Optional: Log environment configuration in development
-if (process.env.NODE_ENV === 'development') {
-  console.log('Recipe Genie Frontend Configuration:');
-  console.log('API URL:', process.env.REACT_APP_API_URL || 'http://localhost:8080');
-  console.log('Port:', process.env.PORT || '3000');
-}
