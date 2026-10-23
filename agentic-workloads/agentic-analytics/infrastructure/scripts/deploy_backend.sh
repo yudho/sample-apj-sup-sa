@@ -335,6 +335,7 @@ else
   KEY_PAIRS+=("ObservabilityLambdaKey=lambdas/$(latest lambdas/observability_setup-)")
   KEY_PAIRS+=("AmplifyLambdaKey=lambdas/$(latest lambdas/amplify_hosting-)")
   KEY_PAIRS+=("InterceptorLambdaKey=lambdas/$(latest lambdas/gateway_interceptor-)")
+  KEY_PAIRS+=("SchemaSyncLambdaKey=lambdas/$(latest lambdas/schema_sync-)")
   KEY_PAIRS+=("DataFoundationLambdaKey=lambdas/$(latest lambdas/datafoundation-)")
   KEY_PAIRS+=("ApiIntegLambdaKey=lambdas/$(latest lambdas/api_integration_toolset-)")
   KEY_PAIRS+=("CustomSqlLambdaKey=lambdas/$(latest lambdas/custom_sql_toolset-)")

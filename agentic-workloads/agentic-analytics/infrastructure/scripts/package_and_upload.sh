@@ -188,6 +188,21 @@ if [ "$DEPLOY_MODE" != "workshop" ]; then
     aws s3 cp "$TEMP_DIR/gateway_interceptor.zip" "s3://$BUCKET/$(s3_path "$INTERCEPTOR_KEY")" --region $REGION > /dev/null
     echo "  gateway_interceptor: $INTERCEPTOR_KEY"
 
+    # Package the schema change pipeline Lambda (app/schema_sync)
+    echo "Packaging schema_sync Lambda..."
+    SCHEMA_PKG="$TEMP_DIR/schema_sync_pkg"
+    mkdir -p "$SCHEMA_PKG"
+    cp "$PROJECT_ROOT/app/schema_sync/schema_sync_lambda.py" "$PROJECT_ROOT/app/schema_sync/schema_diff.py" "$SCHEMA_PKG/"
+    (cd "$SCHEMA_PKG" && zip -r "$TEMP_DIR/schema_sync.zip" . > /dev/null)
+    if command -v sha256sum &> /dev/null; then
+        HASH=$(sha256sum "$TEMP_DIR/schema_sync.zip" | cut -c1-8)
+    else
+        HASH=$(shasum -a 256 "$TEMP_DIR/schema_sync.zip" | cut -c1-8)
+    fi
+    SCHEMA_SYNC_KEY="lambdas/schema_sync-${HASH}.zip"
+    aws s3 cp "$TEMP_DIR/schema_sync.zip" "s3://$BUCKET/$(s3_path "$SCHEMA_SYNC_KEY")" --region $REGION > /dev/null
+    echo "  schema_sync: $SCHEMA_SYNC_KEY"
+
     # Package agent code ZIP for AgentCore Runtime (CodeConfiguration)
     echo "Packaging agent code for AgentCore Runtime..."
     cd "$AGENT_DIR"
@@ -306,6 +321,7 @@ aws s3 cp cognito-stack.yaml "s3://$BUCKET/$(s3_path "templates/cognito-stack.ya
 aws s3 cp code-editor-stack.yaml "s3://$BUCKET/$(s3_path "templates/code-editor-stack.yaml")" --region $REGION > /dev/null
 aws s3 cp observability-stack.yaml "s3://$BUCKET/$(s3_path "templates/observability-stack.yaml")" --region $REGION > /dev/null
 aws s3 cp cube-stack.yaml "s3://$BUCKET/$(s3_path "templates/cube-stack.yaml")" --region $REGION > /dev/null
+aws s3 cp schema-sync-stack.yaml "s3://$BUCKET/$(s3_path "templates/schema-sync-stack.yaml")" --region $REGION > /dev/null
 
 echo "Uploading schema and data..."
 aws s3 cp "$PROJECT_ROOT/dataset/schema/schema.sql" "s3://$BUCKET/$(s3_path "schema/schema.sql")" --region $REGION > /dev/null
@@ -393,6 +409,7 @@ echo "  GlueCrawlerLambdaKey=$GLUE_KEY"
 echo "  AmplifyLambdaKey=$AMPLIFY_KEY"
 echo "  DataFoundationLambdaKey=${DATAFOUNDATION_KEY:-lambda/datafoundation_lambda.zip}"
 echo "  InterceptorLambdaKey=$INTERCEPTOR_KEY"
+echo "  SchemaSyncLambdaKey=$SCHEMA_SYNC_KEY"
 echo "  ApiIntegLambdaKey=$API_INTEG_KEY"
 echo "  CustomSqlLambdaKey=$CUSTOM_SQL_KEY"
 echo "  SemanticLayerLambdaKey=$SEMANTIC_LAYER_KEY"

@@ -55,6 +55,11 @@ Parameters:
     Default: lambda/datafoundation_lambda.zip
     Description: S3 key for DataFoundation toolset Lambda (use hash-versioned key)
 
+  SchemaSyncLambdaKey:
+    Type: String
+    Default: ''
+    Description: S3 key for the schema change pipeline Lambda (empty = no pipeline)
+
   InterceptorLambdaKey:
     Type: String
     Default: lambdas/gateway_interceptor.zip
@@ -127,6 +132,7 @@ Parameters:
 
 Conditions:
   IsDemo: !Equals [!Ref DeployMode, 'demo']
+  HasSchemaSync: !And [!Condition IsDemo, !Not [!Equals [!Ref SchemaSyncLambdaKey, '']]]
   IsWorkshop: !Equals [!Ref DeployMode, 'workshop']
   # Voice is demo-only and additive. VoiceAgentCore is the CFN-wired mode (the voice
   # pipeline runs as its own AgentCore Runtime, WebRTC + KVS TURN, no vendor SFU);
@@ -410,6 +416,31 @@ Resources:
         - Key: Project
           Value: !Ref EnvironmentName
 
+
+  #============================================================================
+  # Schema change pipeline (Step Functions): keeps Glue descriptions and the
+  # business-context KB in step with DDL changes. See schema-sync-stack.yaml.
+  #============================================================================
+  SchemaSyncStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: HasSchemaSync
+    Properties:
+      TemplateURL: !Sub https://${ArtifactsBucket}.s3.${AWS::Region}.amazonaws.com/${ArtifactsPrefix}templates/schema-sync-stack.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        ArtifactsBucket: !Ref ArtifactsBucket
+        ArtifactsPrefix: !Ref ArtifactsPrefix
+        SchemaSyncLambdaKey: !Ref SchemaSyncLambdaKey
+        AuroraEndpoint: !GetAtt AuroraStack.Outputs.AuroraClusterEndpoint
+        DatabaseSecretArn: !GetAtt AuroraStack.Outputs.DatabaseSecretArn
+        SubnetIds: !Join [',', [!GetAtt AuroraStack.Outputs.PrivateSubnet1Id, !GetAtt AuroraStack.Outputs.PrivateSubnet2Id]]
+        SecurityGroupId: !GetAtt AuroraStack.Outputs.LambdaSecurityGroupId
+        GlueDatabaseName: !GetAtt GlueStack.Outputs.GlueDatabaseName
+        GlueCrawlerName: !GetAtt GlueStack.Outputs.GlueCrawlerName
+        KnowledgeBaseId: !GetAtt BedrockKBStack.Outputs.KnowledgeBaseId
+        KnowledgeBaseDataSourceId: !GetAtt BedrockKBStack.Outputs.DataSourceId
+        KBDocsBucketName: !GetAtt BedrockKBStack.Outputs.KBDocsBucketName
+
 Outputs:
   VpcId:
     Description: VPC ID
@@ -527,5 +558,7 @@ Outputs:
     Description: S3 bucket for Cube configuration files
     Value: !GetAtt CubeStack.Outputs.CubeConfigBucketName
 
-
-
+  SchemaSyncStateMachineArn:
+    Condition: HasSchemaSync
+    Description: Step Functions state machine for schema changes
+    Value: !GetAtt SchemaSyncStack.Outputs.SchemaSyncStateMachineArn
