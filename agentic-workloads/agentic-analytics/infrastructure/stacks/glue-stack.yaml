@@ -148,10 +148,17 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # The crawler's JDBC connection runs in the VPC through ENIs it creates and removes.
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
                   - ec2:DeleteNetworkInterface
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+              - Effect: Allow
+                Action:
                   - ec2:DescribeNetworkInterfaces
                   - ec2:DescribeSecurityGroups
                   - ec2:DescribeSubnets
@@ -180,22 +187,6 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::${GlueDriverBucket}
                   - !Sub arn:aws:s3:::${GlueDriverBucket}/*
-        - PolicyName: GlueJobAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - glue:CreateJob
-                  - glue:DeleteJob
-                  - glue:GetJob
-                  - glue:GetJobRun
-                  - glue:StartJobRun
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - iam:PassRole
-                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-glue-role
 
   #============================================================================
   # S3 Bucket for JDBC Driver (Glue needs write access to driver bucket)
@@ -453,11 +444,16 @@ Resources:
                   - glue:GetCrawler
                 Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${EnvironmentName}-aurora-crawler
               - Effect: Allow
+                Action: ec2:DescribeNetworkInterfaces
+                Resource: '*'
+              # Cleans up the crawler ENIs left behind in this account and Region.
+              - Effect: Allow
                 Action:
-                  - ec2:DescribeNetworkInterfaces
                   - ec2:DeleteNetworkInterface
                   - ec2:DetachNetworkInterface
-                Resource: '*'
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
 
   #============================================================================
   # Crawler Trigger Lambda Function
