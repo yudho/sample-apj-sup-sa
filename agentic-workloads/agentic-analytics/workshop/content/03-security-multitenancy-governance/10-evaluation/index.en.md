@@ -22,7 +22,7 @@ Observability (Step 9) tells you *what happened*. Evaluation tells you *how well
 | **On-demand** | You trigger it manually | Test after changes, investigate specific sessions |
 | **Online** | Continuously on live traffic | Production monitoring, quality alerts |
 
-::alert[**A deliberate exception to the "no CLI" rule.** Everywhere else in this workshop you build the agent layer by editing CloudFormation and running `make deploy`. Evaluation is different: it's an analysis harness that scores existing traces, and there is **no CloudFormation resource** for it: so this step uses the `agentcore eval` CLI directly. This is the one place the CLI is the right tool, the same way the optional Cube lab keeps its own scripts.]{type="info"}
+::alert[**One CLI command, one template block.** The on-demand run in Step 10.1 is an analysis you start by hand, so it uses the `agentcore eval` CLI. Continuous scoring in Step 10.3 is infrastructure, so it is a CloudFormation resource you uncomment like every other step.]{type="info"}
 
 ## Lab Procedures
 
@@ -59,21 +59,19 @@ Each built-in evaluator scores a different dimension:
 
 ### Step 10.3: Set Up Online (Continuous) Evaluation
 
-For production, you want every invocation scored automatically:
+For production you want conversations scored without anyone running a command. That is one more resource in your template. Find the **Step 10** fence in :code[agentcore-topup-stack.yaml]{showCopyAction=true}, uncomment it and deploy:
 
 ```bash
-agentcore eval online create \
-  --name unicorn_eval \
-  --sampling-rate 100 \
-  --evaluator "Builtin.Helpfulness" \
-  --evaluator "Builtin.Correctness" \
-  --agent-id "<AgentRuntimeId-from-make-outputs>"
+cd /workshop/agentic-analytics/app/agentcore_strands
+make deploy
 ```
 
-This creates a continuous evaluation that:
-- Samples 100% of invocations (reduce for cost in production: e.g., 10%)
-- Scores each one with Helpfulness and Correctness
-- Reports metrics to CloudWatch: you can set alarms when quality drops
+The fence adds an IAM role that can read the runtime's spans and an `AWS::BedrockAgentCore::OnlineEvaluationConfig` named `unicorn_rental_online_eval`. It:
+- samples 10% of finished conversations (raise it while you test, lower it for cost in production)
+- scores each with Correctness, Faithfulness, Helpfulness, ToolSelectionAccuracy and GoalSuccessRate
+- writes scores to a results log group and as CloudWatch metrics in the `Bedrock-AgentCore/Evaluations` namespace, so you can alarm on quality like you alarm on errors
+
+Have a few conversations in the UI, then give the evaluator a few minutes: it scores a conversation after it has finished.
 
 ### Step 10.4: View Results in CloudWatch
 
