@@ -1664,7 +1664,9 @@ Resources:
       # the voice ECR repo in voice-agentcore-stack.yaml).
       EmptyOnDelete: true
       ImageScanningConfiguration:
-        ScanOnPush: false
+        ScanOnPush: true
+      # Images are encrypted at rest with AES-256 (ECR default). A KMS key would force a
+      # repository replacement on existing stacks and adds no control in a single-account sample.
       LifecyclePolicy:
         LifecyclePolicyText: '{"rules":[{"rulePriority":1,"selection":{"tagStatus":"untagged","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}}]}'
 
