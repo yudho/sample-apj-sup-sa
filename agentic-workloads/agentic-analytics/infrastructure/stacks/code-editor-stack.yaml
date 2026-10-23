@@ -128,6 +128,14 @@ Parameters:
     Default: ''
     Description: Git repo URL (optional - if empty, downloads from S3 artifacts bucket)
 
+Mappings:
+  # Managed prefix list com.amazonaws.global.cloudfront.origin-facing, per Region.
+  CloudFrontOriginFacing:
+    us-east-1:
+      PrefixListId: pl-3b927c52
+    us-west-2:
+      PrefixListId: pl-82a045eb
+
 Resources:
   #============================================================================
   # Code Editor Password Secret
@@ -154,16 +162,15 @@ Resources:
       GroupDescription: Code Editor EC2 security group
       VpcId: !Ref VpcId
       SecurityGroupIngress:
+        # Only CloudFront's origin-facing addresses can reach the instance, so the
+        # IDE is not exposed to the internet directly. CloudFront terminates TLS for
+        # the browser; the CloudFront-to-instance hop is HTTP inside AWS's network.
+        # For production, front the instance with an ALB (HTTPS origin) or a VPC origin.
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
-          # Justification: Port 80 is open to 0.0.0.0/0 because CloudFront requires
-          # HTTP access to the EC2 origin. CloudFront does not support security group
-          # restrictions. The Code Editor is password-protected via code-server auth
-          # token embedded in the CloudFront URL. In production, use an ALB with
-          # WAF and CloudFront origin access control.
-          Description: HTTP for CloudFront origin (password-protected via code-server)
+          SourcePrefixListId: !FindInMap [CloudFrontOriginFacing, !Ref AWS::Region, PrefixListId]
+          Description: HTTP from CloudFront only (origin-facing managed prefix list)
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 443
