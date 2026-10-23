@@ -35,11 +35,6 @@ Parameters:
     Default: lambdas/glue_crawler_trigger.zip
     Description: S3 key for Glue crawler Lambda (use hash-versioned key)
 
-  BedrockKBLambdaKey:
-    Type: String
-    Default: lambdas/bedrock_kb_ingestion.zip
-    Description: S3 key for Bedrock KB Lambda (use hash-versioned key)
-
   AgentCodeS3Key:
     Type: String
     Default: agent/agent_code.zip
@@ -225,12 +220,8 @@ Resources:
       TemplateURL: !Sub https://${ArtifactsBucket}.s3.${AWS::Region}.amazonaws.com/${ArtifactsPrefix}templates/bedrock-kb-stack.yaml
       Parameters:
         EnvironmentName: !Ref EnvironmentName
-        AuroraClusterArn: !GetAtt AuroraStack.Outputs.AuroraResourceArn
-        DatabaseSecretArn: !GetAtt AuroraStack.Outputs.DatabaseSecretArn
-        DatabaseName: !GetAtt AuroraStack.Outputs.DatabaseName
         ArtifactsBucket: !Ref ArtifactsBucket
         ArtifactsPrefix: !Ref ArtifactsPrefix
-        LambdaS3Key: !Sub ${ArtifactsPrefix}${BedrockKBLambdaKey}
         BusinessContextKey: !Sub ${ArtifactsPrefix}docs/business-context.md
         KnowledgeBaseName: !Sub ${EnvironmentName}-kb
       Tags:

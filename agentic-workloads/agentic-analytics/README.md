@@ -120,7 +120,6 @@ aws cloudformation create-stack \
       ParameterKey=DeployMode,ParameterValue=demo \
       ParameterKey=DatabaseInitLambdaKey,ParameterValue=<from-output> \
       ParameterKey=GlueCrawlerLambdaKey,ParameterValue=<from-output> \
-      ParameterKey=BedrockKBLambdaKey,ParameterValue=<from-output> \
       ParameterKey=AmplifyLambdaKey,ParameterValue=<from-output> \
       ParameterKey=InterceptorLambdaKey,ParameterValue=<from-output> \
       ParameterKey=ApiIntegLambdaKey,ParameterValue=<from-output> \

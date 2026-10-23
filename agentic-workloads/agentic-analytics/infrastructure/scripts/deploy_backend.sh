@@ -332,7 +332,6 @@ else
   latest() { aws s3 ls "s3://${BUCKET}/$1" --region "$REGION" | sort | tail -1 | awk '{print $4}'; }
   KEY_PAIRS+=("DatabaseInitLambdaKey=lambdas/$(latest lambdas/database_init-)")
   KEY_PAIRS+=("GlueCrawlerLambdaKey=lambdas/$(latest lambdas/glue_crawler_trigger-)")
-  KEY_PAIRS+=("BedrockKBLambdaKey=lambdas/$(latest lambdas/bedrock_kb_ingestion-)")
   KEY_PAIRS+=("ObservabilityLambdaKey=lambdas/$(latest lambdas/observability_setup-)")
   KEY_PAIRS+=("AmplifyLambdaKey=lambdas/$(latest lambdas/amplify_hosting-)")
   KEY_PAIRS+=("InterceptorLambdaKey=lambdas/$(latest lambdas/gateway_interceptor-)")
@@ -345,7 +344,7 @@ else
   [ "$ENABLE_VOICE" = "true" ] && KEY_PAIRS+=("VoiceAgentCodeS3Key=voice/$(latest voice/voice_agent_code-)")
 fi
 
-REQUIRED_KEYS=(DatabaseInitLambdaKey GlueCrawlerLambdaKey BedrockKBLambdaKey
+REQUIRED_KEYS=(DatabaseInitLambdaKey GlueCrawlerLambdaKey
   ObservabilityLambdaKey AmplifyLambdaKey DataFoundationLambdaKey InterceptorLambdaKey
   ApiIntegLambdaKey CustomSqlLambdaKey SemanticLayerLambdaKey UIBuildKey AgentCodeS3Key)
 for k in "${REQUIRED_KEYS[@]}"; do

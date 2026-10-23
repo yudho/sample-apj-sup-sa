@@ -118,9 +118,6 @@ echo "  database_init: $DB_INIT_KEY"
 GLUE_KEY=$(package_lambda "glue_crawler_trigger" "$INFRA_DIR/custom-resource-lambdas/glue_crawler_trigger")
 echo "  glue_crawler_trigger: $GLUE_KEY"
 
-BEDROCK_KEY=$(package_lambda "bedrock_kb_ingestion" "$INFRA_DIR/custom-resource-lambdas/bedrock_kb_ingestion")
-echo "  bedrock_kb_ingestion: $BEDROCK_KEY"
-
 OBSERVABILITY_KEY=$(package_lambda "observability_setup" "$INFRA_DIR/custom-resource-lambdas/observability_setup")
 echo "  observability_setup: $OBSERVABILITY_KEY"
 
@@ -393,7 +390,6 @@ echo ""
 echo "Lambda S3 Keys:"
 echo "  DatabaseInitLambdaKey=$DB_INIT_KEY"
 echo "  GlueCrawlerLambdaKey=$GLUE_KEY"
-echo "  BedrockKBLambdaKey=$BEDROCK_KEY"
 echo "  AmplifyLambdaKey=$AMPLIFY_KEY"
 echo "  DataFoundationLambdaKey=${DATAFOUNDATION_KEY:-lambda/datafoundation_lambda.zip}"
 echo "  InterceptorLambdaKey=$INTERCEPTOR_KEY"
@@ -425,7 +421,6 @@ echo "      ParameterKey=ArtifactsBucket,ParameterValue=$ARTIFACTS_BUCKET \\"
 echo "      ParameterKey=DeployMode,ParameterValue=$DEPLOY_MODE \\"
 echo "      ParameterKey=DatabaseInitLambdaKey,ParameterValue=$DB_INIT_KEY \\"
 echo "      ParameterKey=GlueCrawlerLambdaKey,ParameterValue=$GLUE_KEY \\"
-echo "      ParameterKey=BedrockKBLambdaKey,ParameterValue=$BEDROCK_KEY \\"
 echo "      ParameterKey=AgentCodeS3Key,ParameterValue=agent/agent_code.zip \\"
 echo "      ParameterKey=AmplifyLambdaKey,ParameterValue=$AMPLIFY_KEY \\"
 echo "      ParameterKey=DataFoundationLambdaKey,ParameterValue=${DATAFOUNDATION_KEY:-lambda/datafoundation_lambda.zip} \\"

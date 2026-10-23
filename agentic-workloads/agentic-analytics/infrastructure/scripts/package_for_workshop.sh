@@ -53,7 +53,6 @@ package_lambda() {
 
 package_lambda "database_init" "$INFRA_DIR/custom-resource-lambdas/database_init"
 package_lambda "glue_crawler_trigger" "$INFRA_DIR/custom-resource-lambdas/glue_crawler_trigger"
-package_lambda "bedrock_kb_ingestion" "$INFRA_DIR/custom-resource-lambdas/bedrock_kb_ingestion"
 package_lambda "observability_setup" "$INFRA_DIR/custom-resource-lambdas/observability_setup"
 
 # NOTE: the old agentcore_gateway Lambda (which bundled the imperative
