@@ -374,6 +374,9 @@ fi
 build_params() {
   echo "ParameterKey=ArtifactsBucket,ParameterValue=${BUCKET}"
   echo "ParameterKey=DeployMode,ParameterValue=demo"
+  # Resource-name/export prefix. Without it every deployment is "agentic-analytics",
+  # which collides with a second deployment (or a workshop base stack) in the same account.
+  echo "ParameterKey=EnvironmentName,ParameterValue=${ENV_NAME}"
   for k in "${REQUIRED_KEYS[@]}"; do
     echo "ParameterKey=${k},ParameterValue=$(key_val "$k")"
   done
