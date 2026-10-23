@@ -2,6 +2,8 @@
 """
 Local Strands Agent — connects directly to Aurora PostgreSQL with @tool functions.
 Use this for local testing before deploying to AgentCore.
+Run it only against the synthetic Timely-Unicorn dataset: it prints the agent's reply,
+which contains query results.
 """
 
 import os

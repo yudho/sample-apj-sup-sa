@@ -2,6 +2,8 @@
 """
 Local Strands Agent — Step 1: Build Your First Agent
 Connects directly to Aurora PostgreSQL with a simple @tool function.
+Run it only against the synthetic Timely-Unicorn dataset: it prints the agent's reply,
+which contains query results.
 """
 
 import os

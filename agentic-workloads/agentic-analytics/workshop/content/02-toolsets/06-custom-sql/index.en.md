@@ -28,7 +28,7 @@ The Custom SQL toolset lets the agent **generate SQL dynamically**, but with mul
 
 This database is small, so the tool sends the whole schema: 9 tables and 22 views, well under the 32,000-character limit set by `SCHEMA_FULL_MAX_CHARS`. Real warehouses are not. When the schema is bigger than the limit, the tool sends a short index instead (one line per table: name, description and column count), the model picks the tables it needs, and the tool is called again with a `tables` list to get only those.
 
-We measured this on 60 questions, with the schema padded with 150 unrelated tables (181 tables and views). Sending the full schema scored 85% correct results and cost about 51,000 input tokens per question. The index-then-pick approach scored 90% at about 11,600 tokens, and it also beat embedding-based schema retrieval. Good one-line table descriptions matter more than the retrieval method, which is why Step 11 keeps them current.
+In our test (60 questions, Claude Sonnet 5.5, the schema padded with 150 unrelated tables to 181 tables and views; method and raw results in `dev/evaluation/schema-context/` in the sample repository), sending the full schema scored 85% correct results and cost about 51,000 input tokens per question. The index-then-pick approach scored 90% at about 11,600 tokens, and it also beat embedding-based schema retrieval. Your numbers will differ by schema and model. Good one-line table descriptions matter more than the retrieval method, which is why Step 11 keeps them current.
 
 ## Lab Procedures
 
