@@ -475,6 +475,7 @@ COGNITO_USER_POOL_ID="$(get_out CognitoUserPoolId)"
 AMPLIFY_URL="$(get_out AmplifyAppUrl)"
 [ -n "$RUNTIME_ID" ] || die "AgentRuntimeId output missing"
 AGENT_ARN="arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}"
+FRONTDOOR_URL="$(get_out FrontDoorUrl)"
 
 # Demo user creds live in SSM (seeded by the Cognito stack). Pick by role.
 USERS_JSON="$(aws ssm get-parameter --region "$REGION" --name "/agentic-analytics/demo/users" \
@@ -512,6 +513,8 @@ AWS_REGION=${REGION}
 
 # ── AgentCore (deployed Strands agent) ─────────────────────────────────────────
 AWS_AGENT_ARN=${AGENT_ARN}
+# The analytics runtime is IAM-only behind the front door; the bot calls the gateway.
+AWS_AGENT_FRONTDOOR_URL=${FRONTDOOR_URL}
 
 # ── Cognito ──────────────────────────────────────────────────────────────────
 COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}

@@ -68,6 +68,9 @@ if [ -z "$AGENT_ARN" ] || [ "$AGENT_ARN" = "None" ]; then
     AGENT_ARN="$(aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id "$AGENT_RT_ID" --region "$REGION" --query 'agentRuntimeArn' --output text 2>/dev/null)"
 fi
 [ -n "$AGENT_ARN" ] && [ "$AGENT_ARN" != "None" ] || { echo "ERROR: could not resolve analytics AgentRuntimeArn from $MAIN_STACK"; exit 1; }
+FRONTDOOR_URL="$(aws cloudformation describe-stacks --stack-name "$AGENTCORE_STACK" --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='FrontDoorUrl'].OutputValue" --output text 2>/dev/null)"
+[ "$FRONTDOOR_URL" = "None" ] && FRONTDOOR_URL=""
 
 echo "==> 1/5 PCC secret set (Deepgram/Daily keys on Pipecat's side)"
 # The Pipecat Cloud CLI ships as the 'cloud' extension of the 'pipecat' CLI
@@ -80,7 +83,7 @@ PATH="$ROOT/app/voice/.venv/bin:$PATH" PIPECAT_TOKEN="$PCC_PAT" \
     DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" DAILY_API_KEY="$DAILY_API_KEY" \
     DEEPGRAM_VOICE_ID="${DEEPGRAM_VOICE_ID:-aura-2-apollo-en}" \
     AWS_REGION="$REGION" COGNITO_CLIENT_ID="$CLIENT_ID" \
-    AWS_AGENT_ARN="$AGENT_ARN" \
+    AWS_AGENT_ARN="$AGENT_ARN" AWS_AGENT_FRONTDOOR_URL="$FRONTDOOR_URL" \
     AWS_AGENT_QUALIFIER="${AGENT_QUALIFIER:-agentic_analytics_endpoint}" \
     CHART_BUCKET="$ARTIFACTS_BUCKET" >/dev/null
 echo "    secret set ready (analytics runtime: $AGENT_ARN)"

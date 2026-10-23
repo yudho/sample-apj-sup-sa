@@ -357,6 +357,7 @@ Resources:
         CognitoUserPoolId: !GetAtt CognitoStack.Outputs.UserPoolId
         CognitoClientId: !GetAtt CognitoStack.Outputs.UserLoginClientId
         StrandsAgentRuntimeArn: !GetAtt AgentCoreStack.Outputs.AgentRuntimeArn
+        StrandsAgentFrontDoorUrl: !GetAtt AgentCoreStack.Outputs.FrontDoorUrl
         ChartBucket: !Ref ArtifactsBucket
         DeepgramApiKey: !Ref DeepgramApiKey
         DeepgramVoiceId: !Ref DeepgramVoiceId
@@ -473,6 +474,11 @@ Outputs:
     Condition: IsDemo
     Description: AgentCore Runtime ID
     Value: !GetAtt AgentCoreStack.Outputs.AgentRuntimeId
+
+  FrontDoorUrl:
+    Condition: IsDemo
+    Description: Front-door gateway URL for the agent (POST <url>/agent/invocations)
+    Value: !GetAtt AgentCoreStack.Outputs.FrontDoorUrl
 
   AgentRuntimeEndpointArn:
     Condition: IsDemo
