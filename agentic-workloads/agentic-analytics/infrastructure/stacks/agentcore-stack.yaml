@@ -805,10 +805,13 @@ Resources:
                   Description: Get monthly revenue summary
                   InputSchema: { Type: object }
                 - Name: get_daily_bookings_summary_tool
-                  Description: Get daily bookings with customer/unicorn details
+                  Description: Bookings by start date. Pass group_by=day for one row per day (counts, rental hours); without it, returns booking rows (max 200)
                   InputSchema:
                     Type: object
                     Properties:
+                      start_date: { Type: string, Description: 'YYYY-MM-DD, inclusive' }
+                      end_date: { Type: string, Description: 'YYYY-MM-DD, inclusive' }
+                      group_by: { Type: string, Description: "Only value: 'day' (per-day aggregates)" }
                       limit: { Type: integer }
                 - Name: get_monthly_revenue_summary_tool
                   Description: Get monthly revenue breakdown
