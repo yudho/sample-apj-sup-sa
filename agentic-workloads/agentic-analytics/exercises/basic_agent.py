@@ -53,4 +53,5 @@ agent = Agent(
 if __name__ == "__main__":
     print("Testing local Strands Agent...")
     result = agent("Show me the top 5 customers by revenue")
-    print(result)
+    # str(result) is the reply text only; the result object also holds tool inputs and outputs.
+    print(str(result))

@@ -30,7 +30,7 @@ You need two layers of security:
 | Layer | Technology | What It Controls | Enforcement Point |
 |-------|-----------|-----------------|-------------------|
 | **Tool access** | :link[AgentCore Policy (Cedar)]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html"} | Which tools each role can use | Gateway: tool is hidden from unauthorized users |
-| **Data isolation** | :link[PostgreSQL RLS]{href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html"} | Which rows each tenant can see | Database engine: impossible to bypass from application |
+| **Data isolation** | :link[PostgreSQL RLS]{href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html"} | Which rows each tenant can see | Database engine: enforced for every non-owner role, so application code cannot turn it off |
 | **Identity propagation** | :link[Gateway Interceptor]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-headers.html"} | Passes JWT from Gateway to Lambda targets | Gateway: forwards Authorization header to targets |
 
 The flow:
@@ -252,7 +252,7 @@ This is the most important test in the workshop. Log in as users from **differen
 2. Log out, log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true}
 3. Ask the **exact same question**: **write down her #1 customer's name.**
 
-::alert[**What you should see: and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL, but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation no application bug can undo. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
+::alert[**What you should see: and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL, but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation that holds even if the application or the generated SQL forgets the tenant filter, as long as RLS is configured for every tenant table. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
 
 ### Step 7.8: The Invisibility Test: *Part A payoff*
 

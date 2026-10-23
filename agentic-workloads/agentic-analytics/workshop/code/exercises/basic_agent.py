@@ -77,4 +77,5 @@ if __name__ == "__main__":
         print("=" * 50)
         result = agent("Show me the top 5 customers by revenue")
         print("\nAgent response:")
-        print(result)
+        # str(result) is the reply text only; the result object also holds tool inputs and outputs.
+        print(str(result))
