@@ -49,6 +49,14 @@ User asks ──┤                                                 ├─► Fr
 - **Temporal rule:** `create_booking_tool` is refused unless `get_unicorn_availability_tool` ran for the same `unicorn_id` in the same policy session within 15 minutes. With any temporal rule in the engine, every tools call must carry `X-Amzn-Bedrock-AgentCore-Policy-Session-Id`; the agent sends its runtime session id. A policy change invalidates open sessions (409), so start a new chat after `make deploy`.
 - Switches: `EnablePolicyGuardrails`, `EnableBookingOrderPolicy` (demo stack); workshop Step 7b.
 
+### Schema change pipeline
+
+Step Functions `<env>-schema-sync`, started by a Glue crawler success (EventBridge), daily at 18:00 UTC (demo only) or by hand: Snapshot (pg_catalog: columns, comments, RLS, policies, view SQL) → Classify against `schema/current.json` (none / additive / breaking / blocked) → Describe (agent model) → WaitForApproval for breaking changes (task token in `schema/pending/`) → Publish (Glue table descriptions, `docs/schema/<name>.md` KB cards, KB ingestion with retry on ConflictException, EventBridge `agentic-analytics.schema`). A table with `account_id` but no RLS policy fails the run. Input `{"rebuild": true}` republishes everything. Only table/view drops delete cards; a dropped column rewrites its table's card.
+
+### Schema context for text-to-SQL
+
+`text_to_sql_tool` sends the whole Glue schema while it fits `SCHEMA_FULL_MAX_CHARS` (32,000); above that it sends a one-line-per-table index and the model calls again with `tables`. Benchmark and decision: 60 questions, 181 objects, full schema 85% at ~51k tokens vs index 90% at ~11.6k.
+
 ### Memory and evaluation
 
 - **Memory:** short-term events plus long-term `EpisodicMemoryStrategy` and `UserPreferenceMemoryStrategy`, namespaced per user (`/analytics/{actorId}/...`). The agent pulls up to 3 preferences and 2 past episodes into the system prompt each turn (`_long_term_context`, fails open).
@@ -69,6 +77,8 @@ The agent renders charts in an AgentCore **Code Interpreter** sandbox (matplotli
 | Lambda tools | `app/agentcore_strands/tools/*.py` |
 | Cube lab scripts (documented exception) | `app/agentcore_strands/infra/deploy_cube_models.py`, `deploy_semantic_layer_{toolset,stack}.py` |
 | Gateway interceptor Lambda | `app/agentcore_strands/infra/interceptor_lambda.py` |
+| Schema change pipeline Lambda + diff | `app/schema_sync/schema_sync_lambda.py`, `app/schema_sync/schema_diff.py` (tests next to them) |
+| Schema change pipeline stack | `infrastructure/stacks/schema-sync-stack.yaml` (demo, nested); workshop: Step 11 fence in the top-up stack |
 | Semantic-layer agent variant | `app/agentcore_strands/agent/unicorn_rental_semantic_agent.py` |
 | Workshop AgentCore top-up | `infrastructure/stacks/agentcore-topup-stack.yaml` (canonical) + `workshop/code/app/agentcore_strands/{agentcore-topup-stack.yaml,Makefile}` (fenced participant copy) |
 | CFN stacks | `infrastructure/stacks/*.yaml` |
@@ -102,6 +112,9 @@ cd app/agentcore_strands
 make deploy                       # deploy/redeploy the AgentCore top-up stack
 make build                        # rebuild the agent image after a code edit
 make outputs                      # show GatewayUrl / AgentRuntimeArn
+make deploy POLICY_MODE=ENFORCE   # POLICY_MODE and FRONT_DOOR stick: a later bare `make deploy` keeps them
+make schema-sync                  # Step 11: start a schema pipeline run
+make approve                      # Step 11: approve the run waiting at WaitForApproval (or `make reject`)
 # Each lab step = uncomment one fenced block (or flip one toggle) + `make deploy`.
 
 # UI (dev mode)
