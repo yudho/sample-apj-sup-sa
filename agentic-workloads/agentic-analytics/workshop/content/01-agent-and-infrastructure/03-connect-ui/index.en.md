@@ -62,6 +62,8 @@ cat .env
 
 Verify the output: `REACT_APP_AGENT_RUNTIME_ARN` should show an ARN like `arn:aws:bedrock-agentcore:us-east-1:...:runtime/agentic_analytics_agent-...`. If it's empty, run `make outputs` from `../agentcore_strands` and copy the `AgentRuntimeArn` value manually.
 
+::alert[There is no `REACT_APP_FRONTDOOR_URL` yet, so the UI calls the agent runtime directly. You add that line in Step 7c, when the front-door gateway goes in.]{type="info"}
+
 ::alert[The `REACT_APP_COGNITO_USER_CLIENT_ID` and `REACT_APP_COGNITO_DOMAIN` enable the **Login** button. Login is required: the agent needs a JWT token to authenticate with the Gateway.]{type="info"}
 
 ### Step 3.2: Start the Development Server
@@ -96,7 +98,7 @@ For example it will be https://xxxxxxxxxxxxxx.cloudfront.net/app
 
 ::alert[The `/app` path is pre-configured in the Code Editor's Nginx proxy to forward requests to the React dev server on port 3001. No port forwarding setup is needed.]{type="info"}
 
-::alert[**Login callback is pre-registered for you.** Your CloudFront `/app` URL was automatically added to the Cognito app client's allowed callback/logout list when the environment was provisioned (along with `http://localhost:3001/app` for local dev), so Login just works. The redirect the app sends is `window.location.origin + /app`. *If* you ever reach the UI by some other host/path and see `redirect_mismatch`, add that exact `…/app` URL under the user pool client's **Allowed callback URLs** (Cognito console → User pool → App client → Hosted UI): but in the standard workshop flow you won't need to.]{type="info"}
+::alert[**Login callback is pre-registered for you.** Your CloudFront `/app` URL was automatically added to the Cognito app client's allowed callback/logout list when the environment was provisioned (along with `http://localhost:3001/app` for local dev), so Login just works. The redirect the app sends is `window.location.origin + /app`. *If* you ever reach the UI by some other host/path and see `redirect_mismatch`, add that exact `…/app` URL under the user pool client's **Allowed callback URLs** (Cognito console → User pool → App client → Hosted UI). In the standard workshop flow you won't need to.]{type="info"}
 
 You should see the Timely-Unicorn Analytics dashboard with:
 - A chat panel on the left with suggested queries

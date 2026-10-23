@@ -36,7 +36,7 @@ As shipped, the template's **baseline** already contains everything needed for a
 | **AgentCore Memory** | Short-term conversation memory |
 | **Container build chain** (ECR + CodeBuild + a build-trigger) | Builds your agent's Docker image and pushes it: this is what **replaces `agentcore configure` / `agentcore deploy`** |
 | **Chart Code Interpreter** | Sandbox the agent uses to render chart images |
-| **Runtime** + **Endpoint** | Hosts your agent, JWT-authorized |
+| **Runtime** + **Endpoint** | Hosts your agent. It checks the user's JWT itself for now; in Step 7c a front-door gateway takes over that check and the runtime accepts only the gateway's IAM role |
 | **Observability** | Log + trace delivery for the Gateway and Memory |
 
 The toolsets, Cedar policies, and guardrail are present but **commented out**: you'll uncomment them one step at a time. Right now the Gateway has **no toolsets**: the agent can chat, but has no analytics tools yet.

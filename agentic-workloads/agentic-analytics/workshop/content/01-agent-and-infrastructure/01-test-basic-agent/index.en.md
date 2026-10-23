@@ -87,6 +87,8 @@ cd /workshop/agentic-analytics
 python3 exercises/basic_agent.py
 ```
 
+::alert[**Why `global.`?** The ID is a global cross-Region inference profile for Claude Sonnet 5.5. Bedrock routes each request to a Region with capacity, and Workshop Studio sandbox accounts allow the `global.*` profiles. A Region-pinned ID such as `us.anthropic...` can be refused in these accounts.]{type="info"}
+
 Expected output:
 
 ```
