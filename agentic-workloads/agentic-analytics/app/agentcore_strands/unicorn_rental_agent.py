@@ -133,6 +133,7 @@ region = os.getenv("AWS_REGION", "us-east-1")
 # Guardrail configuration (native Bedrock integration)
 GUARDRAIL_ID = os.getenv("GUARDRAIL_ID", "")
 GUARDRAIL_VERSION = os.getenv("GUARDRAIL_VERSION", "DRAFT")
+GUARDRAIL_BLOCKED_MESSAGE = "I can only help with unicorn rental analytics. Please ask about bookings, revenue, customers, or unicorn management."
 
 bedrock_model_kwargs = dict(
     model_id=model_id,
@@ -149,7 +150,7 @@ if GUARDRAIL_ID:
         guardrail_id=GUARDRAIL_ID,
         guardrail_version=GUARDRAIL_VERSION,
         guardrail_redact_input=True,
-        guardrail_redact_input_message="I can only help with unicorn rental analytics. Please ask about bookings, revenue, customers, or unicorn management.",
+        guardrail_redact_input_message=GUARDRAIL_BLOCKED_MESSAGE,
         # Scope guardrail evaluation to the LATEST user message only (guardContent
         # qualifier). Without this, Bedrock scans the whole input — including this
         # agent's appended system/SOP directives ("You MUST…", "NEVER…") — which the
@@ -513,7 +514,11 @@ async def agent_invocation(payload, context):
                 return buf, ""  # runaway; stop holding
             return buf[:lt], tail
 
+        sent_text = False
+        final = None
         async for event in request_agent.stream_async(enhanced_prompt):
+            if isinstance(event, dict) and "result" in event:
+                final = event["result"]
             ev = event.get("event") if isinstance(event, dict) else None
             if not isinstance(ev, dict):
                 continue
@@ -521,6 +526,7 @@ async def agent_invocation(payload, context):
                 pending += ev["contentBlockDelta"]["delta"]["text"]
                 flush, pending = _split_flushable(pending)
                 if flush:
+                    sent_text = True
                     yield {"event": {"contentBlockDelta": {"delta": {"text": _rewrite_chart_tags(flush)}}}}
                 continue
             # Tool-use START: forward a minimal {name, toolUseId} event so the UI can
@@ -537,7 +543,12 @@ async def agent_invocation(payload, context):
 
         # Flush whatever remains after the stream ends (presign any final tag).
         if pending:
+            sent_text = True
             yield {"event": {"contentBlockDelta": {"delta": {"text": _rewrite_chart_tags(pending)}}}}
+        # A guardrail block ends the turn without any text delta; tell the user why
+        # instead of returning an empty reply.
+        if not sent_text and getattr(final, "stop_reason", None) == "guardrail_intervened":
+            yield {"event": {"contentBlockDelta": {"delta": {"text": GUARDRAIL_BLOCKED_MESSAGE}}}}
 
     except Exception as e:
         print(f"❌ Request failed: {str(e)}")
