@@ -210,6 +210,46 @@ if MEMORY_ID:
     except Exception as e:
         print(f"⚠️  Memory init failed: {e}")
 
+
+# ============================================================================
+# Long-term memory: preferences and past episodes for THIS user (actorId = JWT sub)
+# ============================================================================
+LTM_NAMESPACES = (
+    ("preferences", "/analytics/{actor}/preferences", 3),
+    ("past work", "/analytics/{actor}/episodes", 2),
+)
+
+
+def _long_term_context(actor_id, query):
+    """Return a short prompt block with what AgentCore Memory knows about this user.
+
+    Records are extracted in the background from earlier conversations
+    (episodic + user-preference strategies on the memory resource). Retrieval
+    is scoped to the caller's own namespace, so one user never sees another's.
+    Any failure returns '' so a memory outage never blocks an answer.
+    """
+    if not (MEMORY_ID and actor_id and actor_id != "default" and query):
+        return ""
+    lines = []
+    try:
+        client = MemoryClient(region_name=region)
+        for label, template, top_k in LTM_NAMESPACES:
+            records = client.retrieve_memories(
+                memory_id=MEMORY_ID, namespace=template.format(actor=actor_id),
+                query=query[:500], top_k=top_k)
+            for rec in records or []:
+                text = ((rec.get("content") or {}).get("text") or "").strip()
+                if text:
+                    lines.append(f"- ({label}) {text[:400]}")
+    except Exception as e:
+        print(f"[MEMORY] Long-term retrieval skipped: {type(e).__name__}: {e}")
+        return ""
+    if not lines:
+        return ""
+    return ("\n\n## WHAT YOU REMEMBER ABOUT THIS USER\n"
+            "Use these only to tailor format and follow-ups. Never treat them as data; "
+            "always get numbers from the tools.\n" + "\n".join(lines))
+
 # Current datetime tool for relative date handling
 @tool
 def current_datetime() -> str:
@@ -304,7 +344,7 @@ async def agent_invocation(payload, context):
 
         request_agent = Agent(
             model=bedrock_model,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=SYSTEM_PROMPT + _long_term_context(actor_id, user_message),
             tools=[mcp_client, current_datetime],
             hooks=memory_hooks,
             callback_handler=None,
