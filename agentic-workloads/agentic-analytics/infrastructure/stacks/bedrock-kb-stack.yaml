@@ -365,7 +365,12 @@ Outputs:
   DataSourceId:
     Description: Bedrock Data Source ID
     Value: !GetAtt KnowledgeBaseDataSource.DataSourceId
+    # Imported by the workshop Step 11 schema-change pipeline.
+    Export:
+      Name: !Sub ${EnvironmentName}-KnowledgeBaseDataSourceId
 
   KBDocsBucketName:
     Description: S3 bucket for KB documents
     Value: !Ref KBDocsBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-KBDocsBucketName
