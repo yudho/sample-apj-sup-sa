@@ -12,26 +12,28 @@ Built with [Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentc
 
 1. **User** asks a question in the React chat UI (e.g., *"Who are my top 3 customers this month?"*)
 2. **Cognito** authenticates the user and issues a JWT with tenant (`account_id`) and role (`admin`/`analyst`) claims
-3. **AgentCore Runtime** hosts a Strands agent that interprets the query and selects the right tool(s)
-4. **MCP Gateway** routes tool calls to Lambda functions, enforcing Cedar RBAC policies and propagating the JWT
-5. **Lambda Tools** execute parameterized SQL against Aurora PostgreSQL, with Row-Level Security filtering data by tenant
-6. **Agent** formats the results and streams them back to the UI — as text, a markdown table, and/or a generated chart image
-7. **(Optional) Voice** — the same agent answers spoken questions: a Pipecat pipeline (its own AgentCore Runtime, WebRTC + Amazon KVS managed TURN, Deepgram STT/TTS) calls the analytics agent and speaks the answer back
+3. **Front-door Gateway** checks the JWT, runs the request through AWS WAF and a per-user rate limit, and forwards it to the agent. The agent runtime accepts calls from this gateway only
+4. **AgentCore Runtime** hosts a Strands agent that interprets the query and selects the right tool(s)
+5. **MCP Gateway** routes tool calls to Lambda functions, enforcing Cedar RBAC policies and propagating the JWT
+6. **Lambda Tools** execute parameterized SQL against Aurora PostgreSQL, with Row-Level Security filtering data by tenant
+7. **Agent** formats the results and streams them back to the UI — as text, a markdown table, and/or a generated chart image
+8. **(Optional) Voice** — the same agent answers spoken questions: a Pipecat pipeline (its own AgentCore Runtime, WebRTC + Amazon KVS managed TURN, Deepgram STT/TTS) calls the analytics agent and speaks the answer back
 
 ### Key Components
 
 | Component | Purpose |
 |-----------|---------|
 | **React UI** | Chat interface with streaming responses, SQL approval workflow, rendered charts, and optional voice mode |
-| **AgentCore Runtime** | Hosts the Strands agent with memory, SOP, and guardrails |
+| **Front-door Gateway** | AgentCore Gateway in front of the agent runtime: Cognito JWT check, AWS WAF, per-user rate limit |
+| **AgentCore Runtime** | Hosts the Strands agent with memory, SOP, and guardrails; IAM-only, callable only by the front door |
 | **Voice Runtime** *(optional)* | A second AgentCore Runtime running the Pipecat voice pipeline (WebRTC + KVS TURN, Deepgram STT/TTS) that invokes the analytics agent |
 | **Chart Code Interpreter** | Sandboxed matplotlib rendering → PNG to S3; the agent returns a short presigned `<chart>` tag (no base64 in the stream) |
 | **MCP Gateway** | Authenticated tool routing with Cedar policy enforcement |
 | **Prebaked SQL Toolset** | 27+ analytics tools backed by database Views |
 | **API Integration Toolset** | Write operations (e.g., create booking) with tenant-scoped inserts |
 | **Custom SQL Toolset** | Text-to-SQL with Glue schema + Bedrock KB RAG + human approval |
-| **Aurora PostgreSQL** | Multi-tenant data store with RLS and pgvector for semantic search |
-| **Bedrock Knowledge Base** | Business context retrieval for RAG-augmented custom SQL |
+| **Aurora PostgreSQL** | Multi-tenant data store with Row-Level Security |
+| **Bedrock Managed Knowledge Base** | Business context retrieval for custom SQL; Bedrock runs the vector store and embeddings |
 | **Cognito** | Authentication with custom claims for tenant and role |
 | **CloudWatch + X-Ray** | End-to-end observability via GenAI Observability dashboard |
 
