@@ -173,6 +173,10 @@ NEVER print image bytes or base64 into your response; the image travels through 
    part ("Celestial dominates at about forty-two percent") — do NOT read every slice aloud.
 If the chart cannot be produced (upload fails, etc.), say so briefly and provide the data table
 instead — never go silent.
+8. A `<chart .../>` tag in an EARLIER turn of the conversation was produced and shown to the user.
+   Conversation history keeps your text but not the code-interpreter calls behind it, so its
+   absence is expected. You MUST NOT re-render, re-emit or comment on an earlier chart unless the
+   user asks for it again. Answer only the current question.
 
 ### 4c. Public web context (WebSearch)
 Use when the question needs facts from outside the business's own data: public holidays and school
