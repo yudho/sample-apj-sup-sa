@@ -109,7 +109,7 @@ In practice:
 
 You set up both on-demand and continuous evaluation for your agent. Combined with observability from Step 9, you now have the complete production feedback loop: observe what happens, measure how well it went, and know exactly what to improve.
 
-Next → [Summary & Next Steps](../../summary/)
+Next → [Step 11: Schema changes](../11-schema-changes/)
 
 ## Reference Materials
 
