@@ -129,6 +129,10 @@ Open the log group in the CloudWatch console. These logs show every policy decis
 
 ::alert[Gateway logs depend on the log-delivery resources in the template baseline: they were created by your first `make deploy` in Step 2.]
 
+### Step 9.7: Watch the Front Door (after Step 7c)
+
+The front door has its own metrics. Open **AWS WAF** → **Web ACLs** (Region us-east-1) → `agentic-analytics-frontdoor` → **Traffic overview**. You see allowed and blocked requests per rule: `rate-per-ip`, `ip-reputation`, `known-bad-inputs`, and the body rules that only count by default. **Sampled requests** shows a few real requests per rule, which is the quickest way to check why a call was blocked. The same numbers are in CloudWatch under the `AWS/WAFV2` namespace if you want an alarm.
+
 ## Verification
 
 - Observability came live with the Step-2 baseline `make deploy` (no extra step)

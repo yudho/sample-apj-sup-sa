@@ -133,14 +133,18 @@ Now try these two questions in the demo UI, back to back, so you see the contras
 
 ## Summary
 
-You added a defense-in-depth layer with Bedrock Guardrails that evaluates every user message and agent response. Combined with SOPs (behavior guidance), Cedar policies (tool access), and RLS (data isolation), your agent now has four layers of protection:
+You added a defense-in-depth layer with Bedrock Guardrails that evaluates every user message and agent response. Together with what you built in Step 7, your agent now has these layers:
 
-| Layer | What It Controls | Enforcement |
-|-------|-----------------|-------------|
-| **SOP** | Agent behavior and response format | Best-effort (LLM follows instructions) |
-| **Policy** | Which tools each role can access | Hard (Gateway hides tools) |
-| **RLS** | Which data rows each tenant sees | Hard (database filters rows) |
-| **Guardrails** | Content safety and topic boundaries | Hard (blocks violating content) |
+| Layer | What it controls | Where it runs |
+|-------|-----------------|---------------|
+| **Front door** (7c) | Who may call the agent, how often, and known-bad traffic | AWS WAF and the front-door gateway, before the agent |
+| **Guardrail** (this step) | What the user says and what the agent answers | Bedrock, on the conversation inside the agent |
+| **SOP** | Agent behavior and response format | The model, best effort |
+| **Policy: roles** (7.1) | Which tools each role can call | Tools gateway, hides the tool |
+| **Policy: guardrails and order** (7.9) | What goes into a tool call, and in what order tools run | Tools gateway, on each tool input |
+| **RLS** (7.2) | Which rows each tenant sees | Aurora PostgreSQL |
+
+The guardrail here and the policy guardrails in 7.9 overlap on purpose. This one sees the whole conversation, so it catches an off-topic or unsafe request before any tool runs. The policy checks see only the tool input, but they run outside the model, so a prompt cannot argue its way past them.
 
 Next, you'll learn to leverage observability to monitor your agent → [Step 9: Observability](../09-observability/)
 
