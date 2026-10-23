@@ -44,14 +44,15 @@ If you do not have the AWS UI console open, you can open it from the AWS worksho
 1. Open **AWS Console** → **Amazon Bedrock** → **Knowledge bases** or navigate straight to the :link[Bedrock Knowledge Bases UI console]{href="https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/knowledge-bases" external=true}
 2. Find the knowledge base (named `agentic-analytics-kb`)
 3. Click on it
-4. Look at the **Data source** section and click `business-context-source` data source
+4. Note the **Knowledge base type**: it is a **managed** knowledge base
+5. In the **Data source** section, click the `business-context-source` data source
 
 You'll see:
 - **Data source type**: Amazon S3
-- **S3 bucket**: Contains `business-context.md`
-- **Chunking strategy**: Hierarchical (parent: 1000 tokens, child: 300 tokens)
+- **S3 URI**: the `docs/` folder of the KB bucket, which holds `business-context.md`
+- **Sync history**: one completed sync, run by CloudFormation when the stack was created
 
-::alert[**Hierarchical chunking** splits the document into large parent chunks (1000 tokens) and smaller child chunks (300 tokens). When the agent searches, it matches on child chunks (precise) but retrieves the parent chunk (more context). This gives the LLM both precision and surrounding context — critical for understanding SQL patterns that span multiple paragraphs.]{type="info"}
+::alert[**Why a managed knowledge base?** You picked only the data source. Bedrock chose and runs the vector store, the embedding model and the chunking for you, so there is no OpenSearch collection, Aurora pgvector table or embedding model to size, patch or pay for while idle. Choose a self-managed vector store only when you need control over chunking, the embedding model or where vectors live.]{type="info"}
 
 ### Step 6.3: Test Semantic Search in the Console
 
@@ -65,7 +66,7 @@ You'll see:
 
 This is the same RAG retrieval the agent uses when generating SQL.
 
-::alert[**Updating the Knowledge Base:** To add new business context, upload files to the S3 data source bucket and click **Sync** in the data source section (or call the :link[StartIngestionJob API]{href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_StartIngestionJob.html"}). The new content will be chunked, vectorized, and stored in Aurora PostgreSQL's pgvector extension.]{type="info"}
+::alert[**Updating the Knowledge Base:** To add new business context, upload files to the S3 data source bucket and click **Sync** in the data source section (or call the :link[StartIngestionJob API]{href="https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_StartIngestionJob.html"}). Bedrock chunks, embeds and indexes the new content in the managed vector store.]{type="info"}
 
 ### Step 6.4: Understand the SOP — Text-to-SQL Workflow
 

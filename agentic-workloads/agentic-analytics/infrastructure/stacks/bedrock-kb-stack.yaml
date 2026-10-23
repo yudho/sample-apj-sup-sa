@@ -246,7 +246,7 @@ Resources:
     DependsOn: CopyDocsTrigger
     Properties:
       KnowledgeBaseId: !Ref KnowledgeBase
-      Name: business-context-docs
+      Name: business-context-source
       Description: Markdown business context in the KB docs bucket (docs/ prefix)
       DataSourceConfiguration:
         Type: S3

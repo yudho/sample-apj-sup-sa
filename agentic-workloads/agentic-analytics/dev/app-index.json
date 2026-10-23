@@ -49,7 +49,7 @@
     },
     {
       "path": "infrastructure/stacks/bedrock-kb-stack.yaml",
-      "summary": "CloudFormation stack for Bedrock Knowledge Base with Aurora pgvector, custom data source, and hierarchical chunking (parent=1000, child=300, overlap=50)"
+      "summary": "CloudFormation stack for an Amazon Bedrock Managed Knowledge Base (Type MANAGED: Bedrock owns the vector store, embeddings and chunking) over an S3 data source (docs/ prefix), plus an inline custom resource that runs the first ingestion job and waits for it"
     },
     {
       "path": "infrastructure/stacks/agentcore-stack.yaml",
@@ -94,10 +94,6 @@
     {
       "path": "infrastructure/custom-resource-lambdas/glue_crawler_trigger/handler.py",
       "summary": "Custom Resource Lambda to trigger Glue crawler and wait for completion"
-    },
-    {
-      "path": "infrastructure/custom-resource-lambdas/bedrock_kb_ingestion/handler.py",
-      "summary": "Custom Resource Lambda to create Bedrock KB with Aurora pgvector and ingest business-context.md via IngestKnowledgeBaseDocuments API"
     },
     {
       "path": "infrastructure/custom-resource-lambdas/amplify_hosting/handler.py",
