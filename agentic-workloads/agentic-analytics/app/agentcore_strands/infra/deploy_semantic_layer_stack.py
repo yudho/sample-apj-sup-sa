@@ -55,7 +55,7 @@ except ImportError:
     print("Installing bedrock-agentcore-starter-toolkit...")
     # Use subprocess with an argument list (no shell) so there is no command
     # injection surface — the args are fixed literals, not an interpolated string.
-    subprocess.check_call([
+    subprocess.check_call([  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         sys.executable, "-m", "pip", "install",
         "bedrock-agentcore-starter-toolkit", "-q",
     ])
@@ -462,7 +462,8 @@ def deploy_runtime(gateway_url):
         "--disable-memory",
         "--non-interactive",
     ]
-    result = subprocess.run(
+    # Fixed argv list (no shell); values come from this script's constants.
+    result = subprocess.run(  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         configure_cmd, cwd=str(ROOT_DIR),
         capture_output=True, text=True,
         timeout=60
@@ -504,7 +505,7 @@ def deploy_runtime(gateway_url):
     # Deploy
     print("Deploying to AgentCore Runtime (this takes ~2-3 minutes)...")
     deploy_cmd = ["agentcore", "deploy"]
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         deploy_cmd, cwd=str(ROOT_DIR),
         capture_output=True, text=True, timeout=600
     )

@@ -311,7 +311,7 @@ async def agent_invocation(payload, context):
     # steps before the front door is added), the token is in Authorization.
     # Either way it is forwarded to the tools gateway, which validates it again
     # and drives Cedar RBAC + database RLS.
-    USER_TOKEN_HEADER = "x-amzn-bedrock-agentcore-runtime-custom-user-token"
+    USER_TOKEN_HEADER = "x-amzn-bedrock-agentcore-runtime-custom-user-token"  # nosec B105 - header name / test fixture, not a credential
 
     def _bearer_from_headers(ctx):
         raw = (getattr(ctx, "request_headers", None) or {}) if ctx else {}

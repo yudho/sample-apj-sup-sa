@@ -85,7 +85,7 @@ def test_invoke_returns_spoken_text():
     req = urllib.request.Request(
         invoke_url, data=json.dumps(payload).encode(), headers=headers, method="POST"
     )
-    with urllib.request.urlopen(req, timeout=120) as r:  # noqa: S310 (trusted AWS URL)
+    with urllib.request.urlopen(req, timeout=120) as r:  # noqa: S310 (trusted AWS URL)  # nosec B310 - https URL built by the test
         status = r.status
         raw = r.read().decode("utf-8")
 

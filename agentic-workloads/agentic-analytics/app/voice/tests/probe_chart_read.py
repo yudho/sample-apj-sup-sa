@@ -106,7 +106,7 @@ async def main():
         url = await s3.generate_presigned_url(
             "get_object", Params={"Bucket": os.environ["ARTIFACTS_BUCKET"], "Key": key}, ExpiresIn=3600)
     import urllib.request
-    with urllib.request.urlopen(url) as r:
+    with urllib.request.urlopen(url) as r:  # nosec B310 - https URL built by the test
         data = r.read()
     print(f"\ncaption         : {caption!r}")
     print(f"s3key           : {key}")
