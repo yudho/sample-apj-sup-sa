@@ -151,7 +151,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
               - Effect: Allow
                 Action:
                   - ecr:GetAuthorizationToken
@@ -404,7 +405,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
               - Effect: Allow
                 Action:
                   - ecr:GetAuthorizationToken

@@ -1724,7 +1724,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
               # Observability: the agent runs under opentelemetry-instrument and
               # exports spans to the AgentCore-provided OTLP collector → X-Ray /
               # CloudWatch Transaction Search. Without these the runtime emits no
@@ -1795,7 +1796,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
               - Effect: Allow
                 Action:
                   - ecr:GetAuthorizationToken
@@ -1981,7 +1983,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
 
   ChartCodeInterpreter:
     Type: AWS::BedrockAgentCore::CodeInterpreterCustom
