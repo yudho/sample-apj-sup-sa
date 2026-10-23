@@ -151,7 +151,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
               - Effect: Allow
                 Action:
                   - ecr:GetAuthorizationToken
@@ -398,7 +399,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                # Only this service's own log groups.
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
               - Effect: Allow
                 Action:
                   - ecr:GetAuthorizationToken
@@ -411,12 +413,17 @@ Resources:
                 Resource: !GetAtt VoiceECRRepo.Arn
               # VPC mode: the runtime manages ENIs in our subnets using this role.
               - Effect: Allow
+                Action: ec2:DescribeNetworkInterfaces
+                Resource: '*'
+              - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
                   - ec2:DeleteNetworkInterface
                   - ec2:CreateNetworkInterfacePermission
-                Resource: '*'
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
       # NOTE: NO Memory perms (Memory writes happen in the Strands runtime), and NO
       # bedrock-agentcore:InvokeAgentRuntime — the onward call to the Strands runtime
       # is a JWT-Bearer HTTPS request validated by ITS authorizer, not an IAM call.
