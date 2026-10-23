@@ -110,7 +110,8 @@ async def main():
         data = r.read()
     print(f"\ncaption         : {len(caption)} chars")
     print(f"s3key           : {key}")
-    print(f"presigned fetch : status={r.status} bytes={len(data):,} valid_png={data[:8] == b'\x89PNG\r\n\x1a\n'}")
+    valid_png = data[:8] == b'\x89PNG\r\n\x1a\n'
+    print(f"presigned fetch : status={r.status} bytes={len(data):,} valid_png={valid_png}")
 
 
 if __name__ == "__main__":
