@@ -37,6 +37,11 @@ Parameters:
     Type: String
     Description: ARN of the EXISTING Strands analytics AgentCore Runtime the voice pipeline invokes (Bearer HTTPS)
 
+  StrandsAgentFrontDoorUrl:
+    Type: String
+    Default: ''
+    Description: Front-door gateway URL of the analytics agent. When set, the pipeline calls <url>/agent/invocations instead of the runtime directly.
+
   StrandsAgentQualifier:
     Type: String
     Default: agentic_analytics_endpoint
@@ -459,6 +464,7 @@ Resources:
         # The pipeline's LLM stage invokes the Strands runtime (Bearer HTTPS).
         AWS_AGENT_ARN: !Ref StrandsAgentRuntimeArn
         AWS_AGENT_QUALIFIER: !Ref StrandsAgentQualifier
+        AWS_AGENT_FRONTDOOR_URL: !Ref StrandsAgentFrontDoorUrl
         DEEPGRAM_API_KEY: !Ref DeepgramApiKey
         DEEPGRAM_VOICE_ID: !Ref DeepgramVoiceId
         CHART_BUCKET: !Ref ChartBucket

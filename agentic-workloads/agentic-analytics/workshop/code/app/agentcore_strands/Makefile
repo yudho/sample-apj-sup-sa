@@ -153,6 +153,10 @@ voice-deploy:
 	STRANDS_ARN=$$(aws cloudformation describe-stacks --stack-name $(STACK) --region $(REGION) \
 	  --query "Stacks[0].Outputs[?OutputKey=='AgentRuntimeArn'].OutputValue" --output text); \
 	[ -n "$$STRANDS_ARN" ] || { echo "AgentRuntimeArn not found — deploy the analytics top-up first (make deploy)" >&2; exit 1; }; \
+	FRONTDOOR_URL=$$(aws cloudformation describe-stacks --stack-name $(STACK) --region $(REGION) \
+	  --query "Stacks[0].Outputs[?OutputKey=='FrontDoorUrl'].OutputValue" --output text); \
+	[ "$$FRONTDOOR_URL" = "None" ] && FRONTDOOR_URL=""; \
+	echo "==> [voice] front door: $${FRONTDOOR_URL:-off (Step 7c not enabled), calling the runtime directly}"; \
 	aws s3api head-bucket --bucket $(CFN_BUCKET) 2>/dev/null || \
 	  { echo "==> [voice] creating staging bucket $(CFN_BUCKET)"; aws s3 mb s3://$(CFN_BUCKET) --region $(REGION); }; \
 	echo "==> [voice] zipping voice bot from $(VOICE_DIR)"; \
@@ -176,6 +180,7 @@ voice-deploy:
 	      CognitoUserPoolId=$(COGNITO_POOL) \
 	      CognitoClientId=$(COGNITO_CLIENT) \
 	      StrandsAgentRuntimeArn=$$STRANDS_ARN \
+	      StrandsAgentFrontDoorUrl=$$FRONTDOOR_URL \
 	      ChartBucket=$(ARTIFACTS_BUCKET) \
 	      DeepgramApiKey=$(DEEPGRAM_API_KEY) \
 	      DeepgramVoiceId=$(DEEPGRAM_VOICE_ID) \
