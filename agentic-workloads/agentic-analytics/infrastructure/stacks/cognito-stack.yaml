@@ -200,13 +200,19 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:PutParameter
+                  - ssm:GetParameter
                   - ssm:DeleteParameter
                 Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/demo/*
               - Effect: Allow
+                # SecureString parameters use the AWS managed key; only through SSM.
                 Action:
                   - kms:Encrypt
+                  - kms:Decrypt
                   - kms:GenerateDataKey
                 Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
 
   #============================================================================
   # Custom Resource Lambda (creates users from CSV)
@@ -244,8 +250,22 @@ Resources:
               urllib.request.urlopen(req)
 
           def generate_password():
-              # Standardized password for workshop — easy for participants to remember
-              return 'Unicorn123!'
+              # One random password per deployment, shared by the demo users so it is easy
+              # to type in a workshop. Read it from the SSM parameter (SecureString).
+              alphabet = string.ascii_letters + string.digits
+              while True:
+                  parts = [''.join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)]
+                  pw = 'Unicorn-' + '-'.join(parts)
+                  if any(c.isdigit() for c in pw):
+                      return pw
+
+          def existing_password(ssm, name):
+              # Keep the password across stack updates so signed-in users are not reset.
+              try:
+                  users = json.loads(ssm.get_parameter(Name=name, WithDecryption=True)['Parameter']['Value'])
+                  return users[0]['password'] if users else None
+              except Exception:
+                  return None
 
           def lambda_handler(event, context):
               print(f"Event: {json.dumps(event)}")
@@ -274,14 +294,13 @@ Resources:
                   csv_content = response['Body'].read().decode('utf-8')
                   reader = csv.DictReader(csv_content.splitlines())
                   
+                  password = existing_password(ssm, ssm_param) or generate_password()
                   users = []
                   for row in reader:
                       email = row['email']
                       role = row['role']
                       account_id = row['account_id']
                       display_name = row.get('first_name', email.split('@')[0])
-                      password = generate_password()
-                      
                       try:
                           cognito.admin_create_user(
                               UserPoolId=pool_id,
@@ -292,7 +311,7 @@ Resources:
                                   {'Name': 'custom:role', 'Value': role},
                                   {'Name': 'custom:account_id', 'Value': account_id}
                               ],
-                              TemporaryPassword='TempPass123!',
+                              TemporaryPassword=generate_password(),
                               MessageAction='SUPPRESS'
                           )
                           cognito.admin_set_user_password(UserPoolId=pool_id, Username=email, Password=password, Permanent=True)
@@ -306,6 +325,7 @@ Resources:
                                   {'Name': 'custom:account_id', 'Value': account_id}
                               ]
                           )
+                          cognito.admin_set_user_password(UserPoolId=pool_id, Username=email, Password=password, Permanent=True)
                           print(f"Updated user: {email}")
                       
                       users.append({'email': email, 'password': password, 'role': role, 'account_id': account_id, 'display_name': display_name})
