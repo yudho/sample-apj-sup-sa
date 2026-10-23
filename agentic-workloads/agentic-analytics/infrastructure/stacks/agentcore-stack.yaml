@@ -679,6 +679,16 @@ Resources:
               - Effect: Allow
                 Action: bedrock-agentcore:InvokeWebSearch
                 Resource: !Sub arn:aws:bedrock-agentcore:${AWS::Region}:aws:tool/web-search.v1
+              # The gateway gets a workload access token for its own identity before
+              # it calls targets (CloudTrail showed AccessDenied without this).
+              - Effect: Allow
+                Action:
+                  - bedrock-agentcore:GetWorkloadAccessToken
+                  - bedrock-agentcore:GetWorkloadAccessTokenForJWT
+                  - bedrock-agentcore:GetWorkloadAccessTokenForUserId
+                Resource:
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default
+                  - !Sub arn:aws:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/*
               # BusinessContext connector target: validate and query the managed KB.
               - !If
                 - HasKnowledgeBase
