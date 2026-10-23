@@ -79,7 +79,7 @@ ifeq ($(strip $(REGION)),)
   $(error AWS_REGION not found in config.env — run from app/agentcore_strands/ where config.env lives)
 endif
 
-.PHONY: help deploy build outputs status voice-deploy
+.PHONY: help deploy build outputs status voice-deploy schema-sync approve reject
 
 help:
 	@sed -n '2,18p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
@@ -129,6 +129,28 @@ outputs:
 status:
 	@aws cloudformation describe-stacks --stack-name $(STACK) --region $(REGION) \
 	  --query 'Stacks[0].StackStatus' --output text
+
+# ---- Step 11: schema change pipeline ----------------------------------------
+# `make schema-sync` starts a run by hand (the Glue crawler also starts one when it
+# finishes). `make approve` / `make reject` answer the newest run that is waiting
+# for approval: the Lambda wrote its task token to s3://$(CFN_BUCKET)/schema/pending/.
+SCHEMA_SM = arn:aws:states:$(REGION):$(ACCOUNT_ID):stateMachine:$(ENV_NAME)-schema-sync
+
+schema-sync:
+	aws stepfunctions start-execution --state-machine-arn $(SCHEMA_SM) --region $(REGION) \
+	  --input '{"trigger":"manual"}' --query executionArn --output text
+
+approve reject:
+	@KEY=$$(aws s3api list-objects-v2 --bucket $(CFN_BUCKET) --prefix schema/pending/ --region $(REGION) \
+	  --query 'sort_by(Contents,&LastModified)[-1].Key' --output text); \
+	[ "$$KEY" != "None" ] || { echo "No run is waiting for approval."; exit 1; }; \
+	aws s3api get-object --bucket $(CFN_BUCKET) --key "$$KEY" --region $(REGION) /tmp/schema-pending.json >/dev/null; \
+	TOKEN=$$(python3 -c 'import json; print(json.load(open("/tmp/schema-pending.json"))["task_token"])'); \
+	if [ "$@" = approve ]; then \
+	  aws stepfunctions send-task-success --task-token "$$TOKEN" --task-output '{"approved":true}' --region $(REGION); \
+	else \
+	  aws stepfunctions send-task-failure --task-token "$$TOKEN" --error Rejected --cause "Rejected in the Code Editor" --region $(REGION); \
+	fi && aws s3api delete-object --bucket $(CFN_BUCKET) --key "$$KEY" --region $(REGION) && rm -f /tmp/schema-pending.json && echo "$@: $$KEY"
 
 # ---- build: rebuild the agent image after a code edit -----------------------
 # Run this after editing unicorn_rental_agent.py or the SOP. `make deploy` only
