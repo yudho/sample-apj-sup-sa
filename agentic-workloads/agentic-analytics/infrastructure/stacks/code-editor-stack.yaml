@@ -488,7 +488,9 @@ Resources:
       ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}'
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref CodeEditorInstanceProfile
-      SubnetId: !Ref PublicSubnetId
+      # Private subnet: the instance has no public address. CloudFront reaches it
+      # through a VPC origin; package installs go out through the NAT gateway.
+      SubnetId: !GetAtt OriginSubnet.SubnetId
       SecurityGroupIds:
         - !Ref CodeEditorSecurityGroup
       BlockDeviceMappings:
@@ -768,6 +770,74 @@ Resources:
             QueryStringBehavior: all
 
   #============================================================================
+  # Private subnet for the instance. CloudFront VPC origins do not run in
+  # us-east-1 AZ use1-az3, so pick the first private subnet outside it.
+  #============================================================================
+  OriginSubnetPickerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DescribeSubnets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeSubnets
+                Resource: '*'
+
+  OriginSubnetPickerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      Role: !GetAtt OriginSubnetPickerRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, cfnresponse
+          UNSUPPORTED = {"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
+          def handler(event, context):
+              try:
+                  if event["RequestType"] == "Delete":
+                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                  ids = [i for i in event["ResourceProperties"]["SubnetIds"] if i]
+                  subnets = boto3.client("ec2").describe_subnets(SubnetIds=ids)["Subnets"]
+                  by_id = {s["SubnetId"]: s for s in subnets}
+                  pick = next(i for i in ids if by_id[i]["AvailabilityZoneId"] not in UNSUPPORTED)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"SubnetId": pick}, pick)
+              except Exception as e:
+                  print(f"subnet pick failed: {e}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+  OriginSubnet:
+    Type: Custom::OriginSubnet
+    Properties:
+      ServiceToken: !GetAtt OriginSubnetPickerFunction.Arn
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+
+  # CloudFront connects to the instance privately, inside the VPC.
+  CodeEditorVpcOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: !Sub ${EnvironmentName}-code-editor
+        Arn: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${CodeEditorInstance}
+        HTTPPort: 80
+        HTTPSPort: 443
+        OriginProtocolPolicy: http-only
+
+  #============================================================================
   # CloudFront Distribution
   #============================================================================
   CloudFrontDistribution:
@@ -796,9 +866,9 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
         Origins:
           - Id: code-editor-origin
-            DomainName: !GetAtt CodeEditorInstance.PublicDnsName
-            CustomOriginConfig:
-              OriginProtocolPolicy: http-only
+            DomainName: !GetAtt CodeEditorInstance.PrivateDnsName
+            VpcOriginConfig:
+              VpcOriginId: !GetAtt CodeEditorVpcOrigin.Id
               OriginReadTimeout: 60
 
   #============================================================================
