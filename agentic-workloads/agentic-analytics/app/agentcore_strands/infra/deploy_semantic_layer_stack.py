@@ -57,7 +57,7 @@ except ImportError:
     # injection surface — the args are fixed literals, not an interpolated string.
     subprocess.check_call([  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         sys.executable, "-m", "pip", "install",
-        "bedrock-agentcore-starter-toolkit", "-q",
+        "bedrock-agentcore-starter-toolkit==0.2.1", "-q",
     ])
     from bedrock_agentcore_starter_toolkit.operations.gateway.client import (
         GatewayClient, create_gateway_execution_role

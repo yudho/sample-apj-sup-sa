@@ -119,7 +119,8 @@ def invoke_agent(prompt, persona_key="lyra", gateway_token=None):
 
     cmd = ["agentcore", "invoke", json.dumps(payload)]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # Fixed argv list (no shell); the payload is one argument, never parsed by a shell.
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         if result.returncode != 0:
             return f"[ERROR] agentcore invoke failed: {result.stderr[:500]}"
         return result.stdout.strip()
