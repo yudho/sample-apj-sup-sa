@@ -86,7 +86,7 @@ SYSTEM_PROMPT = load_system_prompt()
 GATEWAY_URL = os.getenv("GATEWAY_URL", "")
 
 # Bedrock model configuration
-model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-5-20251101-v1:0")
+model_id = os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5-5")
 region = os.getenv("AWS_REGION", "us-east-1")
 
 # Guardrail configuration (native Bedrock integration)
@@ -95,9 +95,13 @@ GUARDRAIL_VERSION = os.getenv("GUARDRAIL_VERSION", "DRAFT")
 
 bedrock_model_kwargs = dict(
     model_id=model_id,
-    temperature=0.3,
     streaming=True,
 )
+# Claude Opus 4.8 and every Claude 5.x model reject `temperature`; send it only to
+# older models known to accept it.
+TEMPERATURE_MODELS = ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-5", "claude-sonnet-4-5")
+if any(m in model_id for m in TEMPERATURE_MODELS):
+    bedrock_model_kwargs["temperature"] = 0.3
 if GUARDRAIL_ID:
     bedrock_model_kwargs.update(
         guardrail_id=GUARDRAIL_ID,

@@ -32,6 +32,18 @@ Parameters:
     Default: agentic-analytics
     Description: Resource name prefix; MUST match the base stack so Fn::ImportValue names resolve.
 
+  AgentModelId:
+    Type: String
+    Default: global.anthropic.claude-sonnet-5-5
+    AllowedValues:
+      - global.anthropic.claude-sonnet-5-5
+      - global.anthropic.claude-opus-5-5
+      - global.anthropic.claude-opus-4-6-v1
+    Description: >-
+      Bedrock model the analytics agent runs on (Global cross-Region inference).
+      Sonnet 5.5 is the default (fast, near-Opus quality); Opus 5.5 for the hardest
+      questions; Opus 4.6 as a fallback for accounts without 5.5 access.
+
   ArtifactsBucket:
     Type: String
     Description: S3 bucket holding the Lambda/agent code zips (from config.env, passed by `make`).
@@ -1662,7 +1674,7 @@ Resources:
               if event['RequestType'] == 'Delete':
                   send(event, context, 'SUCCESS'); return
               try:
-                  # ModelIds: comma-separated BASE model ids (e.g. anthropic.claude-sonnet-4-6),
+                  # ModelIds: comma-separated BASE model ids (e.g. anthropic.claude-sonnet-5-5),
                   # NOT the global./us. inference-profile ids.
                   ids = [m.strip() for m in event['ResourceProperties'].get('ModelIds','').split(',') if m.strip()]
                   br = boto3.client('bedrock')
@@ -1694,8 +1706,9 @@ Resources:
       - ModelSubscriptionFunction
     Properties:
       ServiceToken: !GetAtt ModelSubscriptionFunction.Arn
-      # Base model id behind the global.anthropic.claude-opus-4-6-v1 inference profile.
-      ModelIds: anthropic.claude-opus-4-6-v1
+      # Base model ids behind the global.* inference profiles the agent may use
+      # (AgentModelId choices + Haiku 5.5 for light tasks). Idempotent, best-effort.
+      ModelIds: anthropic.claude-sonnet-5-5,anthropic.claude-opus-5-5,anthropic.claude-haiku-5-5,anthropic.claude-opus-4-6-v1
 
   AgentRuntime:
     Type: AWS::BedrockAgentCore::Runtime
@@ -1738,11 +1751,9 @@ Resources:
       EnvironmentVariables:
         GATEWAY_URL: !GetAtt Gateway.GatewayUrl
         AWS_REGION: !Ref AWS::Region
-        # Opus 4.6: Opus 4.8/4.7 require account Containment Score >=350 to invoke
-        # (a gate separate from model access); fresh Workshop Studio sandbox accounts
-        # start below that, so 4.8 is AccessDenied for participants. 4.6-v1 has no
-        # C-Score gate and works in every fresh account.
-        BEDROCK_MODEL_ID: global.anthropic.claude-opus-4-6-v1
+        # Model comes from the AgentModelId parameter (default Sonnet 5.5). Its base model
+        # agreement is accepted by the ModelSubscription custom resource above.
+        BEDROCK_MODEL_ID: !Ref AgentModelId
         BYPASS_TOOL_CONSENT: 'true'
         # --- Observability (OTEL → CloudWatch Transaction Search / aws/spans) ---
         # These activate the ADOT distro the image installs; the AgentCore Runtime

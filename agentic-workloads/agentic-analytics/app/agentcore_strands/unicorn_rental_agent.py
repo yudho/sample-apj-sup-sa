@@ -127,7 +127,7 @@ def _rewrite_chart_tags(text: str) -> str:
 GATEWAY_URL = os.getenv("GATEWAY_URL", "")
 
 # Bedrock model configuration
-model_id = os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-opus-4-6-v1")
+model_id = os.getenv("BEDROCK_MODEL_ID", "global.anthropic.claude-sonnet-5-5")
 region = os.getenv("AWS_REGION", "us-east-1")
 
 # Guardrail configuration (native Bedrock integration)
@@ -138,10 +138,11 @@ bedrock_model_kwargs = dict(
     model_id=model_id,
     streaming=True,
 )
-# Opus 4.8+ deprecates the `temperature` parameter (Converse returns a
-# ValidationException: "`temperature` is deprecated for this model"). Only send
-# temperature for models that still accept it.
-if "opus-4-8" not in model_id:
+# Claude Opus 4.8 and every Claude 5.x model reject `temperature` (Converse returns
+# ValidationException: "`temperature` is deprecated for this model"). Send it only to
+# the older models known to accept it, so a new model ID never breaks the agent.
+TEMPERATURE_MODELS = ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-5", "claude-sonnet-4-5")
+if any(m in model_id for m in TEMPERATURE_MODELS):
     bedrock_model_kwargs["temperature"] = 0.3
 if GUARDRAIL_ID:
     bedrock_model_kwargs.update(

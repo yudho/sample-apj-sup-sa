@@ -19,7 +19,7 @@ from strands import Agent, tool
 from strands.models import BedrockModel
 
 bedrock_model = BedrockModel(
-    model_id="global.anthropic.claude-sonnet-4-6",
+    model_id="global.anthropic.claude-sonnet-5-5",
     streaming=True
 )
 

@@ -636,18 +636,18 @@ Resources:
           # Install the CLI globally (nodejs is installed above) and configure it to
           # use Bedrock via the EC2 instance role (no API key). The instance role
           # already grants bedrock:* + aws-marketplace:Subscribe/ViewSubscriptions.
-          # Model is pinned to the cross-region Sonnet 4.6 inference profile — the
-          # model reliably invocable in fresh Bedrock accounts (Opus 4.7/4.8 are
-          # gated behind account containment score; opus-4-6 needs a per-account
-          # Marketplace subscription that may not exist). Claude Code uses the
+          # Model is pinned to the Global Sonnet 5.5 inference profile, whose
+          # Marketplace agreement is already AVAILABLE in fresh Workshop Studio
+          # accounts (verified 2026-10-23). Use global.* IDs: us.* Haiku 5.5 is
+          # denied by the sandbox's private marketplace. Claude Code uses the
           # default AWS SDK credential chain, so the instance role is picked up
           # automatically.
           npm install -g @anthropic-ai/claude-code 2>&1 || echo "claude-code install failed (non-fatal)"
           cat >> "/home/$CODE_EDITOR_USER/.bashrc" << CLAUDEEOF
           # Claude Code -> Amazon Bedrock (instance-role auth, no API key)
           export CLAUDE_CODE_USE_BEDROCK=1
-          export ANTHROPIC_MODEL='us.anthropic.claude-sonnet-4-6'
-          export ANTHROPIC_DEFAULT_SONNET_MODEL='us.anthropic.claude-sonnet-4-6'
+          export ANTHROPIC_MODEL='global.anthropic.claude-sonnet-5-5'
+          export ANTHROPIC_DEFAULT_SONNET_MODEL='global.anthropic.claude-sonnet-5-5'
           CLAUDEEOF
 
           # Python venv setup
