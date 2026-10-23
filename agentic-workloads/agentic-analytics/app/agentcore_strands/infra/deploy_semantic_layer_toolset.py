@@ -165,10 +165,18 @@ def deploy_lambda(role_arn, zip_path, cube_private_ip):
     with open(zip_path, 'rb') as f:
         zip_content = f.read()
 
+    # Reuse the Step 4 toolset Lambda's PyJWT layer and Cognito settings, so this
+    # Lambda verifies the propagated token the same way before trusting its tenant.
+    base = client.get_function_configuration(
+        FunctionName=f"{os.getenv('ENV_NAME', 'agentic-analytics')}-datafoundation")
+    layers = [layer['Arn'] for layer in base.get('Layers', []) if 'pyjwt' in layer['Arn'].lower()]
+    base_env = base.get('Environment', {}).get('Variables', {})
     env = {
         'Variables': {
             'CUBE_API_URL': f'http://{cube_private_ip}:4000',
             'CUBE_API_SECRET': CUBE_API_SECRET,
+            'COGNITO_USER_POOL_ID': base_env.get('COGNITO_USER_POOL_ID', ''),
+            'COGNITO_USER_LOGIN_CLIENT_ID': base_env.get('COGNITO_USER_LOGIN_CLIENT_ID', ''),
         }
     }
     vpc = {
@@ -187,6 +195,7 @@ def deploy_lambda(role_arn, zip_path, cube_private_ip):
             MemorySize=256,
             VpcConfig=vpc,
             Environment=env,
+            Layers=layers,
         )
         print(f"[OK] Created Lambda: {LAMBDA_NAME}")
         client.get_waiter('function_active').wait(FunctionName=LAMBDA_NAME)
@@ -198,6 +207,7 @@ def deploy_lambda(role_arn, zip_path, cube_private_ip):
             Timeout=60,
             VpcConfig=vpc,
             Environment=env,
+            Layers=layers,
         )
         print(f"[OK] Updated Lambda: {LAMBDA_NAME}")
         client.get_waiter('function_updated').wait(FunctionName=LAMBDA_NAME)

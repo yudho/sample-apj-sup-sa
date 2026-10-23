@@ -610,6 +610,8 @@ Resources:
       Code:
         S3Bucket: !Ref ArtifactsBucket
         S3Key: !Sub ${ArtifactsPrefix}${SemanticLayerLambdaKey}
+      Layers:
+        - !If [NeedsPyJwtLayer, !Ref PyJwtLayer, !Ref PyJwtLayerArn]
       VpcConfig:
         SubnetIds: !Ref SubnetIds
         SecurityGroupIds:
@@ -618,6 +620,8 @@ Resources:
         Variables:
           CUBE_API_URL: !Sub http://${CubePrivateIp}:4000
           CUBE_API_SECRET: !Ref CubeApiSecret
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_USER_LOGIN_CLIENT_ID: !Ref CognitoClientId
 
   SemanticLayerLambdaPermission:
     Type: AWS::Lambda::Permission

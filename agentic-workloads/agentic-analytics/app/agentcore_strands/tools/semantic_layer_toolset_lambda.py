@@ -29,24 +29,52 @@ CUBE_API_SECRET = os.environ.get('CUBE_API_SECRET', '')
 
 
 # ---------------------------------------------------------------------------
-# JWT / RLS helpers (same pattern as prebaked_sql_toolset_lambda.py)
+# JWT / RLS helpers (same verification as prebaked_sql_toolset_lambda.py)
 # ---------------------------------------------------------------------------
 
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+COGNITO_USER_POOL_ID = os.environ.get('COGNITO_USER_POOL_ID', '')
+COGNITO_CLIENT_ID = os.environ.get('COGNITO_USER_LOGIN_CLIENT_ID', '')
+_COGNITO_ISSUER = (f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}"
+                   if COGNITO_USER_POOL_ID else '')
+_jwks_client = None
+
+
+def _verify_jwt(token):
+    """Verify a Cognito access token (signature, issuer, token_use, client_id).
+
+    Returns the claims, or None. Fails closed when PyJWT or the Cognito settings
+    are missing, so an unverified token never yields a tenant.
+    """
+    global _jwks_client  # caches signing keys only, never request data
+    if not _COGNITO_ISSUER or not COGNITO_CLIENT_ID:
+        print("JWT verification not configured (COGNITO_USER_POOL_ID / COGNITO_USER_LOGIN_CLIENT_ID)")
+        return None
+    try:
+        import jwt  # PyJWT, from the pyjwt Lambda layer
+        if _jwks_client is None:
+            _jwks_client = jwt.PyJWKClient(f"{_COGNITO_ISSUER}/.well-known/jwks.json")
+        key = _jwks_client.get_signing_key_from_jwt(token)
+        claims = jwt.decode(token, key.key, algorithms=["RS256"], issuer=_COGNITO_ISSUER,
+                            options={"verify_aud": False, "require": ["exp", "iss"]})
+        if claims.get("token_use") != "access" or claims.get("client_id") != COGNITO_CLIENT_ID:
+            print("JWT rejected: wrong token_use or client_id")
+            return None
+        return claims
+    except Exception as e:
+        print(f"JWT verification failed: {type(e).__name__}")
+        return None
+
+
 def _extract_rls_context_from_jwt(context):
-    """Extract account_id and role from JWT claims for RLS."""
+    """Tenant and role from the VERIFIED propagated token; {} when missing or invalid."""
     if context and hasattr(context, 'client_context') and context.client_context:
         custom = getattr(context.client_context, 'custom', {}) or {}
-        propagated_headers = custom.get('bedrockAgentCorePropagatedHeaders', {})
-        auth_header = propagated_headers.get('Authorization')
+        auth_header = custom.get('bedrockAgentCorePropagatedHeaders', {}).get('Authorization')
         if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-            payload = token.split('.')[1]
-            payload += '=' * (4 - len(payload) % 4)
-            claims = json.loads(base64.b64decode(payload))
-            return {
-                'account_id': claims.get('custom:account_id'),
-                'role': claims.get('custom:role')
-            }
+            claims = _verify_jwt(auth_header.split(' ', 1)[1].strip())
+            if claims:
+                return {'account_id': claims.get('custom:account_id'), 'role': claims.get('custom:role')}
     return {}
 
 
