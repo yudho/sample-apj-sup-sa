@@ -109,6 +109,6 @@ The agent now has one entrance, and it checks the token, filters traffic and lim
 
 ## Reference Materials
 
-- :link[AgentCore Gateway — supported targets]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-supported-targets.html" external=true}
-- :link[AWS WAF — rate-based rules]{href="https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based.html" external=true}
+- :link[AgentCore Gateway: supported targets]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-supported-targets.html" external=true}
+- :link[AWS WAF: rate-based rules]{href="https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-rate-based.html" external=true}
 - :link[OAuth 2.0 Token Exchange (RFC 8693)]{href="https://www.rfc-editor.org/rfc/rfc8693" external=true}

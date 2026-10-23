@@ -7,7 +7,7 @@ weight: 21
 
 By the end of this step, you will:
 - Deploy the Prebaked SQL toolset (29 analytics tools) to the Gateway
-- Understand how tools map to database Views — the LLM never generates SQL
+- Understand how tools map to database Views: the LLM never generates SQL
 - Understand how the deploy script registers tools to the Gateway and how the SOP guides tool selection
 
 ## Why Prebaked SQL?
@@ -20,7 +20,7 @@ This is the **first of three toolsets** you'll deploy. The Prebaked SQL pattern 
 
 ### Step 4.1: Uncomment the Prebaked SQL toolset and deploy
 
-This step adds the AWS Lambda that implements the tools (database connection + queries) **and** registers it with the AgentCore Gateway as an MCP target — all by uncommenting one section of the top-up template.
+This step adds the AWS Lambda that implements the tools (database connection + queries) **and** registers it with the AgentCore Gateway as an MCP target: all by uncommenting one section of the top-up template.
 
 Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-stack.yaml]{showCopyAction=true} and find the fence:
 
@@ -32,7 +32,7 @@ Open :code[/workshop/agentic-analytics/app/agentcore_strands/agentcore-topup-sta
 
 Delete the leading `# ` on every line **between** the two marker lines (this brings the `DataFoundationLambda`, its role + permission, the psycopg2 layer, and the `DataToolsTarget` to life).
 
-::alert[**Tip — uncomment the whole block at once.** This block is large, so don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the fence, then **Shift+click** the last line inside it to select the whole block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Select only the lines **between** the two `UNCOMMENT` markers — not the marker lines themselves.]{type="info"}
+::alert[**Tip: uncomment the whole block at once.** This block is large, so don't delete each `#` by hand. The Code Editor is VS Code: click the first line *inside* the fence, then **Shift+click** the last line inside it to select the whole block, and press **Cmd + /** (macOS) or **Ctrl + /** (Windows/Linux) to toggle the comments off for every selected line in one go. Select only the lines **between** the two `UNCOMMENT` markers: not the marker lines themselves.]{type="info"}
 
 Then deploy:
 
@@ -42,12 +42,12 @@ make deploy
 ```
 
 ::::expand{header="💡 Not sure you uncommented it cleanly? Click to see the whole Step-4 block"}
-The fenced block, once uncommented, defines `DataFoundationLambdaRole`, `DataFoundationLambda`, `DataFoundationLambdaPermission`, the conditional `Psycopg2Layer`, and the `DataToolsTarget` Gateway target. If `make deploy` errors with a YAML/indentation complaint, the safest fix is to copy the exact block from the workshop solution or re-clone the file — every line in the block is indented two spaces under `Resources:`.
+The fenced block, once uncommented, defines `DataFoundationLambdaRole`, `DataFoundationLambda`, `DataFoundationLambdaPermission`, the conditional `Psycopg2Layer`, and the `DataToolsTarget` Gateway target. If `make deploy` errors with a YAML/indentation complaint, the safest fix is to copy the exact block from the workshop solution or re-clone the file: every line in the block is indented two spaces under `Resources:`.
 ::::
 
 `make deploy` updates the stack in a couple of minutes. When it finishes, the Gateway has a new target named `PrebakedSQL` with 20+ tools.
 
-### Step 4.2: Examine what you uncommented — Tool Schema and Gateway Registration
+### Step 4.2: Examine what you uncommented: Tool Schema and Gateway Registration
 
 Let's understand what that block does. Still in :code[agentcore-topup-stack.yaml]{showCopyAction=true}, look at the `DataToolsTarget` resource you just uncommented.
 
@@ -62,9 +62,9 @@ Let's understand what that block does. Still in :code[agentcore-topup-stack.yaml
       limit: { Type: integer }
 ```
 
-- `Name` — the tool identifier the LLM sees and calls
-- `Description` — the LLM reads this to decide *when* to call the tool (this is the only thing guiding tool selection!). Provide enough detail to avoid confusion between similar tools.
-- `InputSchema` — tells the LLM what arguments to extract from the user's question
+- `Name`: the tool identifier the LLM sees and calls
+- `Description`: the LLM reads this to decide *when* to call the tool (this is the only thing guiding tool selection!). Provide enough detail to avoid confusion between similar tools.
+- `InputSchema`: tells the LLM what arguments to extract from the user's question
 
 **The Gateway target itself:** the resource registers that schema to the Gateway and points it at the Lambda:
 
@@ -82,29 +82,29 @@ DataToolsTarget:
             InlinePayload: [ ... the tool list above ... ]
 ```
 
-The Gateway now knows: *"When the agent calls any tool in this `InlinePayload`, route it to this Lambda."* The target name `PrebakedSQL` becomes a prefix — the agent sees tools as `PrebakedSQL___get_top_revenue_customers_tool`.
+The Gateway now knows: *"When the agent calls any tool in this `InlinePayload`, route it to this Lambda."* The target name `PrebakedSQL` becomes a prefix: the agent sees tools as `PrebakedSQL___get_top_revenue_customers_tool`.
 
 ::alert[**The tool description is your steering wheel.** If you write `"Get top customers by revenue"`, the LLM will call this tool when users ask about top customers. If the description is vague or wrong, the LLM picks the wrong tool. Good descriptions = accurate routing.]{type="info"}
 
-### Step 4.3: Understand the SOP — Query Classification and Tool Selection
+### Step 4.3: Understand the SOP: Query Classification and Tool Selection
 
-The agent's behavior is governed by a Standard Operating Procedure (SOP) — a markdown file that uses :link[RFC 2119]{href="https://www.rfc-editor.org/rfc/rfc2119" external=true} keywords (MUST, SHOULD, MAY) for precise behavior control.
+The agent's behavior is governed by a Standard Operating Procedure (SOP): a markdown file that uses :link[RFC 2119]{href="https://www.rfc-editor.org/rfc/rfc2119" external=true} keywords (MUST, SHOULD, MAY) for precise behavior control.
 
 Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review these sections:
 
-**Section 1, Query Classification:** How the agent categorizes each user question and decides which tool to call. Notice the constraint: *"You MUST identify if the query maps to a specific analytics tool"* — this prevents the agent from guessing.
+**Section 1, Query Classification:** How the agent categorizes each user question and decides which tool to call. Notice the constraint: *"You MUST identify if the query maps to a specific analytics tool"*: this prevents the agent from guessing.
 
 **Section 2, Tool Selection and the tool mapping table:** The mapping from user intent to specific tool. For example, "Top customers" → `get_top_revenue_customers_tool`. This is how the agent knows to call the right prebaked tool instead of generating SQL.
 
 **Section 5, Response Formatting:** Constraints like *"You MUST provide actionable insights; highlight trends, anomalies, or areas needing attention"*, plus separate rules for text and voice mode. This is why the agent returns tables with business insights instead of raw rows, as you will see below.
 
-**Constraints Summary (end of the file):** The hard rules — no emojis, no SQL in responses, use specific tools before falling back to text-to-sql.
+**Constraints Summary (end of the file):** The hard rules: no emojis, no SQL in responses, use specific tools before falling back to text-to-sql.
 
-::alert[**The SOP is the agent's playbook.** Without it, the LLM guesses which tool to call and how to format responses. With it, behavior is consistent, testable, and reviewable — like code, but in natural language. As you add more toolsets in the next steps, you'll see how the SOP guides the agent's behavior for each one.]{type="info"}
+::alert[**The SOP is the agent's playbook.** Without it, the LLM guesses which tool to call and how to format responses. With it, behavior is consistent, testable, and reviewable: like code, but in natural language. As you add more toolsets in the next steps, you'll see how the SOP guides the agent's behavior for each one.]{type="info"}
 
-::alert[**Should I rebuild the agent?** Adding a toolset is often more than registering tools on the Gateway. You usually also add guidance in the SOP to help the agent route to the new tools, plus response-formatting rules. When you change the SOP (or any agent code), rebuild the image with `make build`. In our case the SOP already ships with the instructions for every tool, so no rebuild is needed here — uncommenting the target and `make deploy` is enough.]{type="info"}
+::alert[**Should I rebuild the agent?** Adding a toolset is often more than registering tools on the Gateway. You usually also add guidance in the SOP to help the agent route to the new tools, plus response-formatting rules. When you change the SOP (or any agent code), rebuild the image with `make build`. In our case the SOP already ships with the instructions for every tool, so no rebuild is needed here: uncommenting the target and `make deploy` is enough.]{type="info"}
 
-### Step 4.4: Test — Ask Your First Analytics Question
+### Step 4.4: Test: Ask Your First Analytics Question
 
 Switch to the chat UI you set up in Step 3. If you're not logged in, log in as:
 
@@ -119,13 +119,13 @@ In the chat, ask:
 
 > "Show me top 5 customers by revenue"
 
-The agent should now return a formatted table with customer names and revenue figures. This is the Prebaked SQL pattern in action — the LLM picked `PrebakedSQL___get_top_revenue_customers_tool` and passed `limit=5`.
+The agent should now return a formatted table with customer names and revenue figures. This is the Prebaked SQL pattern in action: the LLM picked `PrebakedSQL___get_top_revenue_customers_tool` and passed `limit=5`.
 
-### Step 4.5: Deep Exercise — Trace the "Top Customers" Query
+### Step 4.5: Deep Exercise: Trace the "Top Customers" Query
 
 Let's verify exactly what happened under the hood.
 
-#### Part A — Check the trace in CloudWatch
+#### Part A: Check the trace in CloudWatch
 
 1. If you are accessing AWS through the sandbox account provided by AWS workshop studio, go to the workshop studio dashboard and click "Open AWS console" link on the left pane. This will open a AWS UI console in a new tab.
 2. Head to :link[CloudWatch GenAI Observability for AgentCore]{href="https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#/gen-ai-observability/agent-core/agents" external=true}
@@ -142,7 +142,7 @@ On the agent's endpoint page, open the **Sessions** tab:
 
 :image[The agent endpoint page, with the Sessions tab highlighted next to Overview]{src="/static/images/cw-genai-sessions-tab.png"}
 
-#### Part B — Check the Lambda implementation
+#### Part B: Check the Lambda implementation
 
 Open :code[tools/prebaked_sql_toolset_lambda.py]{showCopyAction=true} and go to **line 403**:
 
@@ -154,7 +154,7 @@ def get_top_revenue_customers(args):
         cur.execute("SELECT * FROM top_revenue_customers LIMIT %s", [limit])
 ```
 
-Notice: the function queries the `top_revenue_customers` **View** — not a raw table with complex joins. The View is pre-defined in the database schema by your team. The LLM never saw this SQL. If you are interested in looking at the query implementation for this View, find it from `/workshop/agentic-analytics/dataset/schema/schema.sql`.
+Notice: the function queries the `top_revenue_customers` **View**, not a raw table with complex joins. The View is pre-defined in the database schema by your team. The LLM never saw this SQL. If you are interested in looking at the query implementation for this View, find it from `/workshop/agentic-analytics/dataset/schema/schema.sql`.
 
 ## Verification
 
@@ -169,19 +169,19 @@ Notice: the function queries the `top_revenue_customers` **View** — not a raw 
 
 **Trace doesn't show tool calls**
 - Ensure you're looking at the correct time range in CloudWatch.
-- The agent may have answered from its own knowledge without calling a tool — rephrase the question to be more specific.
+- The agent may have answered from its own knowledge without calling a tool: rephrase the question to be more specific.
 
 **Lambda returns empty results**
 - The database may not have data for the specific query. Try "Show me all accounts" first to verify connectivity.
 
 ## Summary
 
-You deployed the Prebaked SQL toolset — 29 analytics tools backed by database Views. You examined how the deploy script registers tool schemas to the Gateway, how the SOP guides the agent's tool selection, and traced a query end-to-end in CloudWatch. This is the safest pattern for production analytics — zero SQL hallucination risk.
+You deployed the Prebaked SQL toolset: 29 analytics tools backed by database Views. You examined how the deploy script registers tool schemas to the Gateway, how the SOP guides the agent's tool selection, and traced a query end-to-end in CloudWatch. This is the safest pattern for production analytics: zero SQL hallucination risk.
 
 Next, you'll connect the agent to existing business APIs → [Step 5: Integrate with Existing APIs](../05-integrate-existing-apis/)
 
 ## Reference Materials
 
-- :link[AgentCore Gateway — Adding Targets]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-building-adding-targets.html"}
-- :link[AgentCore Gateway — Tool Naming]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-tool-naming.html"}
-- :link[Strands Agents — Tools]{href="https://strandsagents.com/docs/user-guide/concepts/tools/" external=true}
+- :link[AgentCore Gateway: Adding Targets]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-building-adding-targets.html"}
+- :link[AgentCore Gateway: Tool Naming]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-tool-naming.html"}
+- :link[Strands Agents: Tools]{href="https://strandsagents.com/docs/user-guide/concepts/tools/" external=true}

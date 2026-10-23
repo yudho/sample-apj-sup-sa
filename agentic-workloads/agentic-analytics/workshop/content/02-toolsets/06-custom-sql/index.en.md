@@ -17,7 +17,7 @@ Your agent has 29 prebaked tools, but tenants always ask questions that don't ma
 
 ## The Solution: Custom SQL with RAG
 
-The Custom SQL toolset lets the agent **generate SQL dynamically**: but with multiple hallucination mitigation layers:
+The Custom SQL toolset lets the agent **generate SQL dynamically**, but with multiple hallucination mitigation layers:
 
 1. **Schema from :link[AWS Glue Data Catalog]{href="https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html"}**: tables, columns and types, sized to fit (see below)
 2. **Business context from :link[Bedrock Knowledge Base]{href="https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html"} (RAG)**: descriptions, rules, and sample SQL
