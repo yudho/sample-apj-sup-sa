@@ -72,20 +72,18 @@ Cube Core was deployed as part of the CloudFormation stack: it's running as a Do
 Your Code Editor already forwards the private Cube instance to **`localhost:4000`** on the Code Editor box (a small tunnel set up at deploy time). To open it in your browser, use the Code Editor's built-in **Ports** feature:
 
 1. In the Code Editor, open the **Ports** panel (the **Ports** tab next to the Terminal, or **View → Open View… → Ports**).
-2. You should see port **4000** listed (labelled the Cube tunnel). If it isn't there yet, click **Forward a Port** and enter `4000`.
-3. Click the **🌐 globe / "Open in Browser"** icon next to port 4000.
+2. You should see port **4000** listed, with `socat` as its running process (that is the tunnel). If it isn't there yet, choose **Add Port** and enter `4000`.
+3. Hover over the port 4000 row and choose the **globe** icon (**Open in Browser**).
 
-A new tab opens the Cube Playground at its root path. It will show a mostly empty interface because no data models have been defined yet: that's expected.
+A new tab opens the Cube Playground under `/ports/4000/`. It shows the tables in the `public` schema and no data models yet: that's expected.
 
-::alert[**Why the Ports panel and not a URL path?** Cube's Playground is a single-page app that loads its assets from the site root, so it can't be served under a sub-path like `/cube/`. The Ports panel forwards it at the root of a generated URL, which is why the Playground (and its live-reload) work correctly. The forward targets `localhost:4000` on the Code Editor, which tunnels to the private Cube instance.]{type="info"}
+::alert[**How the Playground reaches you.** The Ports panel forwards `localhost:4000` on the Code Editor, which tunnels to the private Cube instance. The Playground also loads files and calls its API from root paths such as `/playground/` and `/cubejs-api/`. The Code Editor's web server sends those to Cube too, but only for a browser that is signed in to your Code Editor: anyone else gets `403`.]{type="info"}
 
 ::alert[**If port 4000 isn't listed or the page doesn't load:** the Code Editor discovers the Cube instance shortly after both boot and retries every ~2 minutes: wait a minute and re-open the Ports panel. You can also confirm Cube is running via **SSM Session Manager** on the Cube EC2 instance: `docker ps`.]{type="warning"}
 
-**1b. Set up database connectivity:**
+**1b. The database connection is already set.**
 
-In the Playground, open the **`#/connection`** path (append `#/connection` to the forwarded URL) to configure the PostgreSQL connection. Enter your Aurora PostgreSQL credentials (see the info box below). Once the connection is saved, Cube will use these credentials to query Aurora when you add data models in the next step.
-
-::alert[**Need the database credentials?** Retrieve the Aurora credentials from **AWS Console** → **Secrets Manager** → the secret named `agentic-analytics/aurora/credentials`. Click **Retrieve secret value** to see the host, port, username, password, and database name. **Note:** Cube connects to Aurora as the database **owner** (`postgres`), which is why tenant isolation for the semantic layer is enforced in the Lambda rather than by PostgreSQL RLS: see the Step 9 callout.]{type="info"}
+Cube connects to Aurora with the credentials it was started with, so you don't enter any here: the `public` tables you see in **Data Model** come from that connection. Cube connects as the database **owner** (`postgres`), which is why tenant isolation for the semantic layer is enforced in the Lambda rather than by PostgreSQL RLS: see the Step 9 callout.
 
 ### Step 2: Explore the Cube Data Models
 

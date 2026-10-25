@@ -853,6 +853,24 @@ Resources:
               location /ports/3001/ {
                   return 301 /app;
               }
+              # Cube Playground (optional semantic-layer lab). The Ports panel opens it at
+              # /ports/4000/, but the Playground loads its assets and calls its API from
+              # absolute root paths, which would otherwise hit the Code Editor and 404.
+              # Route those paths to the Cube tunnel, only for a signed-in Code Editor
+              # session: auth_request asks the Code Editor's own (authenticated) port proxy.
+              location ~ ^/(assets/|fonts/|antd\.min\.css|favicon-|playground/|cubejs-api/|cubejs-system/) {
+                  auth_request /_code_editor_session;
+                  proxy_pass http://127.0.0.1:4000;
+                  proxy_set_header Host localhost;
+                  proxy_read_timeout 300;
+              }
+              location = /_code_editor_session {
+                  internal;
+                  proxy_pass http://127.0.0.1:8080/ports/4000/favicon-16x16.png;
+                  proxy_pass_request_body off;
+                  proxy_set_header Content-Length "";
+                  proxy_set_header Host $http_host;
+              }
           }
           NGINXEOF
           # Disable default server block that conflicts with our conf.d config
