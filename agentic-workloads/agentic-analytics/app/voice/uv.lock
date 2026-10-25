@@ -3429,13 +3429,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp" },
-    { name = "bedrock-agentcore" },
-    { name = "boto3" },
-    { name = "pillow", specifier = ">=13.0.0" },
-    { name = "pipecat-ai", extras = ["daily", "deepgram", "aws", "runner", "sagemaker", "silero", "webrtc"], specifier = ">=0.0.60" },
-    { name = "pipecatcloud" },
-    { name = "python-dotenv" },
+    { name = "aiohttp", specifier = "==3.14.5" },
+    { name = "bedrock-agentcore", specifier = "==1.25.0" },
+    { name = "boto3", specifier = "==1.43.117" },
+    { name = "pillow", specifier = "==13.0.0" },
+    { name = "pipecat-ai", extras = ["daily", "deepgram", "aws", "runner", "sagemaker", "silero", "webrtc"], specifier = "==1.14.0" },
+    { name = "pipecatcloud", specifier = "==1.4.0" },
+    { name = "python-dotenv", specifier = "==1.2.4" },
 ]
 
 [package.metadata.requires-dev]
