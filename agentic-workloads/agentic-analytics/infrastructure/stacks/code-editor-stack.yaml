@@ -1013,20 +1013,24 @@ Resources:
       Role: !GetAtt OriginSubnetPickerRole.Arn
       Code:
         ZipFile: |
-          import boto3, cfnresponse
+          # cfnresponse is not importable in this runtime, so reply to CloudFormation directly.
+          import boto3, json, urllib.request
           UNSUPPORTED = {"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
+          def send(event, context, status, data, physical_id=None, reason="OK"):
+              body = json.dumps({"Status": status, "Reason": reason, "PhysicalResourceId": physical_id or event.get("PhysicalResourceId") or context.log_stream_name, "StackId": event["StackId"], "RequestId": event["RequestId"], "LogicalResourceId": event["LogicalResourceId"], "Data": data})
+              urllib.request.urlopen(urllib.request.Request(event["ResponseURL"], data=body.encode(), headers={"Content-Type": ""}, method="PUT"))
           def handler(event, context):
               try:
                   if event["RequestType"] == "Delete":
-                      return cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      return send(event, context, "SUCCESS", {})
                   ids = [i for i in event["ResourceProperties"]["SubnetIds"] if i]
                   subnets = boto3.client("ec2").describe_subnets(SubnetIds=ids)["Subnets"]
                   by_id = {s["SubnetId"]: s for s in subnets}
                   pick = next(i for i in ids if by_id[i]["AvailabilityZoneId"] not in UNSUPPORTED)
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {"SubnetId": pick}, pick)
+                  send(event, context, "SUCCESS", {"SubnetId": pick}, pick)
               except Exception as e:
                   print(f"subnet pick failed: {e}")
-                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+                  send(event, context, "FAILED", {}, reason=f"subnet pick failed: {e}"[:250])
 
   OriginSubnet:
     Type: Custom::OriginSubnet
