@@ -6,7 +6,7 @@ weight: 20
 ## Learning Objectives
 
 By the end of this step, you will:
-- Deploy the AgentCore layer: MCP Gateway, Runtime, and Memory: as **one CloudFormation stack** you edit and redeploy
+- Deploy the AgentCore layer: MCP Gateway, Runtime, and Memory, as **one CloudFormation stack** you edit and redeploy
 - Connect your agent to the Gateway and ship it to AgentCore Runtime **without the `agentcore` CLI**
 - Understand why Gateway + Runtime is the production foundation for agentic systems
 
@@ -14,9 +14,9 @@ By the end of this step, you will:
 
 In Step 1 you built a basic agent that ran on your Code Editor and connected directly to the database. That was an exercise. Now you'll build the real agent: one deployed to :link[AgentCore Runtime]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html"} that discovers tools through an :link[MCP Gateway]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html"}.
 
-Everything from here on is built by editing **one** CloudFormation template: `agentcore-topup-stack.yaml`: and redeploying it with `make`. Each step you **uncomment one clearly-marked section** (or flip one value) and run `make deploy`. No SDK scripts, no `agentcore` CLI.
+Everything from here on is built by editing **one** CloudFormation template, `agentcore-topup-stack.yaml`, and redeploying it with `make`. Each step you **uncomment one clearly-marked section** (or flip one value) and run `make deploy`. You do not need SDK scripts or the `agentcore` CLI.
 
-::alert[**Why CloudFormation?** Production agent platforms are defined as code so they can be reviewed, versioned, and reproduced. By the end you'll have the entire agent layer: Gateway, Runtime, Memory, toolsets, policies, guardrail: described in one auditable template, deployed exactly the way the demo environment deploys it.]{type="info"}
+::alert[**Why CloudFormation?** Production agent platforms are defined as code so they can be reviewed, versioned, and reproduced. By the end you'll have the entire agent layer (Gateway, Runtime, Memory, toolsets, policies, guardrail) described in one auditable template, deployed exactly the way the demo environment deploys it.]{type="info"}
 
 The base infrastructure (Aurora, Cognito, Glue, the Bedrock Knowledge Base, and this Code Editor) was **already provisioned** for you by the event. The top-up stack reads those values automatically with `Fn::ImportValue`: you never copy an ARN by hand.
 
@@ -168,7 +168,7 @@ AgentRuntimeArn     arn:aws:bedrock-agentcore:us-east-1:xxxxxxxxxxxx:runtime/age
 make build
 ```
 
-`make build` runs a small, readable bash script (`scripts/rebuild-agent.sh`: open it, there's no hidden magic): it re-zips the agent code, uploads it, and runs `make deploy` with a **fresh image tag**. CloudFormation does the rest: it rebuilds the image under that tag and rolls the Runtime to a new version, re-applying the auth, network, and environment settings straight from the template. Use `make deploy` when you change the **template**; use `make build` when you change the **agent code**.
+`make build` runs a small, readable bash script (`scripts/rebuild-agent.sh`, a short script you can read): it re-zips the agent code, uploads it, and runs `make deploy` with a **fresh image tag**. CloudFormation does the rest: it rebuilds the image under that tag and rolls the Runtime to a new version, re-applying the auth, network, and environment settings straight from the template. Use `make deploy` when you change the **template**; use `make build` when you change the **agent code**.
 
 ::alert[**You won't fully test the agent here.** The Runtime is JWT-only: it's invoked by the chat UI with the signed-in user's token, not from the command line. You'll connect that UI in Step 3 and watch the agent (and its memory) work end to end.]{type="info"}
 
@@ -192,7 +192,7 @@ make build
 
 ## Summary
 
-You deployed the production infrastructure as code: an MCP Gateway (empty, ready for toolsets), AgentCore Memory, and your agent on AgentCore Runtime: all from one CloudFormation template, with the container image built automatically and no `agentcore` CLI. In the next step you'll connect the chat UI and watch it work.
+You deployed the production infrastructure as code: an MCP Gateway (empty, ready for toolsets), AgentCore Memory, and your agent on AgentCore Runtime, all from one CloudFormation template, with the container image built automatically and no `agentcore` CLI. In the next step you'll connect the chat UI and watch it work.
 
 Next → [Step 3: Connect the Chat UI](../03-connect-ui/)
 

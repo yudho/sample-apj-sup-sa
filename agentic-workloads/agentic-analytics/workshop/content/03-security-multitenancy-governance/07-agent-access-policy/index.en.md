@@ -23,7 +23,7 @@ You need two layers of security:
 - **Tool-level access control**: which tools each role can use
 - **Data-level isolation**: which rows each tenant and role can see
 
-::alert[**SaaS critical:** In a pool model (shared database), a single misconfigured query could expose one tenant's data to another. You need enforcement at the **infrastructure level**: not in the agent's prompt, not in the application code. :link[AgentCore Policy]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html"} handles tool access. :link[PostgreSQL Row-Level Security]{href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html"} handles data isolation. Together, they make multi-tenant security deterministic and auditable.]{type="warning"}
+::alert[**SaaS critical:** In a pool model (shared database), a single misconfigured query could expose one tenant's data to another. Enforce isolation at the **infrastructure level**, where neither a prompt nor a bug in application code can remove it. :link[AgentCore Policy]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html"} handles tool access. :link[PostgreSQL Row-Level Security]{href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html"} handles data isolation.]{type="warning"}
 
 ## The Solution
 
@@ -56,13 +56,13 @@ The two halves are independent: Part A controls *which tools* a role can call; P
 
 ### A 60-second primer on Cedar (read before 7.1)
 
-You're about to write your first :link[Cedar]{href="https://www.cedarpolicy.com/"} policies, so here's the whole idea in a paragraph. **Cedar is a policy language** (the same engine behind Amazon Verified Permissions) that answers one question: *"is this principal allowed to do this action on this resource?"*: with **formal logic, not an LLM judgment call.** Three things to know and you can read every policy in this step:
+You're about to write your first :link[Cedar]{href="https://www.cedarpolicy.com/"} policies, and here is how it works. **Cedar is a policy language** (the same engine behind Amazon Verified Permissions) that decides with **formal logic** whether *a principal is allowed to do this action on this resource*. Three things to know and you can read every policy in this step:
 
 - It is **default-deny**: if nothing explicitly `permit`s an action, it's denied.
 - **`forbid` always beats `permit`.** So the usual pattern is one broad `permit` (allow everything) plus narrow `forbid`s that carve out exceptions. That's exactly what you'll deploy: *permit all tools, then forbid the booking tool for analysts and the Custom-SQL tools for staff.*
 - A policy reads almost like English: `forbid(principal, action == "create_booking", resource) when { principal.getTag("custom:role") == "analyst" };`: "forbid the create-booking action when the caller's role is analyst."
 
-Why not just tell the agent in the prompt "don't let analysts book"? Because a prompt is a *suggestion* an attacker can talk the model out of (prompt injection). Cedar is evaluated at the **Gateway, before the agent runs**: the analyst's session literally never sees the tool. That's the difference between application-level and infrastructure-level security, and it's the whole point of this step.
+Why not just tell the agent in the prompt "don't let analysts book"? Because a prompt is a *suggestion* an attacker can talk the model out of (prompt injection). Cedar is evaluated at the **Gateway, before the agent runs**: the analyst's session never sees the tool, so no prompt can bring it back.
 
 ### Step 7.1: Add Cedar Policies (TODO 7.1): *Part A: tool access*
 
@@ -136,7 +136,7 @@ To fix this, you'll switch to `app_user`: a non-owner role created during the ba
 
 #### TODO 7.2: Flip the RLS feature flag (no redeploy)
 
-The three SQL Lambdas are already wired with **both** database secrets: the `postgres` owner and the `app_user` non-owner: and they decide which to use at **runtime** by reading a feature flag in :link[AWS Systems Manager Parameter Store]{href="https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html"}. The flag (`/agentic-analytics/rls-mode`) currently reads `disabled`, so they connect as `postgres` and RLS is bypassed. Flip it to `enabled` and they connect as `app_user`: **no `make deploy`**.
+The three SQL Lambdas are already wired with **both** database secrets (the `postgres` owner and the `app_user` non-owner), and they decide which to use at **runtime** by reading a feature flag in :link[AWS Systems Manager Parameter Store]{href="https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html"}. The flag (`/agentic-analytics/rls-mode`) currently reads `disabled`, so they connect as `postgres` and RLS is bypassed. Flip it to `enabled` and they connect as `app_user`: **no `make deploy`**.
 
 Flip it from the Code Editor terminal:
 
@@ -241,7 +241,7 @@ All test users share one password. Run `make users` in `app/agentcore_strands` i
 
 ### Step 7.7: Test Tenant Data Isolation: *Part B payoff*
 
-This is the most important test in the workshop. Log in as users from **different tenants** and confirm they see different data from the *same* question.
+Log in as users from **different tenants** and confirm they see different data from the *same* question.
 
 **As Mythical Unicorns (Lyra):**
 
@@ -252,16 +252,16 @@ This is the most important test in the workshop. Log in as users from **differen
 2. Log out, log in as :code[aria.skybloom@example-mythicunicorns.com]{showCopyAction=true}
 3. Ask the **exact same question**: **write down her #1 customer's name.**
 
-::alert[**What you should see: and why it's the whole point.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL, but each tenant got only **their own rows**. *That difference is RLS working.* Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation that holds even if the application or the generated SQL forgets the tenant filter, as long as RLS is configured for every tenant table. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
+::alert[**What you should see.** Lyra's and Aria's number 1 customers are **different names** (e.g. Lyra's top customer is an organization; Aria's is a different individual entirely). Same agent, same Gateway, same Lambda, same SQL, but each tenant got only **their own rows** because RLS is filtering them. Before you flipped the flag, both users would have seen the **same** global list (the Lambda was connecting as the table owner, which bypasses RLS). Now the database engine itself filters by `account_id` from the JWT: isolation that holds even if the application or the generated SQL forgets the tenant filter, as long as RLS is configured for every tenant table. Even if the LLM wrote a Custom-SQL query with no tenant filter, RLS still protects the data. **If both users see the same names,** RLS isn't active yet: confirm `/agentic-analytics/rls-mode` reads `enabled` (Step 7.2), and wait out the ~60s flag cache (or start a fresh chat) before retrying.]{type="success"}
 
 ### Step 7.8: The Invisibility Test: *Part A payoff*
 
-The Cedar policy doesn't just *refuse* the booking tool: it makes it **invisible**.
+The Cedar policy also makes the booking tool **invisible** to the analyst.
 
 1. Log in as **Orion (analyst)**, ask: **"List every tool you can use."**
 2. Log in as **Lyra (admin)**, ask the **same** question.
 
-::alert[**What you should see.** Orion's list contains only *read* booking tools (e.g. `get_bookings`, `get_booking_summary`): there is **no create-booking tool**. Lyra's list **includes `APIInteg___create_booking_tool`.** Same agent, same Gateway; the only difference is the `custom:role` claim in their JWT, and Cedar uses it to hide the write tool from the analyst *at the Gateway, before the agent runs.* A prompt restriction ("don't let analysts create bookings") can be talked around with prompt injection; this cannot: **the agent can't call what it can't see.** That's why this belongs at the infrastructure layer, not in the prompt.]{type="info"}
+::alert[**What you should see.** Orion's list contains only *read* booking tools (e.g. `get_bookings`, `get_booking_summary`): there is **no create-booking tool**. Lyra's list **includes `APIInteg___create_booking_tool`.** Same agent, same Gateway; the only difference is the `custom:role` claim in their JWT, and Cedar uses it to hide the write tool from the analyst *at the Gateway, before the agent runs.* A prompt restriction ("don't let analysts create bookings") can be talked around with prompt injection. A tool hidden at the Gateway **cannot be called at all.**]{type="info"}
 
 ### Step 7.9: Guardrails and a booking-order rule in policy (Step 7b)
 
@@ -318,7 +318,7 @@ Test it as Lyra:
 └─────────────────────────────────────────────────────────┘
 ```
 
-::alert[**This is one of the most important steps in the workshop**: multi-tenant isolation and access control are core to a well-architected SaaS agent. To study the full implementation, browse the complete project at :link[aws-samples/sample-apj-sup-sa]{href="https://github.com/aws-samples/sample-apj-sup-sa/tree/main/agentic-workloads/agentic-analytics" external=true}. The repository contains the complete **sample code** (agent, Lambda toolsets, Cedar policies, RLS schema), **this very workshop's content**, and a **demo mode** that deploys the whole system end to end in an AWS account: a useful reference for adapting these security patterns to your needs.]{type="info"}
+::alert[Multi-tenant isolation and access control are core to a well-architected SaaS agent. To study the full implementation, browse the complete project at :link[aws-samples/sample-apj-sup-sa]{href="https://github.com/aws-samples/sample-apj-sup-sa/tree/main/agentic-workloads/agentic-analytics" external=true}. The repository contains the complete **sample code** (agent, Lambda toolsets, Cedar policies, RLS schema), **this very workshop's content**, and a **demo mode** that deploys the whole system end to end in an AWS account: a useful reference for adapting these security patterns to your needs.]{type="info"}
 
 ## Verification
 

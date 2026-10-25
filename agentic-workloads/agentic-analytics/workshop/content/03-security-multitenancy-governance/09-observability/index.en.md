@@ -159,7 +159,7 @@ The front door has its own metrics. Open **AWS WAF** → **Web ACLs** (Region us
 
 ## Summary
 
-You explored the observability stack: CloudWatch traces for debugging, spans for understanding agent behavior, and Gateway logs for policy decisions. The key insight: Runtime tracing is automatic (via `strands-agents[otel]` + `aws-opentelemetry-distro`), but Gateway and Memory need explicit log/trace delivery configuration.
+You explored the observability stack: CloudWatch traces for debugging, spans for understanding agent behavior, and Gateway logs for policy decisions. Runtime tracing is automatic (via `strands-agents[otel]` + `aws-opentelemetry-distro`), while Gateway and Memory need explicit log/trace delivery configuration.
 
 You can now trace any tenant interaction end-to-end and debug issues in production.
 

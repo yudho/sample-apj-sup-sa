@@ -63,7 +63,7 @@ Let's understand what that block does. Still in :code[agentcore-topup-stack.yaml
 ```
 
 - `Name`: the tool identifier the LLM sees and calls
-- `Description`: the LLM reads this to decide *when* to call the tool (this is the only thing guiding tool selection!). Provide enough detail to avoid confusion between similar tools.
+- `Description`: the LLM reads this, together with the SOP's tool mapping, to decide *when* to call the tool. Provide enough detail to avoid confusion between similar tools.
 - `InputSchema`: tells the LLM what arguments to extract from the user's question
 
 **The Gateway target itself:** the resource registers that schema to the Gateway and points it at the Lambda:
@@ -84,7 +84,7 @@ DataToolsTarget:
 
 The Gateway now knows: *"When the agent calls any tool in this `InlinePayload`, route it to this Lambda."* The target name `PrebakedSQL` becomes a prefix: the agent sees tools as `PrebakedSQL___get_top_revenue_customers_tool`.
 
-::alert[**The tool description is your steering wheel.** If you write `"Get top customers by revenue"`, the LLM will call this tool when users ask about top customers. If the description is vague or wrong, the LLM picks the wrong tool. Good descriptions = accurate routing.]{type="info"}
+::alert[**The tool description drives tool selection.** If you write `"Get top customers by revenue"`, the LLM will call this tool when users ask about top customers. If the description is vague or wrong, the LLM picks the wrong tool.]{type="info"}
 
 ### Step 4.3: Understand the SOP: Query Classification and Tool Selection
 
@@ -100,7 +100,7 @@ Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review thes
 
 **Constraints Summary (end of the file):** The hard rules: no emojis, no SQL in responses, use specific tools before falling back to text-to-sql.
 
-::alert[**The SOP is the agent's playbook.** Without it, the LLM guesses which tool to call and how to format responses. With it, behavior is consistent, testable, and reviewable: like code, but in natural language. As you add more toolsets in the next steps, you'll see how the SOP guides the agent's behavior for each one.]{type="info"}
+::alert[**The SOP sets the agent's behavior.** Without it, the LLM guesses which tool to call and how to format responses. With it, the rules sit in one file you can review and test like code. As you add more toolsets in the next steps, you'll see how the SOP guides the agent's behavior for each one.]{type="info"}
 
 ::alert[**Should I rebuild the agent?** Adding a toolset is often more than registering tools on the Gateway. You usually also add guidance in the SOP to help the agent route to the new tools, plus response-formatting rules. When you change the SOP (or any agent code), rebuild the image with `make build`. In our case the SOP already ships with the instructions for every tool, so no rebuild is needed here: uncommenting the target and `make deploy` is enough.]{type="info"}
 
@@ -123,7 +123,7 @@ The agent should now return a formatted table with customer names and revenue fi
 
 ### Step 4.5: Deep Exercise: Trace the "Top Customers" Query
 
-Let's verify exactly what happened under the hood.
+Check which tool the agent called and what SQL the tool ran.
 
 #### Part A: Check the trace in CloudWatch
 

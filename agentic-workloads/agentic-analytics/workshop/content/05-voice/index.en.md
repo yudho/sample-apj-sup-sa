@@ -8,13 +8,13 @@ weight: 78
 By the end of this optional step, you will:
 - Deploy a **voice** front-end for the same analytics agent: speak a question, hear the answer
 - Understand how a second AgentCore Runtime (a Pipecat pipeline) reuses the agent you already built
-- See an AWS-native real-time voice stack: WebRTC with **Amazon Kinesis Video Streams (KVS) managed TURN**: no third-party media vendor
+- See an AWS-native real-time voice stack: WebRTC with **Amazon Kinesis Video Streams (KVS) managed TURN**, with no third-party media vendor
 
 ## Why Voice?
 
-Your analytics assistant answers typed questions. But a depot manager walking the floor, or a staffer with their hands full, would rather just **ask**: "what's my revenue this week?": and hear the answer. Voice removes the keyboard.
+Your analytics assistant answers typed questions. But a depot manager walking the floor, or a staffer with their hands full, would rather **ask** "What's my revenue this week?" out loud and hear the answer.
 
-The key idea: **you don't rebuild the agent.** Voice is a new *front-end* that calls the exact same Strands analytics agent you deployed in Step 2, with the same per-user JWT: so RBAC, RLS, the SOP, and the conversation memory all work identically. A spoken question and a typed question reach the same Runtime.
+**You don't rebuild the agent.** Voice is a new *front-end* that calls the exact same Strands analytics agent you deployed in Step 2, with the same per-user JWT: so RBAC, RLS, the SOP, and the conversation memory all work identically. A spoken question and a typed question reach the same Runtime.
 
 ::alert[**This lab is optional and a separate stack.** Unlike Steps 4–8 (which uncomment sections of the one analytics top-up), voice is its own CloudFormation stack: a **second AgentCore Runtime** running a :link[Pipecat]{href="https://www.pipecat.ai/" external=true} pipeline (Deepgram speech-to-text → your analytics agent → Deepgram text-to-speech) plus a tiny JWT-gated WebRTC signaling proxy. It reuses the analytics Runtime you already built; it does not replace it.]{type="info"}
 

@@ -49,7 +49,7 @@ SET app.current_account_id = '<account_id_from_jwt>';
 SET app.current_user_role = '<role_from_jwt>';
 ```
 
-All tables have RLS policies that filter rows by `account_id`, so `SELECT * FROM bookings` automatically returns only the current tenant's data. No application-level filtering needed: the database enforces isolation.
+All tables have RLS policies that filter rows by `account_id`, so `SELECT * FROM bookings` automatically returns only the current tenant's data. The database enforces isolation, so the application adds no tenant filters.
 
 **Pre-Token Lambda V2** enriches the Cognito access token with `custom:role` and `custom:account_id` claims, making them available for both RLS and Cedar policy evaluation.
 
@@ -203,9 +203,9 @@ for details (including the agentcore voice teardown caveat: VPC ENIs reclaim slo
 
 ## The Scenario: Timely-Unicorn
 
-**Timely-Unicorn** is a fictional multi-tenant SaaS platform for unicorn rental businesses. Two rental companies: Mythical Unicorns and Mythic Unicorns: each manage their own fleet of unicorns, customers, bookings, and revenue. The synthetic dataset includes ~14,000 bookings, 500 customers, and 100 unicorns across 2 tenant accounts (plus the platform account).
+**Timely-Unicorn** is a fictional multi-tenant SaaS platform for unicorn rental businesses. Two rental companies, Mythical Unicorns and Mythic Unicorns, each manage their own fleet of unicorns, customers, bookings, and revenue. The synthetic dataset includes ~14,000 bookings, 500 customers, and 100 unicorns across 2 tenant accounts (plus the platform account).
 
-Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"*, but they don't know SQL. The AI assistant solves this for all tenants simultaneously, with full data isolation.
+Staff and analysts need answers like *"Who are my top 3 customers this month?"* or *"Create a 3-hour booking for customer X with unicorn Y"*, but they don't know SQL. One assistant serves all tenants, and RLS keeps each tenant's rows separate.
 
 ## License
 

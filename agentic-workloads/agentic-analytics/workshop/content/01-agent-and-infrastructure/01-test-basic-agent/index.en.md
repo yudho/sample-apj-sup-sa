@@ -16,7 +16,7 @@ By the end of this step, you will:
 
 Your tenants need answers. Lyra Starwhisper at Mythical Unicorns wants to know her top customers by revenue, but she'd have to email the data team and wait half a day. As the Timely-Unicorn SaaS platform team, let's build something better for her and all of the future tenants with the same need.
 
-Before deploying to the cloud, it's important to understand how an AI agent works at its core. :link[Strands Agents]{href="https://strandsagents.com/docs/" external=true} is an open-source SDK from AWS that takes a :link[model-driven approach]{href="https://aws.amazon.com/blogs/opensource/strands-agents-and-the-model-driven-approach/" external=true}: instead of writing complex routing logic, you define tools and a prompt, and the LLM decides which tools to call and in what order.
+Before deploying to the cloud, see how an agent works on its own. :link[Strands Agents]{href="https://strandsagents.com/docs/" external=true} is an open-source SDK from AWS that takes a :link[model-driven approach]{href="https://aws.amazon.com/blogs/opensource/strands-agents-and-the-model-driven-approach/" external=true}: instead of writing complex routing logic, you define tools and a prompt, and the LLM decides which tools to call and in what order.
 
 An agent has three components:
 
@@ -60,7 +60,7 @@ Find `TODO 1.3` in `exercises/basic_agent.py` and add the decorator above the fu
 @tool
 :::
 
-One line. The docstring `"""Get the top customers by revenue..."""` already tells the LLM exactly when this tool is relevant.
+That one line is enough, because the docstring `"""Get the top customers by revenue..."""` already tells the LLM when the tool is relevant.
 ::::
 
 ### Step 1.4: Create the Agent (TODO 1.4)
@@ -113,7 +113,7 @@ User: "Show me top customers by revenue"
             → Claude formats a human-readable response
 ```
 
-You didn't write any if/else routing. The LLM chose the right tool based on the question and the docstring. This is the **model-driven** approach: the model is the orchestrator.
+The LLM chose the tool from the question and the docstring, with no if/else routing in your code. Strands calls this the **model-driven** approach.
 
 ## Verification
 
@@ -143,11 +143,11 @@ You didn't write any if/else routing. The LLM chose the right tool based on the 
 
 This agent runs locally in this development machine with no built-in session isolation and high-availability. In the actual agent deployment in this workshop, you'd deploy the agent into AgentCore Runtime, support 20+ tools, need authentication, and want centralized management.
 
-That's what **AgentCore** solves: next step.
+Step 2 moves the agent to **AgentCore**, which provides these.
 
 ## Summary
 
-You built a minimal Strands agent with three components: a Bedrock model, a `@tool` function, and a system prompt. The LLM autonomously decided which tool to call based on the user's question. This model-driven approach is the foundation for everything that follows.
+You built a minimal Strands agent with three components: a Bedrock model, a `@tool` function, and a system prompt. The LLM autonomously decided which tool to call based on the user's question. Every later step uses the same model-driven approach.
 
 Next, you'll move from a single machine deployment to a highly available deployment → [Step 2: Deploy Agent Infrastructure](../02-deploy-agent-infra/)
 

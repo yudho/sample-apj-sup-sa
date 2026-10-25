@@ -99,7 +99,7 @@ Open :code[unicorn_rental_analytics.sop.md]{showCopyAction=true} and review:
 
 **Example 2, under Examples:** A complete booking example showing the tool chain: `current_datetime` → `search_customers_tool` → `search_unicorns_tool` → `create_booking_tool`.
 
-::alert[**SOP + Policy = Defense in Depth.** The Policy Engine hides the tool at the Gateway level (the agent can't call it). The SOP's graceful failure handling means the agent will inform the user if a tool isn't available. Together, they provide both infrastructure-level and application-level access control.]{type="info"}
+::alert[**The SOP and the policy work at different layers.** The Policy Engine (Step 7) hides the tool at the Gateway level, so the agent can't call it. The SOP's graceful failure handling makes the agent inform the user when a tool isn't available.]{type="info"}
 
 ### Step 5.4: Test It
 
@@ -130,13 +130,13 @@ Watch the agent chain multiple tools autonomously:
 4. **`get_unicorn_availability_tool`**: checks that the unicorn is free in that slot (the SOP asks for this before any booking)
 5. **`create_booking_tool`**: re-checks availability, calculates cost, creates the booking (Gateway → separate Lambda → Aurora)
 
-The agent orchestrated five tool calls across two Lambda functions, resolved a relative date, and created a booking from one natural-language request. The exact order can vary from run to run; the availability check before the booking is the part that matters, and in Step 7b you'll make it a hard rule in Cedar.
+The agent orchestrated five tool calls across two Lambda functions, resolved a relative date, and created a booking from one natural-language request. The exact order can vary from run to run, but the availability check must come before the booking, and in Step 7b you'll make that a Cedar rule.
 
 ## The Concern
 
-Now think about this: **any user** with access to the agent can create bookings. An analyst who should only have read access could say "create a booking" and it would work. That's a security gap.
+Now think about this: **any user** with access to the agent can create bookings. An analyst who should only have read access could say "create a booking" and it would work.
 
-We'll fix this in the next step with AgentCore Policy.
+Step 7 closes this gap with AgentCore Policy.
 
 ## Verification
 
@@ -155,7 +155,7 @@ We'll fix this in the next step with AgentCore Policy.
 
 ## Summary
 
-You deployed a write operation as a separate Gateway target, and the agent autonomously chained 4 tools to create a booking from a single natural language request. The separation of read (`PrebakedSQL`) and write (`APIInteg`) targets is a deliberate design choice that enables fine-grained access control.
+You deployed a write operation as a separate Gateway target, and the agent autonomously chained five tools to create a booking from a single natural language request. The separation of read (`PrebakedSQL`) and write (`APIInteg`) targets is a deliberate design choice that enables fine-grained access control.
 
 But right now, any user can create bookings. We'll fix this with AgentCore Policy in Step 7. First, let's add the final toolset → [Step 6: Custom SQL for Ad-Hoc Queries](../06-custom-sql/)
 

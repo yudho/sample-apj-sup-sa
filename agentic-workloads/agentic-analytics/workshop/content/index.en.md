@@ -5,15 +5,15 @@ weight: 0
 
 ## Give Your Business Users the Power to Ask Questions in Plain English
 
-Welcome! In this workshop, you'll build an AI assistant that lets business users access data through natural conversation: no SQL required. Instead of waiting days for a BI team to run a report, your users simply ask: *"Who are my top customers this month?"* and get an instant, accurate answer.
+Welcome! In this workshop, you'll build an AI assistant that answers business users' data questions in plain English, so they do not need SQL or a BI team. A user asks *"Who are my top customers this month?"* and the agent queries the database and returns the answer.
 
 This is **agentic data access**: an AI agent that understands your business context, selects the right database query, enforces security policies, and returns formatted insights. You'll build it step by step, starting with a simple local agent and progressively adding enterprise capabilities: centralized tool management, role-based access control, tenant data isolation for multi-tenant environment, content safety, and custom SQL with human approval.
 
-::alert[This workshop uses :link[Amazon Bedrock AgentCore]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html"} and :link[Strands Agents SDK]{href="https://strandsagents.com/docs/"}, but the focus is on the **data access patterns**, not the tools. The techniques apply to agentic analytics systems in general.]{type="info"}
+::alert[This workshop uses :link[Amazon Bedrock AgentCore]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html"} and :link[Strands Agents SDK]{href="https://strandsagents.com/docs/"}, but the workshop focuses on **data access patterns**, which also apply to agentic analytics systems built with other tools.]{type="info"}
 
 ## The Scenario: Timely-Unicorn
 
-**Timely-Unicorn** is a multi-tenant SaaS platform for unicorn rental businesses. Two rental companies: Mythical Unicorns and Mythic Unicorns: each manage their own fleet of unicorns, customers, bookings, and revenue on the platform. The unicorns will take the customers from a pick-up point to their destination.
+**Timely-Unicorn** is a multi-tenant SaaS platform for unicorn rental businesses. Two rental companies, Mythical Unicorns and Mythic Unicorns, each manage their own fleet of unicorns, customers, bookings, and revenue on the platform. The unicorns will take the customers from a pick-up point to their destination.
 
 Their staff and analysts need answers: *"Who are my top 3 customers this month"*, *"What unicorn breed gives the most revenue"*, *"Create a 3-hour booking for customer X with unicorn Y for tomorrow 1 pm."* But they don't know SQL, and the BI team is backlogged. **You are the Timely-Unicorn SaaS platform team**: you'll build the AI assistant that solves this for all your tenants.
 
@@ -67,7 +67,7 @@ Their staff and analysts need answers: *"Who are my top 3 customers this month"*
 - Developers implementing agentic applications on AWS
 - Anyone who wants to understand how to secure and govern AI agents in production
 
-::alert[**For SaaS builders:** The pattern in this workshop: tenant isolation via RLS, role-based tool access via Cedar, shared infrastructure with per-session isolation: maps to the :link[SaaS Lens]{href="https://docs.aws.amazon.com/wellarchitected/latest/saas-lens/saas-lens.html"} of the AWS Well-Architected Framework. You'll build a pool model where all tenants share the same agent, database, and Gateway: with isolation enforced at the data and policy layers.]{type="success"}
+::alert[**For SaaS builders:** The pattern in this workshop (tenant isolation via RLS, role-based tool access via Cedar, shared infrastructure with per-session isolation) maps to the :link[SaaS Lens]{href="https://docs.aws.amazon.com/wellarchitected/latest/saas-lens/saas-lens.html"} of the AWS Well-Architected Framework. You'll build a pool model where all tenants share the same agent, database, and Gateway, with isolation enforced at the data and policy layers.]{type="success"}
 
 ## Level & Prerequisites
 
@@ -103,4 +103,4 @@ For reference, the estimated AWS cost for running the full workshop infrastructu
 
 ---
 
-Let's start by understanding the business scenario → [Introduction](introduction/)
+Next, read the business scenario → [Introduction](introduction/)

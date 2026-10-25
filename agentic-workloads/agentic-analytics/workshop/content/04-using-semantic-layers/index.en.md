@@ -17,7 +17,7 @@ You've now seen three data access patterns:
 
 | Pattern | Pros | Cons |
 |---------|------|------|
-| **Prebaked SQL** (Step 3) | Minimum hallucination: LLM never generates SQL | Rigid: every new question needs a new View |
+| **Prebaked SQL** (Step 4) | Minimum hallucination: LLM never generates SQL | Rigid: every new question needs a new View |
 | **Custom SQL** (Step 6) | Flexible: handles any ad-hoc question | Hallucination risk: LLM generates raw SQL |
 | **API Integration** (Step 5) | Connects to external services | Only for write operations and external APIs |
 
@@ -41,7 +41,7 @@ User: "Top 5 customers by revenue"
 
 The agent never writes SQL. It picks from a defined set of measures and dimensions: more flexible than Prebaked SQL, more reliable than Custom SQL.
 
-::alert[**Key insight:** The semantic layer defines the "vocabulary" the agent can use. If a measure or dimension doesn't exist in the Cube model, the agent can't query it. This is a controlled flexibility: you expand what the agent can do by adding to the data model, not by hoping the LLM generates correct SQL.]{type="info"}
+::alert[**The data model is the agent's vocabulary.** If a measure or dimension doesn't exist in the Cube model, the agent can't query it. You expand what the agent can query by adding measures and dimensions to the data model.]{type="info"}
 
 ## Architecture
 
@@ -65,7 +65,7 @@ The Lambda handles multi-tenancy the same way as the other toolsets: it extracts
 
 Cube Core was deployed as part of the CloudFormation stack: it's running as a Docker container on an EC2 instance in a **private subnet** of your VPC (no public IP). Cube ships with a browser-based **Playground UI** that lets you explore data models, build queries visually, and test them: all without writing code.
 
-::alert[**The Cube EC2 is private and not reachable from the internet**: by design. Its security group accepts traffic on port 4000 from only two places: the semantic-layer **Lambda** (the agent's tool path) and the **Code Editor** (your workspace). You reach the Playground *through* the Code Editor, which forwards the port to your browser. This is the secure pattern: the database-facing Cube instance is never exposed publicly.]{type="info"}
+::alert[**The Cube EC2 is private and not reachable from the internet.** Its security group accepts traffic on port 4000 from only two places: the semantic-layer **Lambda** (the agent's tool path) and the **Code Editor** (your workspace). You reach the Playground *through* the Code Editor, which forwards the port to your browser. Cube, which connects to the database, has no public endpoint.]{type="info"}
 
 **1a. Open the Playground via the Code Editor's Ports panel:**
 
@@ -105,13 +105,13 @@ The baseline models are intentionally minimal: raw column dimensions, a primary 
 
 Now open the same files under :code[dataset/cube_models/final_model/]{showCopyAction=true}. Compare `bookings.yml` side by side with the initial version.
 
-You'll immediately see the difference. The final models add:
+The final models add:
 - **Joins**: Relationships between cubes (e.g., bookings → customers, bookings → unicorns) that let the agent combine data across tables in a single query
 - **Derived dimensions**: Computed values like `status` (derived from `is_completed` and `cancellation_reason`), `duration_hours`, and `start_day_name` that encode business logic the agent would otherwise have to guess
 - **Richer measures**: `total_revenue`, `avg_booking_value`, `cancellation_rate`, `unique_customers`: aggregations that match how the business actually thinks about the data
 - **Segments**: Named filters like `completed_bookings` and `late_returns` that the agent can apply by name instead of constructing filter logic
 
-The key insight: every enrichment you add to the model expands what the agent can do reliably: without changing any application code. The semantic layer is the control surface.
+Each enrichment expands what the agent can do without changing any application code.
 
 **2c. Deploy the baseline models:**
 
@@ -135,7 +135,7 @@ Deploying Cube models: initial
 ============================================================
 ```
 
-::alert[**Why start with a baseline?** Starting with minimal models lets you see what the agent can and cannot do with just raw columns. As you enrich the models in the next steps, you'll see the agent's capabilities expand: without changing any application code. The semantic layer is the control surface.]{type="info"}
+::alert[**Why start with a baseline?** Starting with minimal models lets you see what the agent can and cannot do with just raw columns. As you enrich the models in the next steps, you'll see the agent's capabilities expand without changing any application code.]{type="info"}
 
 ### Step 3: Verify the Data Models in the Playground UI
 
@@ -191,7 +191,7 @@ Deploying Cube models: final
 
 Cube reloads automatically. Refresh the Playground to see the new dimensions, measures, and segments. You'll notice derived dimensions like `bookings.status`, subquery dimensions like `customers.lifetime_revenue`, and segments like `completed_bookings` and `vip_customers`.
 
-::alert[**Key takeaway:** Each layer you add to the Cube model expands what the agent can do reliably: without changing the Lambda, the agent code, or the SOP. The semantic layer is the single place where you encode business logic, and the agent automatically benefits from every enrichment.]{type="success"}
+::alert[**Key takeaway:** Each layer you add to the Cube model expands what the agent can do reliably, without changing the Lambda, the agent code, or the SOP. The semantic layer is the single place where you encode business logic, and the agent automatically benefits from every enrichment.]{type="success"}
 
 ### Step 5: Review the Lambda Function
 
@@ -212,7 +212,7 @@ Key design decisions:
 
 3. **Same JWT extraction pattern**: Uses `context.client_context.custom['bedrockAgentCorePropagatedHeaders']` to read the JWT, identical to the Prebaked SQL and Custom SQL Lambdas.
 
-::alert[**Compare with Prebaked SQL:** In Step 3, the Lambda maps each tool to a database View: the LLM picks a tool. Here, the Lambda proxies Cube's API: the LLM constructs a JSON query from discovered dimensions and measures. The tenant-isolation *boundary*, however, differs: Prebaked/Custom SQL rely on PostgreSQL Row-Level Security, while the semantic layer enforces isolation in **this Lambda** by injecting the `account_id` filter (Cube connects to Aurora as the table owner and bypasses RLS). Step 9 covers this in detail. The flexibility is much higher than Prebaked SQL.]{type="info"}
+::alert[**Compare with Prebaked SQL:** In workshop Step 4, the Lambda maps each tool to a database View: the LLM picks a tool. Here, the Lambda proxies Cube's API: the LLM constructs a JSON query from discovered dimensions and measures. The tenant-isolation *boundary*, however, differs: Prebaked/Custom SQL rely on PostgreSQL Row-Level Security, while the semantic layer enforces isolation in **this Lambda** by injecting the `account_id` filter (Cube connects to Aurora as the table owner and bypasses RLS). Step 9 covers this in detail. The flexibility is much higher than Prebaked SQL.]{type="info"}
 
 ### Step 6: Deploy the Semantic Layer Toolset
 
@@ -269,7 +269,7 @@ cd /workshop/agentic-analytics/app/agentcore_strands
 python3 infra/deploy_semantic_layer_stack.py
 ```
 
-The script performs four steps:
+The script performs four deployment steps, then saves its configuration:
 
 1. **Creates a separate AgentCore Gateway** with the same Cognito authorizer configuration but a distinct Gateway name
 2. **Registers the SemanticLayer target** (`cube_meta_tool` + `cube_query_tool`) on the new Gateway
@@ -304,7 +304,7 @@ Config saved to: semantic_config.env
 
 ### Step 8: Test Semantic Layer Queries
 
-Try these queries in the semantic layer UI (Tab 2): prefix with "Using the semantic layer" to guide the agent toward the SemanticLayer tools. These queries leverage the full production models you deployed in Step 4.
+Try these queries in the semantic layer UI (Tab 2): prefix with "Using the semantic layer" to guide the agent toward the SemanticLayer tools. These queries use the full production models you deployed in Step 4.
 
 For each query, the agent follows the same pattern: call `cube_meta_tool` first to discover available measures and dimensions, construct a Cube JSON query, then call `cube_query_tool` to execute it.
 
@@ -415,7 +415,7 @@ The two users belong to different accounts, so the `_inject_account_id_filter` f
 
 This confirms that tenant isolation works at the Cube query level: the same security *goal* as the Prebaked SQL and Custom SQL toolsets, but enforced by a **different mechanism**.
 
-::alert[**Important: tenant isolation here is enforced differently than in Step 7.** The Prebaked SQL and Custom SQL toolsets connect to Aurora as a **non-owner role** (`app_user`) and rely on **PostgreSQL Row-Level Security** to filter rows at the database engine. The semantic layer does **not** use RLS: Cube Core connects to Aurora as the table **owner** (the `postgres` user you entered in Step 1c), and table owners **bypass RLS**. Instead, tenant isolation is enforced **one layer up, in the Lambda**: `_inject_account_id_filter` adds an `account_id` filter (read from the JWT) to every Cube query, for every referenced cube, before it reaches Cube. So the isolation boundary for the semantic layer is the **Lambda + the propagated JWT**, not the database. This is why the Gateway must propagate the `Authorization` header to the Lambda (via the Gateway interceptor `deploy_semantic_layer_stack.py` configures): without the JWT, the Lambda can't determine the tenant and the filter can't be applied. When you adapt this pattern, treat the Lambda's filter injection as the security-critical control and review it accordingly.]{type="warning"}
+::alert[**Important: tenant isolation here is enforced differently than in workshop Step 7.** The Prebaked SQL and Custom SQL toolsets connect to Aurora as a **non-owner role** (`app_user`) and rely on **PostgreSQL Row-Level Security** to filter rows at the database engine. The semantic layer does **not** use RLS: Cube Core connects to Aurora as the table **owner** (the `postgres` owner credentials Cube was started with, see Step 1b), and table owners **bypass RLS**. Instead, tenant isolation is enforced **one layer up, in the Lambda**: `_inject_account_id_filter` adds an `account_id` filter (read from the JWT) to every Cube query, for every referenced cube, before it reaches Cube. So the isolation boundary for the semantic layer is the **Lambda + the propagated JWT**, not the database. This is why the Gateway must propagate the `Authorization` header to the Lambda (via the Gateway interceptor `deploy_semantic_layer_stack.py` configures): without the JWT, the Lambda can't determine the tenant and the filter can't be applied. When you adapt this pattern, treat the Lambda's filter injection as the security-critical control and review it accordingly.]{type="warning"}
 
 ## Comparing the Three Data Access Patterns
 
@@ -427,20 +427,20 @@ Now that you've built all three, here's when to use each:
 | **Semantic Layer** | Ad-hoc analytics within a defined vocabulary | Cube JSON query | Low: constrained to defined measures/dimensions |
 | **Custom SQL** | Truly novel questions outside any model | Raw SQL | Higher: mitigated by RAG + human approval |
 
-::alert[**One way to combine them:** Prebaked SQL for the questions people ask most (fast, fixed queries), the Semantic Layer for ad-hoc analytics over the measures you model, and Custom SQL for questions neither covers (most flexible, human approval required). The SOP (Step 7) can encode this preference hierarchy.]{type="success"}
+::alert[**One way to combine them:** Prebaked SQL for the questions people ask most (fast, fixed queries), the Semantic Layer for ad-hoc analytics over the measures you model, and Custom SQL for questions neither covers (most flexible, human approval required). The SOP's tool priority rules (Section 2, covered in workshop Step 6.4) can encode this preference hierarchy.]{type="success"}
 
 ## Verification
 
-✅ Cube Core returns 5 cubes from `/v1/meta` on the EC2 instance
-✅ A direct Cube query returns booking data from Aurora
-✅ `deploy_cube_models.py --model-set initial` deploys baseline models via S3 + SSM
-✅ `deploy_cube_models.py --model-set final` deploys full production models via S3 + SSM
-✅ `deploy_semantic_layer_toolset.py` deploys the Lambda with 2 tools (cube_meta_tool, cube_query_tool)
-✅ `deploy_semantic_layer_stack.py` deploys the parallel Gateway, Runtime, and Amplify UI
-✅ The semantic layer UI (`agentic-analytics-semantic-ui`) is accessible and functional
-✅ The agent calls `cube_meta_tool` first, then constructs a JSON query for `cube_query_tool`
-✅ "Top customers by revenue" returns correct results
-✅ Different tenants see different data (if RLS is configured)
+- Cube Core returns 5 cubes from `/v1/meta` on the EC2 instance
+- A direct Cube query returns booking data from Aurora
+- `deploy_cube_models.py --model-set initial` deploys baseline models via S3 + SSM
+- `deploy_cube_models.py --model-set final` deploys full production models via S3 + SSM
+- `deploy_semantic_layer_toolset.py` deploys the Lambda with 2 tools (cube_meta_tool, cube_query_tool)
+- `deploy_semantic_layer_stack.py` deploys the parallel Gateway, Runtime, and Amplify UI
+- The semantic layer UI (`agentic-analytics-semantic-ui`) is accessible and functional
+- The agent calls `cube_meta_tool` first, then constructs a JSON query for `cube_query_tool`
+- "Top customers by revenue" returns correct results
+- Different tenants see different data (the Lambda injects each user's `account_id` filter)
 
 ## Troubleshooting
 
@@ -471,7 +471,7 @@ Now that you've built all three, here's when to use each:
 
 ## Summary
 
-You deployed a semantic layer using Cube Core: the fourth data access pattern in the workshop. The agent discovers available measures and dimensions via `/meta`, constructs structured JSON queries, and Cube translates them to SQL. Multi-tenancy is enforced at the Lambda layer, consistent with all other toolsets. A parallel stack lets you compare the semantic layer agent side-by-side with the prebaked SQL agent. This gives you controlled flexibility: more ad-hoc than Prebaked SQL, more reliable than Custom SQL.
+You deployed a semantic layer using Cube Core: the fourth data access pattern in the workshop. The agent discovers available measures and dimensions via `/meta`, constructs structured JSON queries, and Cube translates them to SQL. Multi-tenancy is enforced at the Lambda layer, unlike the other toolsets, which rely on PostgreSQL RLS. A parallel stack lets you compare the semantic layer agent side-by-side with the prebaked SQL agent. This gives you controlled flexibility: more ad-hoc than Prebaked SQL, more reliable than Custom SQL.
 
 Congratulations: you've completed all the steps! → [Summary & Next Steps](../summary/)
 

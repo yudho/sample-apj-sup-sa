@@ -101,11 +101,11 @@ In practice:
 3. **Low Helpfulness** → adjust response formatting constraints in the SOP → redeploy
 4. Re-evaluate to confirm improvement
 
-::alert[**For your SaaS:** Set up online evaluation from day one. Track scores weekly. When you onboard a new tenant with different data patterns, evaluation will catch quality regressions before your tenants do.]{type="success"}
+::alert[**For your SaaS:** Set up online evaluation from day one. Track scores weekly. When you onboard a new tenant with different data patterns, evaluation can flag quality regressions before tenants report them.]{type="success"}
 
 ## Summary
 
-You set up both on-demand and continuous evaluation for your agent. Combined with observability from Step 9, you now have the complete production feedback loop: observe what happens, measure how well it went, and know exactly what to improve.
+You set up both on-demand and continuous evaluation for your agent. With observability from Step 9, you can trace a conversation, score it, and use low scores to find the SOP rule, tool, or view to fix.
 
 Next → [Step 11: Schema changes](../11-schema-changes/)
 

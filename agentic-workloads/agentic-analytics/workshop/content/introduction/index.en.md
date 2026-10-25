@@ -32,7 +32,7 @@ An AI-powered analytics assistant that understands natural language and translat
 > | 2 | Cttharion Dlstormrider | $38,200 |
 > | ... | ... | ... |
 
-But self-service analytics for a multi-tenant SaaS platform isn't just about answering questions. You also need:
+Self-service analytics on a multi-tenant SaaS platform also needs:
 
 - **Role-based access**: analysts can read data; only staff or admins can create bookings
 - **Tenant isolation**: Mythical Unicorns can't see Mythic Unicorns' data
@@ -75,12 +75,12 @@ This method can complement the above existing API integration by adding more dat
 For questions that don't map to any prebaked tool, such as "average booking duration by unicorn breed", the agent generates SQL dynamically. This uses text-to-SQL technique that takes in schema and context to convert natural language query into SQL statement. This is powerful but risky, so we add multiple hallucination mitigation layers:
 
 1. **Full schema from :link[AWS Glue Data Catalog]{href="https://docs.aws.amazon.com/glue/latest/dg/catalog-and-crawler.html"}**: the agent knows every table and column
-2. **Business context from :link[Bedrock Knowledge Base]{href="https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html"} (RAG)**: not just schema, but *what the data means*. Our `business-context.md` includes column descriptions ("a full-day booking = 8 hours"), business rules, and sample SQL for complex joins. RAG retrieves the most relevant chunks for each question.
+2. **Business context from :link[Bedrock Knowledge Base]{href="https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base.html"} (RAG)**: *what the data means*, beyond the schema. Our `business-context.md` includes column descriptions ("a full-day booking = 8 hours"), business rules, and sample SQL for complex joins. RAG retrieves the most relevant chunks for each question.
 3. **Human approval**: the agent shows a business-level query plan before executing. The user reviews and approves, edits, or cancels.
 4. **SOP driven flow** - the agent is instructed with clear SOP (standard operating procedure) to handle less-ideal flows, such as when the request comes with imcomplete data. The agent can ask user back for the missing information instead of making up the information (hallucination).
 5. **SELECT only**: dangerous patterns (DROP, DELETE, UPDATE) are blocked at the Lambda level
 
-The combination of schema + business context + sample SQL significantly reduces hallucination compared to schema-only approaches, because the LLM has context to help interpret field names and link back to the business context in addition to the examples of correct joins to follow.
+Schema plus business context plus sample SQL reduces hallucination compared with schema alone, because the LLM has context to help interpret field names and link back to the business context in addition to the examples of correct joins to follow.
 
 ::alert[**Context Window Limitation:** LLMs have context window limitation, which may not allow the full database schema to be loaded into a single LLM call. As a solution, you can pick LLM with larger context window to fit the full schema into a single LLM call, reducing risk of LLM generating wrong SQL statement due to full context it has. Alternatively, you may consider RAG approach for the schema. However, multiple supporting components are needed for the latter to reduce the risk of wrong SQL generation due to limited context, for example by having business/semantic context and SQL samples. Yet another alternative is to not let LLM generate SQL at all, and delegate that to the semantic layer (see below). ]{type="warning"}
 
@@ -149,7 +149,7 @@ Optional labs (after the core path):
   • Voice — talk to your data
 ```
 
-Ready? Let's set up your environment → [Step 0: Getting Started](../01-agent-and-infrastructure/00-getting-started/)
+Next, set up your environment → [Step 0: Getting Started](../01-agent-and-infrastructure/00-getting-started/)
 
 ::alert[**Your role in this workshop:** You're the Timely-Unicorn SaaS platform engineering team. In Steps 0-3, you build the core agent infrastructure. In Steps 4-6, you add toolsets and behavior. From Step 7 onward, you harden for production with security, observability, and evaluation.]{type="info"}
 

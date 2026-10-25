@@ -41,7 +41,7 @@ This document contains:
 - **Business rules**: "revenue = SUM(total_cost)", "active unicorns = status != 'retired'"
 - **Sample SQL**: correct JOIN patterns for complex multi-table queries
 
-::alert[**Why this matters:** Schema alone tells the LLM that `bookings.start_datetime` exists, but not that "booking duration" means `end_datetime - start_datetime` in hours. The business context fills this gap. The sample SQL is especially important: it gives the LLM correct join patterns to follow, significantly reducing hallucination on complex queries.]{type="info"}
+::alert[**Schema alone is not enough.** Schema tells the LLM that `bookings.start_datetime` exists, but not that "booking duration" means `end_datetime - start_datetime` in hours. The business context supplies that, and the sample SQL gives the LLM correct join patterns for complex queries.]{type="info"}
 
 ### Step 6.2: Explore the Knowledge Base in the Console
 
@@ -185,7 +185,7 @@ The `execute_sql_tool` enforces:
 
 ## Summary
 
-You deployed the Custom SQL toolset, the third integration pattern. The agent combines schema from Glue (whole, or an index when it is large) with business context from RAG to generate SQL, then asks for human approval before executing. The business-context.md document is the key to reducing hallucination: it provides the "why" behind the schema that the LLM needs to generate correct queries.
+You deployed the Custom SQL toolset, the third integration pattern. The agent combines schema from Glue (whole, or an index when it is large) with business context from RAG to generate SQL, then asks for human approval before executing. The `business-context.md` document reduces hallucination by telling the LLM what columns mean and how tables join.
 
 Next, you'll give the agent public web context → [Step 6b: Web Search](../06b-web-search/)
 

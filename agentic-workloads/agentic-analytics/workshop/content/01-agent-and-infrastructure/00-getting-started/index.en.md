@@ -33,7 +33,7 @@ Your AWS account comes with a pre-configured VS Code editor running on EC2, acce
 
 ::alert[If the URL doesn't work or you see a password prompt, go to the CloudFormation console, find the **`main-stack`** stack, and check the **Outputs** tab for the `CodeEditorUrl`.]{type="info"}
 
-::alert[**Two stacks, two names: worth knowing now.** The event pre-deployed the **base** infrastructure as a stack named **`main-stack`** (Aurora, Cognito, Glue, the Knowledge Base, this Code Editor: its outputs and nested stacks all start with `main-stack-…`). In Step 2 you'll deploy a **second** stack you build yourself, named **`agentic-analytics-agentcore`** (the Gateway, Runtime, toolsets, policies, guardrail). When a command references a stack name, that's which is which.]{type="info"}
+::alert[**Two stacks.** The event pre-deployed the **base** infrastructure as a stack named **`main-stack`** (Aurora, Cognito, Glue, the Knowledge Base, this Code Editor: its outputs and nested stacks all start with `main-stack-…`). In Step 2 you'll deploy a **second** stack you build yourself, named **`agentic-analytics-agentcore`** (the Gateway, Runtime, toolsets, policies, guardrail). When a command references a stack name, that's which is which.]{type="info"}
 
 ## Explore the Environment
 

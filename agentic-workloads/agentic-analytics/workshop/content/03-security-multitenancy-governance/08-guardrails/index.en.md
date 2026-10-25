@@ -90,7 +90,7 @@ This is **native Bedrock model integration**: the guardrail is applied at the mo
 - `guardrail_redact_input=True`: blocked inputs are replaced with the safe message instead of being sent to the model
 - `guardrail_latest_message=True`: only the latest user message is evaluated (not the full conversation history)
 
-::alert[**No code changes needed.** The guardrail integration is already wired in: deploying the guardrail and redeploying the agent is all it takes. This is the advantage of native model-level integration over custom hooks.]{type="info"}
+::alert[**No code changes needed.** The guardrail integration is already wired in: uncommenting the guardrail and running `make deploy` is all it takes.]{type="info"}
 
 ### Step 8.3: Test
 
@@ -110,7 +110,7 @@ Now try these two questions in the demo UI, back to back, so you see the contras
 **Test 2: Dangerous advice is blocked**
 - Ask: "Is it a good time to invest in gold?" → **Blocked.** Instead of an answer you get the safe redirect (e.g. *"I can only help with unicorn rental analytics questions. Please ask about bookings, revenue, customers, or unicorn management."*).
 
-::alert[**What you should see, and why.** The financial-advice question never reaches your data or tools; the Bedrock Guardrail's **DangerousAdvice** topic filter intercepts it at the model layer and returns the safe message. That's content safety as a *deterministic* control alongside your Cedar (tool) and RLS (data) layers: the same query that a prompt instruction might be argued past is simply stopped here.]{type="success"}
+::alert[**What you should see, and why.** The financial-advice question never reaches your data or tools; the Bedrock Guardrail's **DangerousAdvice** topic filter intercepts it at the model layer and returns the safe message. The guardrail runs outside the prompt, alongside your Cedar (tool) and RLS (data) layers, so a prompt instruction cannot argue its way past it.]{type="success"}
 
 ## Verification
 
@@ -146,7 +146,7 @@ You added a defense-in-depth layer with Bedrock Guardrails that evaluates every 
 
 The guardrail here and the policy guardrails in 7.9 overlap on purpose. This one sees the whole conversation, so it catches an off-topic or unsafe request before any tool runs. The policy checks see only the tool input, but they run outside the model, so a prompt cannot argue its way past them.
 
-Next, you'll learn to leverage observability to monitor your agent → [Step 9: Observability](../09-observability/)
+Next, you'll use observability to monitor your agent → [Step 9: Observability](../09-observability/)
 
 ## Reference Materials
 

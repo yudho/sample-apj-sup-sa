@@ -5,7 +5,7 @@ weight: 80
 
 ## What You Built
 
-Congratulations! You've built a self-service analytics system for Timely-Unicorn and learned what it takes to get an agentic system into production. Your tenants can now ask questions in plain English and get instant, accurate, secure answers: no SQL required.
+Congratulations! You've built a self-service analytics system for Timely-Unicorn and learned what it takes to get an agentic system into production. Tenants can now ask data questions in plain English without writing SQL, and every answer passes through the access and isolation controls you built.
 
 | Step | What You Built | Business Value |
 |------|---------------|---------------|
@@ -42,11 +42,11 @@ Congratulations! You've built a self-service analytics system for Timely-Unicorn
 1. **Start simple, add capabilities progressively**: local agent → Gateway → Runtime → features, one uncommented CloudFormation section at a time
 2. **The whole agent layer is infrastructure-as-code**: Gateway, Runtime, Memory, toolsets, Cedar policies, and guardrail all live in one CloudFormation template you reviewed, versioned, and redeployed with `make deploy` (no imperative SDK scripts, no `agentcore` CLI for the runtime lifecycle)
 3. **Model-driven approach**: define tools and prompts, let the LLM orchestrate (don't write routing logic)
-4. **SOPs make agents reliable**: structured behavior beats ad-hoc prompt engineering
+4. **SOPs make agent behavior consistent**: RFC 2119 constraints in one reviewed file replace scattered prompt instructions
 5. **Deterministic security at the infrastructure level**: JWT claim propagation, Cedar policies, and RLS to implement security with role-based access control and multi-tenant isolation
 6. **Defense in depth**: multiple security controls to protect against diverse attack vectors
 7. **Human-in-the-loop for risky operations**: query plan review and approval before execution, in natural language
-8. **Observability is not optional**: you can't improve what you can't measure
+8. **Instrument from the start**: traces and evaluation scores show which tool, SOP rule, or view to fix
 
 ## Applying This to Your SaaS
 
@@ -67,7 +67,7 @@ The :link[SaaS Lens]{href="https://docs.aws.amazon.com/wellarchitected/latest/sa
 
 ## Explore More
 
-::alert[**Take the code with you.** The complete source for everything you built: agent, Lambda toolsets, CloudFormation, UI, and this workshop content: is available at :link[aws-samples/sample-apj-sup-sa]{href="https://github.com/aws-samples/sample-apj-sup-sa/tree/main/agentic-workloads/agentic-analytics" external=true} (the `agentic-workloads/agentic-analytics` directory). Clone it to keep after your event account expires, and adapt the patterns to your own SaaS.]{type="success"}
+::alert[**Take the code with you.** The complete source for everything you built (agent, Lambda toolsets, CloudFormation, UI, and this workshop content) is available at :link[aws-samples/sample-apj-sup-sa]{href="https://github.com/aws-samples/sample-apj-sup-sa/tree/main/agentic-workloads/agentic-analytics" external=true} (the `agentic-workloads/agentic-analytics` directory). Clone it to keep after your event account expires, and adapt the patterns to your own SaaS.]{type="success"}
 
 ### Extend This Workshop
 - Improve agent SOP to handle more scenarios
@@ -91,7 +91,7 @@ The :link[SaaS Lens]{href="https://docs.aws.amazon.com/wellarchitected/latest/sa
 
 ## Clean Up
 
-If running in Workshop Studio, all resources: including the AWS account itself: are automatically cleaned up when the event ends. No action needed.
+If running in Workshop Studio, all resources, including the AWS account itself, are automatically cleaned up when the event ends. No action needed.
 
 For manual cleanup (own account), delete the two CloudFormation stacks in this order:
 
@@ -112,4 +112,4 @@ aws cloudformation delete-stack --stack-name main-stack --region us-east-1
 
 ---
 
-Thank you for completing this workshop! We hope Mythical Unicorns and Mythic Unicorns are happy with their new analytics assistant: and you're ready to onboard more tenants.
+Thank you for completing this workshop!

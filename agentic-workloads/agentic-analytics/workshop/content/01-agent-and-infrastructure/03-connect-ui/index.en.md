@@ -12,7 +12,7 @@ By the end of this step, you will:
 
 ## Why a UI?
 
-The CLI is great for testing, but your tenants' staff aren't going to open a terminal. They need a chat interface: something as simple as messaging a colleague.
+Your tenants' staff need a chat interface, not a terminal.
 
 The React UI provides:
 
@@ -20,7 +20,7 @@ The React UI provides:
 |---------|---------------|
 | **Conversational chat** | Natural interaction for non-technical users |
 | **Streaming responses** | Users see answers appearing word by word |
-| **Cognito login** | User identity for access control (Steps 8-9) |
+| **Cognito login** | User identity for access control (Step 7) |
 | **Query plan approval cards** | Human-in-the-loop workflows (Step 6) |
 
 ## Lab Procedures
