@@ -59,14 +59,14 @@ sql() { aws rds-data execute-statement --resource-arn "$CLUSTER_ARN" --secret-ar
           --database timely_unicorn --sql "$1" --query numberOfRecordsUpdated --output text; }
 ```
 
-Add a column with a comment:
+Add a column with a comment. Each command prints `0`, because DDL changes no rows:
 
 ```bash
 sql "ALTER TABLE bookings ADD COLUMN promo_code varchar(20)"
 sql "COMMENT ON COLUMN bookings.promo_code IS 'Marketing promo code applied at checkout, NULL when none'"
 ```
 
-Now let the normal trigger run the pipeline. In the **AWS Glue** console, open **Crawlers**, select the workshop crawler and choose **Run crawler**. When the crawler finishes, a new run of the state machine starts on its own. Open it in the Step Functions console: the graph goes Snapshot, Classify, Describe, then straight to Publish, because a new column is additive.
+Now let the normal trigger run the pipeline. In the **AWS Glue** console, open **Crawlers**, select `agentic-analytics-aurora-crawler` and choose **Run**. The crawler takes about three minutes. When it finishes, a new run of the state machine starts on its own. Open it in the Step Functions console: the graph goes Snapshot, Classify, Describe, past the **NeedsApproval** check and straight to Publish, because a new column is additive. The Classify output lists the change as `column_added`.
 
 ### Step 11.3: Make a breaking change and approve it
 
