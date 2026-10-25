@@ -127,9 +127,10 @@ Watch the agent chain multiple tools autonomously:
 1. **`current_datetime`**: resolves "tomorrow" to an actual date (local tool, instant)
 2. **`get_top_revenue_customers_tool`**: finds the top customer (Gateway → Lambda → Aurora)
 3. **`search_unicorns_tool`**: finds Vega Sapphire's unicorn ID
-4. **`create_booking_tool`**: validates availability, calculates cost, creates booking (Gateway → separate Lambda → Aurora)
+4. **`get_unicorn_availability_tool`**: checks that the unicorn is free in that slot (the SOP asks for this before any booking)
+5. **`create_booking_tool`**: re-checks availability, calculates cost, creates the booking (Gateway → separate Lambda → Aurora)
 
-The agent orchestrated 4 tool calls across 2 different Lambda functions, resolved relative dates, and created a booking: all from a single natural language request.
+The agent orchestrated five tool calls across two Lambda functions, resolved a relative date, and created a booking from one natural-language request. The exact order can vary from run to run; the availability check before the booking is the part that matters, and in Step 7b you'll make it a hard rule in Cedar.
 
 ## The Concern
 
