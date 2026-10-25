@@ -1886,7 +1886,7 @@ Resources:
   # the PNG to s3://${ArtifactsBucket}/charts/ and print only the S3 key. A CUSTOM
   # interpreter is required because the default aws.codeinterpreter.v1 has NO
   # execution role and therefore cannot reach S3. The agent then presigns the key
-  # for the UI (its runtime role already has s3:GetObject on the bucket).
+  # for the UI (its runtime role has s3:GetObject on charts/* and sops/*).
   #============================================================================
   ChartCodeInterpreterRole:
     Type: AWS::IAM::Role
@@ -2108,7 +2108,7 @@ Resources:
         SOP_S3_BUCKET: !Ref ArtifactsBucket
         # Charts: the agent renders matplotlib PNGs in the custom Code Interpreter
         # below (which can write to S3), then presigns the key for the UI. The agent
-        # role already has s3:GetObject on the bucket, so it can presign.
+        # role has s3:GetObject on charts/*, so it can presign them.
         ENABLE_CHART_TOOL: 'true'
         CHART_CI_ID: !GetAtt ChartCodeInterpreter.CodeInterpreterId
         CHART_BUCKET: !Ref ArtifactsBucket

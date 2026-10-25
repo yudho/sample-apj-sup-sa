@@ -86,7 +86,7 @@ _CHART_KEY_RE = re.compile(r"charts/[A-Za-z0-9_-]{1,64}\.png")
 
 
 def _presign_chart_key(s3key: str) -> str | None:
-    """Presign an S3 chart key into a short-lived GET URL (agent role has s3:GetObject)."""
+    """Presign a charts/<name>.png key into a short-lived GET URL (the role can read charts/*)."""
     bucket = os.getenv("CHART_BUCKET") or os.getenv("SOP_S3_BUCKET")
     if not bucket or not s3key:
         return None
