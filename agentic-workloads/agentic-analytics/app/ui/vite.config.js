@@ -29,7 +29,10 @@ export default defineConfig(({ command, mode }) => {
     plugins: [react(), serveBaseWithoutSlash],
     define: { 'process.env': JSON.stringify(processEnv) },
     envPrefix: 'REACT_APP_',
-    server: { host: '127.0.0.1', port: 3001, strictPort: true, allowedHosts: true },
+    // HMR is off by default: behind the Code Editor proxy its websocket drops after about an
+    // hour, and the Vite client then reloads the page, which wipes the chat. UI_HMR=1 turns it on.
+    server: { host: '127.0.0.1', port: 3001, strictPort: true, allowedHosts: true,
+              hmr: process.env.UI_HMR === '1' },
     preview: { host: '127.0.0.1', port: 3001, strictPort: true },
     build: { outDir: 'build', sourcemap: false },
   };
