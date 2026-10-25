@@ -437,35 +437,61 @@ Resources:
                 Action: iam:CreateServiceLinkedRole
                 Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/*
 
-              # EC2 - VPC endpoints, security groups, network interfaces for the
-              # stacks participants deploy, in this Region only.
+              # EC2 - the only network resources participants create are the voice
+              # stack's two subnets and one security group (Step 5). Reads stay on
+              # '*'; writes are limited to this account and Region, and changes to an
+              # existing subnet or security group only to ones the voice stack owns,
+              # so the base VPC, Aurora and endpoint security groups are out of reach.
               - Effect: Allow
                 Action:
                   - ec2:Describe*
                   - ec2:Get*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ec2:CreateSubnet
+                  - ec2:CreateSecurityGroup
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+              - Effect: Allow
+                Action: ec2:CreateTags
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+                Condition:
+                  StringEquals:
+                    ec2:CreateAction:
+                      - CreateSubnet
+                      - CreateSecurityGroup
+              - Effect: Allow
+                Action:
                   - ec2:CreateTags
                   - ec2:DeleteTags
-                  - ec2:CreateVpc
-                  - ec2:DeleteVpc
-                  - ec2:ModifyVpcAttribute
-                  - ec2:CreateSubnet
                   - ec2:DeleteSubnet
                   - ec2:ModifySubnetAttribute
                   - ec2:AssociateRouteTable
                   - ec2:DisassociateRouteTable
-                  - ec2:CreateSecurityGroup
                   - ec2:DeleteSecurityGroup
                   - ec2:AuthorizeSecurityGroupIngress
                   - ec2:AuthorizeSecurityGroupEgress
                   - ec2:RevokeSecurityGroupIngress
                   - ec2:RevokeSecurityGroupEgress
-                  - ec2:CreateVpcEndpoint
-                  - ec2:DeleteVpcEndpoints
-                  - ec2:ModifyVpcEndpoint
-                Resource: '*'
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
                 Condition:
-                  StringEquals:
-                    aws:RequestedRegion: !Ref AWS::Region
+                  StringLike:
+                    ec2:ResourceTag/aws:cloudformation:stack-name: agentic-analytics-voice*
+              # The voice subnets join the base private route table; that table
+              # carries the base stack's tags, so the association is allowed on it
+              # here and the subnet side is checked by the statement above.
+              - Effect: Allow
+                Action:
+                  - ec2:AssociateRouteTable
+                  - ec2:DisassociateRouteTable
+                Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*
 
               # AgentCore: resources in this account and Region; List calls take no ARN.
               - Effect: Allow
@@ -654,18 +680,6 @@ Resources:
                   - arn:aws:s3:::bedrock-agentcore-*
                   - arn:aws:s3:::bedrock-agentcore-*/*
 
-              # EC2 - For VPC config lookups + resolving the Cube private IP by tag
-              # (cube-resolve.sh points the cube-tunnel socat forwarder at Cube)
-              - Effect: Allow
-                Action:
-                  - ec2:DescribeVpcs
-                  - ec2:DescribeSubnets
-                  - ec2:DescribeSecurityGroups
-                  - ec2:CreateNetworkInterface
-                  - ec2:DeleteNetworkInterface
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DescribeInstances
-                Resource: '*'
 
   CodeEditorInstanceProfile:
     Type: AWS::IAM::InstanceProfile
