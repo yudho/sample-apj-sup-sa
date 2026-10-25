@@ -24,6 +24,11 @@ Resources:
     DependsOn: PreTokenLambdaPermission
     Properties:
       UserPoolName: !Sub ${EnvironmentName}-user-pool
+      # Demo users are created by the stack (AdminCreateUser). Without this the hosted
+      # UI offers "Sign up", and a stranger could register and chat with the agent:
+      # RLS would show them no data, but they would still spend Bedrock tokens.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
       AutoVerifiedAttributes:
         - email
       UsernameAttributes:
