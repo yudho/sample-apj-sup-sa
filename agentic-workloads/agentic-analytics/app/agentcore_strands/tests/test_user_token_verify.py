@@ -54,6 +54,8 @@ def test_rejects_forged_signature(agent, key):
 
 
 def test_rejects_unsigned(agent):
+    # Negative test: an unsigned (alg=none) token must be rejected by verify_user_token.
+    # nosemgrep: python.jwt.security.jwt-python-none-alg
     forged = jwt.encode({"sub": "victim", "iss": ISSUER, "token_use": "access", "client_id": CLIENT,
                          "exp": int(time.time()) + 600}, key=None, algorithm="none")
     assert agent.verify_user_token(forged) is None

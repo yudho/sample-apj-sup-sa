@@ -253,12 +253,12 @@ Testing Lambda...
 
 Now you'll deploy a completely separate stack: Gateway, Runtime, and Amplify UI: dedicated to the semantic layer agent. This lets you compare the semantic layer agent side-by-side with the prebaked SQL agent in two browser tabs.
 
-The parallel stack shares the same Aurora PostgreSQL database and Cognito User Pool as the existing stack. Only the Gateway, Runtime, and UI are separate: so both agents query the same data with the same user credentials, but use different tools.
+The parallel stack shares the same Aurora PostgreSQL database and Cognito User Pool as the existing stack. Only the Gateway, Runtime, and UI are separate, so both agents query the same data with the same user credentials, but use different tools.
 
 ::alert[**Before running this script, install `uv`** (the script's runtime build step uses it; it isn't pre-installed). Install it into the workshop's Python environment, which your terminal already has active:]{type="warning"}
 
 ```bash
-pip install uv
+pip install uv==0.12.18
 uv --version
 ```
 

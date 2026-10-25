@@ -335,8 +335,11 @@ echo "Uploading JDBC driver..."
 # Download PostgreSQL JDBC driver if not present
 DRIVER_PATH="$TEMP_DIR/postgresql-42.7.3.jar"
 if [ ! -f "$DRIVER_PATH" ]; then
-    curl -sL https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -o "$DRIVER_PATH"
+    curl -sfL https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -o "$DRIVER_PATH"
 fi
+# SHA-256 of postgresql-42.7.3.jar (its SHA-1 matches Maven Central's published .sha1).
+DRIVER_SHA256=a2644cbfba1baa145ff7e8c8ef582a6eed7a7ec4ca792f7f054122bdec756268
+echo "$DRIVER_SHA256  $DRIVER_PATH" | sha256sum -c --quiet - || { echo "JDBC driver checksum mismatch" >&2; rm -f "$DRIVER_PATH"; exit 1; }
 aws s3 cp "$DRIVER_PATH" "s3://$BUCKET/$(s3_path "drivers/postgresql-42.7.3.jar")" --region $REGION > /dev/null
 
 UI_BUILD_KEY="ui/build.zip"

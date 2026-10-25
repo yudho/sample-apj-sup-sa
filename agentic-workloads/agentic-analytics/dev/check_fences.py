@@ -19,7 +19,8 @@ for i, ln in enumerate(lines, 1):
         ln = s
     out.append(ln)
 try:
-    yaml.load("\n".join(out), Loader=L); print("YAML parses with all fences uncommented")
+    yaml.load("\n".join(out), Loader=L)  # nosec B506 - L is a SafeLoader that only ignores CFN tags
+    print("YAML parses with all fences uncommented")
 except yaml.YAMLError as e:
     print("YAML ERROR:", str(e)[:300]); bad.append(("parse", 0, ""))
 print("fences:", ", ".join(f"{n}@{i}" for n, i in fences))
