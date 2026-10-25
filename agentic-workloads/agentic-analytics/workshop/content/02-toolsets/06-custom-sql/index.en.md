@@ -62,10 +62,10 @@ You'll see:
 
 ### Step 6.3: Test Semantic Search in the Console
 
-1. In the Knowledge Base console, click `agentic-analytics-kb` breadcrumbs menu on top to navigate up
-2. Click **Test knowledge base** (right panel)
-3. Select any available **Claude** model under the `Anthropic` category (a Sonnet or Opus model is ideal), and click `Apply`
-4. Try these queries:
+1. In the Knowledge Base console, click `agentic-analytics-kb` in the breadcrumbs at the top to go back to the knowledge base page
+2. Click **Test** (next to **Delete** at the top of the page). The **Test Knowledge Base** page opens with **Configurations** on the left and **Test** on the right
+3. Under **Retrieval and response generation**, select **Standard retrieval only**. This is the same `Retrieve` call the agent makes: it returns the matching chunks without asking a model to write an answer, so you can see exactly what the agent will read. (The **Agentic retrieval** options also work if you want a synthesized answer.)
+4. Type each query in the prompt box on the right and press **Enter**:
    - "How to calculate booking duration?": should return the section about `end_datetime - start_datetime`
    - "What is the relationship between bookings and unicorns?": should return JOIN patterns
    - "How is revenue calculated?": should return the revenue formula
