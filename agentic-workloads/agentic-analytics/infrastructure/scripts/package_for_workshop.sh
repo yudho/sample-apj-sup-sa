@@ -22,6 +22,9 @@ trap "rm -rf $TEMP_DIR" EXIT
 
 echo "Packaging for Workshop Studio..."
 
+# Every lab fence must still be valid YAML, at the right indent, once a participant uncomments it.
+python3 "$PROJECT_ROOT/dev/check_fences.py" "$WORKSHOP_DIR/code/app/agentcore_strands/agentcore-topup-stack.yaml"
+
 # Clean previous assets (preserve static images and contentspec)
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR/templates" "$ASSETS_DIR/lambdas" "$ASSETS_DIR/schema" "$ASSETS_DIR/data" "$ASSETS_DIR/docs" "$ASSETS_DIR/drivers" "$ASSETS_DIR/repo" "$ASSETS_DIR/lambda" "$ASSETS_DIR/sops"
