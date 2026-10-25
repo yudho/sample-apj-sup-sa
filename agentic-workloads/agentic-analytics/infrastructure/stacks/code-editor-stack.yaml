@@ -493,6 +493,29 @@ Resources:
                   - ec2:DisassociateRouteTable
                 Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*
 
+              # WAF for the Step 7c front door: the web ACL is named <env>-frontdoor and
+              # uses AWS managed rule groups, which CreateWebACL/UpdateWebACL also
+              # authorize against the managed rule set ARNs.
+              - Effect: Allow
+                Action:
+                  - wafv2:CreateWebACL
+                  - wafv2:UpdateWebACL
+                  - wafv2:DeleteWebACL
+                  - wafv2:GetWebACL
+                  - wafv2:AssociateWebACL
+                  - wafv2:DisassociateWebACL
+                  - wafv2:TagResource
+                  - wafv2:UntagResource
+                  - wafv2:ListTagsForResource
+                Resource:
+                  - !Sub arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/webacl/${EnvironmentName}-frontdoor/*
+                  - !Sub arn:aws:wafv2:${AWS::Region}:${AWS::AccountId}:regional/managedruleset/*/*
+              - Effect: Allow
+                Action:
+                  - wafv2:ListWebACLs
+                  - wafv2:GetWebACLForResource
+                Resource: '*'
+
               # AgentCore: resources in this account and Region; List calls take no ARN.
               - Effect: Allow
                 Action: bedrock-agentcore:*
