@@ -164,6 +164,9 @@ Notice: the function queries the `top_revenue_customers` **View**, not a raw tab
 
 ## Troubleshooting
 
+**`make deploy` fails with `Template format error: [/Resources/===== UNCOMMENT FROM HERE ...] resource definition is malformed`**
+- The selection included a marker line, so its `#` was removed too. Put `# ` back at the start of that `UNCOMMENT` line and run `make deploy` again. The same fix applies to every later step.
+
 **Agent still says "no tools available"**
 - Verify the PrebakedSQL target is `ACTIVE` in the Gateway console.
 
