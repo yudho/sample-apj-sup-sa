@@ -52,6 +52,11 @@ def test_allows_read_only(sql):
     ("SELECT SET_CONFIG ('app.current_account_id','x',true)", "set_config"),
     ("SELECT pg_read_file('/etc/passwd')", "pg_read_file"),
     ("SELECT pg_sleep(600)", "pg_sleep"),
+    ("SELECT U&\"set\\005fconfig\"('app.current_account_id', 'other', false)", "Unicode-escaped"),
+    ("SELECT u&\"pg_sl\\0065ep\"(600)", "Unicode-escaped"),
+    ("SELECT U&\"set!005fconfig\" UESCAPE '!' ('app.current_account_id','x',false)", "Unicode-escaped"),
+    ("SELECT U&'d\\0061ta'", "Unicode-escaped"),
+    ("SELECT \"set\\_config\"('a','b',false)", "Unicode-escaped"),
     ("SELECT 'unterminated", "Unterminated"),
     ("SELECT 1 /* open comment", "Unterminated"),
 ])

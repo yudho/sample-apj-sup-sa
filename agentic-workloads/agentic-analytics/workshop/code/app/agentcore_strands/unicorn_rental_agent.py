@@ -279,6 +279,37 @@ def _long_term_context(actor_id, query):
             "always get numbers from the tools.\n" + "\n".join(lines))
 
 # Current datetime tool for relative date handling
+
+# Cognito access-token verification for the memory actor id (signature, issuer,
+# token_use, client id, expiry). The signing keys are cached for the container's life.
+_COGNITO_POOL = os.environ.get("COGNITO_USER_POOL_ID", "")
+_COGNITO_CLIENT = os.environ.get("COGNITO_USER_LOGIN_CLIENT_ID", "")
+_COGNITO_ISSUER = (f"https://cognito-idp.{os.environ.get('AWS_REGION', 'us-east-1')}.amazonaws.com/{_COGNITO_POOL}"
+                   if _COGNITO_POOL else "")
+_jwks = None
+
+
+def verify_user_token(token):
+    """Return the claims of a valid Cognito access token for this app, else None."""
+    global _jwks
+    if not _COGNITO_ISSUER or not _COGNITO_CLIENT:
+        print("[WARN] COGNITO_USER_POOL_ID / COGNITO_USER_LOGIN_CLIENT_ID not set: cannot verify the user token")
+        return None
+    try:
+        import jwt
+        if _jwks is None:
+            _jwks = jwt.PyJWKClient(f"{_COGNITO_ISSUER}/.well-known/jwks.json")
+        key = _jwks.get_signing_key_from_jwt(token).key
+        claims = jwt.decode(token, key, algorithms=["RS256"], issuer=_COGNITO_ISSUER,
+                            options={"verify_aud": False, "require": ["exp", "iss", "sub"]})
+        if claims.get("token_use") != "access" or claims.get("client_id") != _COGNITO_CLIENT:
+            print("[WARN] User token rejected: wrong token_use or client_id")
+            return None
+        return claims
+    except Exception as e:
+        print(f"[WARN] User token verification failed: {type(e).__name__}")
+        return None
+
 @tool
 def current_datetime() -> str:
     """Get the current date and time in UTC. Use this when users request bookings with relative dates like 'tomorrow', 'next week', etc."""
@@ -345,15 +376,13 @@ async def agent_invocation(payload, context):
         access_token = gateway_token
         print(f"[OK] Using validated inbound JWT for gateway auth")
         
-        # Extract actor_id from JWT for memory isolation
-        import base64 as _b64
-        try:
-            jwt_payload = access_token.split('.')[1]
-            jwt_payload += '=' * (4 - len(jwt_payload) % 4)
-            claims = json.loads(_b64.b64decode(jwt_payload))
-            actor_id = claims.get("sub", "default")
-        except Exception:
-            actor_id = "default"
+        # actor_id scopes this user's long-term memory, which is read before any tool
+        # call. Behind the front door the token arrives in a header the gateway does not
+        # check, so verify it here and refuse the request if it is not a valid user token.
+        claims = verify_user_token(access_token)
+        if not claims or not claims.get("sub"):
+            raise ValueError("User token failed verification")
+        actor_id = claims["sub"]
         
         # Use runtime session_id for memory session isolation
         runtime_session_id = context.session_id if context and hasattr(context, 'session_id') else "default"

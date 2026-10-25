@@ -420,6 +420,11 @@ def validate_readonly_sql(sql):
     words = [w.lower() for w in _IDENT_RE.findall(body)]
     if not words or words[0] not in ('select', 'with'):
         return 'Only SELECT queries (optionally starting with WITH) are allowed'
+    # Unicode-escaped names (U&"set\005fconfig") would slip past the blocked-name check
+    # below while PostgreSQL still resolves them, so they are refused outright.
+    if re.search(r'(?i)(?<![A-Za-z0-9_$])u&', body) or 'uescape' in words \
+            or any('\\' in q for q in quoted):
+        return 'Unicode-escaped identifiers and strings are not allowed'
     names = set(words) | {q.lower() for q in quoted}
     for fn in _BLOCKED_FUNCTIONS:
         if fn in names:

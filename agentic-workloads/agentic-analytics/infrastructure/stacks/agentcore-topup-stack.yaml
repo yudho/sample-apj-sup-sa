@@ -2098,6 +2098,9 @@ Resources:
         GUARDRAIL_ID: !Ref Guardrail
         GUARDRAIL_VERSION: 'DRAFT'
         MEMORY_ID: !GetAtt AgentMemory.MemoryId
+        # The agent verifies the user token (memory is scoped to its sub).
+        COGNITO_USER_POOL_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-UserPoolId'}
+        COGNITO_USER_LOGIN_CLIENT_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-UserLoginClientId'}
         SOP_S3_BUCKET: !Ref ArtifactsBucket
         # Charts: the agent renders matplotlib PNGs in the custom Code Interpreter
         # below (which can write to S3), then presigns the key for the UI. The agent
