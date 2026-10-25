@@ -128,7 +128,7 @@ export const getCurrentUser = () => {
 export const isAdmin = () => getCurrentUser().role === 'rental_admin';
 
 // Refresh tokens using stored refresh_token
-const refreshTokens = async () => {
+export const refreshTokens = async () => {
   const refreshToken = localStorage.getItem(TOKEN_KEYS.refreshToken);
   if (!refreshToken) return false;
   try {
@@ -189,6 +189,6 @@ export const isLoginAvailable = () => !!COGNITO_CONFIG.domain && !!COGNITO_CONFI
 
 export default {
   getLoginUrl, getLogoutUrl, exchangeCodeForTokens, handleAuthCallback,
-  isAuthenticated, getCurrentUser, isAdmin, fetchAccessToken, fetchIdToken,
+  isAuthenticated, getCurrentUser, isAdmin, fetchAccessToken, fetchIdToken, refreshTokens,
   logout, clearToken, login, isLoginAvailable,
 };
