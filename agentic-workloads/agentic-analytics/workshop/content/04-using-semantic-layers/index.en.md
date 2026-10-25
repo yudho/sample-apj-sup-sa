@@ -255,11 +255,11 @@ Now you'll deploy a completely separate stack: Gateway, Runtime, and Amplify UI:
 
 The parallel stack shares the same Aurora PostgreSQL database and Cognito User Pool as the existing stack. Only the Gateway, Runtime, and UI are separate: so both agents query the same data with the same user credentials, but use different tools.
 
-::alert[**Before running this script, install `uv`** (the script's runtime build step uses it; it isn't pre-installed). Run the one-liner below, then continue. See the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) for details.]{type="warning"}
+::alert[**Before running this script, install `uv`** (the script's runtime build step uses it; it isn't pre-installed). Install it into the workshop's Python environment, which your terminal already has active:]{type="warning"}
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+pip install uv
+uv --version
 ```
 
 ::alert[**This script may need to be run twice: that's expected.** It creates a fresh IAM role for the Gateway, and AWS IAM can take a moment to propagate; the first run can fail at "Register SemanticLayer Target" with *"Gateway service is not authorized to perform AssumeRole on Gateway role"*. Simply **run the script again**: every step is idempotent, and the second run succeeds once the role has propagated.]{type="info"}
@@ -297,7 +297,7 @@ Config saved to: semantic_config.env
 
 **Open two browser tabs for side-by-side comparison:**
 
-- **Tab 1:** Open the existing Amplify UI URL (from `config.env`): this is the **prebaked SQL agent** with the original toolset
+- **Tab 1:** The UI you have used since Step 3 (`/app` on your Code Editor URL): this is the **prebaked SQL agent** with the original toolset
 - **Tab 2:** Open the new semantic layer UI URL (from `semantic_config.env`): this is the **semantic layer agent** with Cube tools
 
 ::alert[**Same credentials, different tools.** Both UIs connect to the same Aurora PostgreSQL database and Cognito User Pool, so the same login credentials work in both. The difference is which tools the agent has access to: the prebaked SQL agent uses pre-defined database Views, while the semantic layer agent constructs Cube JSON queries from discovered measures and dimensions.]{type="info"}
