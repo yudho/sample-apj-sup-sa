@@ -55,7 +55,7 @@ Step Functions `<env>-schema-sync`, started by a Glue crawler success (EventBrid
 
 ### Schema context for text-to-SQL
 
-`text_to_sql_tool` sends the whole Glue schema while it fits `SCHEMA_FULL_MAX_CHARS` (32,000); above that it sends a one-line-per-table index and the model calls again with `tables`. Benchmark and decision: 60 questions, 181 objects, full schema 85% at ~51k tokens vs index 90% at ~11.6k.
+`text_to_sql_tool` sends the whole Glue schema while it fits `SCHEMA_FULL_MAX_CHARS` (32,000); above that it sends a one-line-per-table index and the model calls again with `tables`. The threshold comes from the benchmark in `dev/evaluation/schema-context/` (method in its `README.md`, per-question raw results in `results.json`): on the schema padded to 181 objects, 60 questions scored 85% with the full schema at ~51k input tokens and 90% with the index at ~11.6k. That is one synthetic schema and one model, so rerun it on your own schema before relying on the number.
 
 ### Memory and evaluation
 

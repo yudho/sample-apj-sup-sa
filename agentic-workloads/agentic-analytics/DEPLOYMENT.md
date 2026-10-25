@@ -116,8 +116,9 @@ is set only when voice is deployed (CFN injects it into `config.js`, or
   which would fail Runtime creation with *"subnets are in unsupported availability
   zones."* The supported AZ-IDs are overridable params (`VoiceSubnet1AzId`/
   `VoiceSubnet2AzId`); change them for other regions. WebRTC
-  media relays through **Amazon Kinesis Video Streams (KVS) managed TURN** (a signaling
-  channel, ~$0.03/mo). The runtime fetches TURN creds for itself, and the browser
+  media relays through **Amazon Kinesis Video Streams (KVS) managed TURN** (one signaling
+  channel; see [KVS pricing](https://aws.amazon.com/kinesis/video-streams/pricing/) for
+  the per-channel and TURN rates in your region). The runtime fetches TURN creds for itself, and the browser
   fetches the **same** creds from the signaling proxy's `GET /api/ice` (JWT-gated) so
   it can gather relay candidates — without this the browser only has host candidates
   and ICE can't traverse NAT to the VPC-only runtime. No Daily, no ALB, no VPC Link.
@@ -135,5 +136,6 @@ is set only when voice is deployed (CFN injects it into `config.js`, or
   is expected — CloudFormation retries and completes once the ENIs clear; you cannot
   detach `ela-attach` ENIs manually.
 - **Cost:** agentcore voice is microVM-per-session (no always-on task/ALB); it
-  cold-starts ~5-10s on the first connection. pipecat-cloud scales to zero
-  (`min_agents=0`) but also cold-starts ~10s.
+  cold-starts on the first connection (about 5-10 s in our us-east-1 tests, October
+  2026). pipecat-cloud scales to zero (`min_agents=0`) and also cold-starts (about 10 s
+  in the same tests). Expect different times in other regions.
