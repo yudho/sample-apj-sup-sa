@@ -2442,14 +2442,17 @@ Resources:
     DependsOn: AgentRuntimeEndpoint
     Properties:
       OnlineEvaluationConfigName: unicorn_rental_online_eval
+      # Without this the config is created paused (executionStatus DISABLED) and scores nothing.
+      ExecutionStatus: ENABLED
       Description: Answer quality and tool use checks on sampled analytics conversations
       EvaluationExecutionRoleArn: !GetAtt EvaluationRole.Arn
       DataSourceConfig:
         CloudWatchLogs:
-          # Prefix, not LogGroupNames: CreateOnlineEvaluationConfig rejects an exact name with
-          # "execution role does not have permissions to access the specified log groups".
-          LogGroupNamePrefixes:
-            - !Sub /aws/bedrock-agentcore/runtimes/${AgentRuntime.AgentRuntimeId}
+          # An exact name, not LogGroupNamePrefixes: with a prefix the config is created but every
+          # scheduled run fails with "log group name prefixes could not be queried". The runtime
+          # creates this group with its DEFAULT endpoint, before the endpoint this resource waits on.
+          LogGroupNames:
+            - !Sub /aws/bedrock-agentcore/runtimes/${AgentRuntime.AgentRuntimeId}-DEFAULT
           ServiceNames:
             - agentic_analytics_agent.DEFAULT
       Rule:
