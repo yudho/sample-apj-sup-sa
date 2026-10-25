@@ -34,6 +34,9 @@ validate = mod.validate_readonly_sql
     "SELECT $$; set_config$$ AS s",
     "/* leading comment */ SELECT 1",
     "SELECT current_setting('app.current_account_id')",
+    "SELECT 1 AS x$q$, 2 AS y$q$",
+    "SELECT name FROM t WHERE type = 'e'",
+    "SELECT CASE WHEN a THEN 1 ELSE'x' END FROM t",
 ])
 def test_allows_read_only(sql):
     assert validate(sql) is None
@@ -57,6 +60,9 @@ def test_allows_read_only(sql):
     ("SELECT U&\"set!005fconfig\" UESCAPE '!' ('app.current_account_id','x',false)", "Unicode-escaped"),
     ("SELECT U&'d\\0061ta'", "Unicode-escaped"),
     ("SELECT \"set\\_config\"('a','b',false)", "Unicode-escaped"),
+    ("SELECT E'\\'', set_config('app.current_user_role','saas_admin',false), * FROM bookings -- '", "Escape string"),
+    ("SELECT e'x'", "Escape string"),
+    ("SELECT 1 AS x$q$, set_config('app.current_account_id','o',false) AS s, 1 AS y$q$", "set_config"),
     ("SELECT 'unterminated", "Unterminated"),
     ("SELECT 1 /* open comment", "Unterminated"),
 ])
@@ -101,6 +107,7 @@ def test_execute_sql_runs_read_only_with_timeout(monkeypatch):
         def __exit__(self, *a): return False
         def execute(self, q, params=None): seen.append(q)
         def fetchmany(self, n): return [{"n": i} for i in range(min(n, 150))]
+        def fetchone(self): return {"a": None, "r": None}
 
     class Conn:
         def cursor(self, **k): return Cur()
@@ -112,5 +119,26 @@ def test_execute_sql_runs_read_only_with_timeout(monkeypatch):
     body = json.loads(res["body"])
     assert seen[0] == "SET TRANSACTION READ ONLY"
     assert seen[1].startswith("SET LOCAL statement_timeout")
+    assert seen[2] == "SET LOCAL standard_conforming_strings = on"
     assert body["row_count"] == 100 and body["truncated"] is True
     assert seen[-2:] == ["ROLLBACK", "CLOSE"]
+
+
+def test_execute_sql_drops_rows_when_session_changed(monkeypatch):
+    class Cur:
+        description = [("n",)]
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, q, params=None): pass
+        def fetchmany(self, n): return [{"n": 1}]
+        def fetchone(self): return {"a": "other-tenant", "r": "staff"}
+
+    class Conn:
+        def cursor(self, **k): return Cur()
+        def rollback(self): pass
+        def close(self): pass
+
+    monkeypatch.setattr(mod, "get_db_connection", lambda ctx: Conn())
+    res = mod.execute_sql({"sql": "SELECT 1"}, {"account_id": "mine", "role": "staff"})
+    body = json.loads(res["body"])
+    assert res["statusCode"] == 400 and "data" not in body

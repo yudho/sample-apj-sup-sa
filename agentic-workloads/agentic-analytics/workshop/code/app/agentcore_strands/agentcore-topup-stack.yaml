@@ -2442,7 +2442,7 @@ Resources:
 #                   - arn:aws:s3:::${Bucket}/docs/schema/*
 #                   - Bucket: {'Fn::ImportValue': !Sub '${EnvironmentName}-KBDocsBucketName'}
 #               - Effect: Allow
-#                 Action: [glue:GetTable, glue:UpdateTable]
+#                 Action: [glue:GetTable, glue:UpdateTable, glue:CreateTable, glue:DeleteTable]
 #                 Resource:
 #                   - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog
 #                   - !Sub
@@ -2491,6 +2491,7 @@ Resources:
 #       Environment:
 #         Variables:
 #           ARTIFACTS_BUCKET: !Ref ArtifactsBucket
+#           SCHEMA_PREFIX: !Sub ${ArtifactsPrefix}schema/
 #           KB_DOCS_BUCKET: {'Fn::ImportValue': !Sub '${EnvironmentName}-KBDocsBucketName'}
 #           KNOWLEDGE_BASE_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-KnowledgeBaseId'}
 #           KB_DATA_SOURCE_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-KnowledgeBaseDataSourceId'}

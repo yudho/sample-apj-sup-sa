@@ -36,7 +36,7 @@ DB_SECRET_ARN = os.environ.get("DB_SECRET_ARN", "")
 DB_HOST = os.environ.get("AURORA_ENDPOINT", "")
 DESCRIBE_MODEL = os.environ.get("DESCRIBE_MODEL_ID", "global.anthropic.claude-sonnet-5-5")
 EVENT_BUS = os.environ.get("EVENT_BUS", "default")
-PREFIX = "schema/"
+PREFIX = os.environ.get("SCHEMA_PREFIX", "schema/")  # must match the IAM grant (ArtifactsPrefix + schema/)
 CARD_PREFIX = "docs/schema/"
 
 SNAPSHOT_SQL = """
@@ -223,25 +223,64 @@ def glue_columns(name, obj, existing, changes):
     return cols
 
 
-def _update_glue_table(name, obj, description, changes):
-    glue_name = f"{AURORA_DATABASE}_public_{name}"
+_GLUE_TABLE_INPUT_KEYS = ("Name", "Description", "Owner", "Retention", "StorageDescriptor", "PartitionKeys",
+                          "TableType", "Parameters", "ViewOriginalText", "ViewExpandedText", "TargetTable")
+
+
+def _glue_name(name):
+    return f"{AURORA_DATABASE}_public_{name}"
+
+
+def _get_glue_table(name):
     try:
-        table = GLUE.get_table(DatabaseName=GLUE_DATABASE, Name=glue_name)["Table"]
+        return GLUE.get_table(DatabaseName=GLUE_DATABASE, Name=_glue_name(name))["Table"]
     except GLUE.exceptions.EntityNotFoundException:
+        return None
+
+
+def _update_glue_table(name, obj, description, changes):
+    table = _get_glue_table(name)
+    renamed_from = next((c["from"] for c in changes
+                         if c["type"] in OBJECT_RENAMES and c["object"] == name), None)
+    create = False
+    if table is None and renamed_from:
+        # A renamed table: carry the crawled entry over to the new name, so the
+        # text-to-SQL tool stops offering the old name before the next crawl.
+        table = _get_glue_table(renamed_from)
+        create = table is not None
+    if table is None:
         return False  # not crawled yet (views are not crawled); the KB card still carries it
-    allowed = ("Name", "Description", "Owner", "Retention", "StorageDescriptor", "PartitionKeys",
-               "TableType", "Parameters", "ViewOriginalText", "ViewExpandedText", "TargetTable")
-    table_input = {k: v for k, v in table.items() if k in allowed}
+    table_input = {k: v for k, v in table.items() if k in _GLUE_TABLE_INPUT_KEYS}
+    table_input["Name"] = _glue_name(name)
     table_input["Description"] = description
     sd = table_input.get("StorageDescriptor")
     if sd is not None and obj["kind"] == "table":
         sd["Columns"] = glue_columns(name, obj, sd.get("Columns", []), changes)
-    GLUE.update_table(DatabaseName=GLUE_DATABASE, TableInput=table_input)
+    if create:
+        GLUE.create_table(DatabaseName=GLUE_DATABASE, TableInput=table_input)
+    else:
+        GLUE.update_table(DatabaseName=GLUE_DATABASE, TableInput=table_input)
     return True
+
+
+def _delete_glue_table(name):
+    try:
+        GLUE.delete_table(DatabaseName=GLUE_DATABASE, Name=_glue_name(name))
+    except GLUE.exceptions.EntityNotFoundException:
+        pass
+
+
+def is_stale(snap, current):
+    """True if the published snapshot was taken after this one (ISO UTC timestamps sort)."""
+    return bool(current and snap and (current.get("taken_at") or "") > (snap.get("taken_at") or ""))
 
 
 def action_publish(event):
     snap = _get_json(event["snapshot_key"])
+    current = _get_json(PREFIX + "current.json")
+    if is_stale(snap, current):
+        # An older run approved after a newer one: publishing it would roll the schema back.
+        return {"run_id": event["run_id"], "skipped": "a newer snapshot is already published"}
     descriptions = event.get("descriptions", {})
     glue_updated, cards = 0, 0
     for name, desc in descriptions.items():
@@ -254,6 +293,8 @@ def action_publish(event):
             cards += 1
     dropped = removed_objects(event["changes"])
     for name in dropped:
+        if GLUE_DATABASE:
+            _delete_glue_table(name)
         if KB_DOCS_BUCKET:
             S3.delete_object(Bucket=KB_DOCS_BUCKET, Key=f"{CARD_PREFIX}{name}.md")
     ingestion = None

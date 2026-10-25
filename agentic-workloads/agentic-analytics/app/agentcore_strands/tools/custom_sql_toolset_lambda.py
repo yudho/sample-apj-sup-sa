@@ -355,6 +355,10 @@ _BLOCKED_FUNCTIONS = (
 _IDENT_RE = re.compile(r'[A-Za-z_][A-Za-z0-9_$]*')
 
 
+def _ident_char(ch):
+    return ch.isalnum() or ch in '_$'
+
+
 def _mask_sql(sql):
     """Return (masked_sql, quoted_identifiers): literals and comments become spaces."""
     out, idents, i, n = [], [], 0, len(sql)
@@ -377,6 +381,10 @@ def _mask_sql(sql):
                 raise ValueError('Unterminated comment')
             out.append(' ' * (j - i)); i = j
         elif c in ("'", '"'):
+            # E'...' takes backslash escapes, so a \' would end the literal here but
+            # not in PostgreSQL. Refuse escape strings instead of modelling them.
+            if c == "'" and i and sql[i - 1] in 'eE' and (i < 2 or not _ident_char(sql[i - 2])):
+                raise ValueError("Escape string literals (E'...') are not allowed")
             j = i + 1
             while True:
                 k = sql.find(c, j)
@@ -389,7 +397,7 @@ def _mask_sql(sql):
             if c == '"':
                 idents.append(sql[i + 1:k].replace('""', '"'))
             out.append(' ' * (k + 1 - i)); i = k + 1
-        elif c == '$':
+        elif c == '$' and not (i and _ident_char(sql[i - 1])):  # a$b$ is one identifier
             m = re.match(r'\$([A-Za-z_][A-Za-z0-9_]*)?\$', sql[i:])
             if m:
                 tag = m.group(0)
@@ -432,6 +440,14 @@ def validate_readonly_sql(sql):
     return None
 
 
+def _session_changed(rls_context, after):
+    """True if the RLS variables after the query differ from what get_db_connection set."""
+    ctx = rls_context or {}
+    after = after or {}
+    return ((after.get('a') or '') != (ctx.get('account_id') or '')
+            or (after.get('r') or '') != (ctx.get('role') or ''))
+
+
 def execute_sql(args, rls_context):
     """Execute an approved read-only SQL query against the database."""
     sql = args.get('sql', '')
@@ -446,10 +462,21 @@ def execute_sql(args, rls_context):
             # Scope both settings to this transaction only.
             cur.execute("SET TRANSACTION READ ONLY")
             cur.execute("SET LOCAL statement_timeout = %s", [SQL_STATEMENT_TIMEOUT_MS])
+            # The masker assumes plain '...' strings take no backslash escapes.
+            cur.execute("SET LOCAL standard_conforming_strings = on")
             cur.execute(sql)
             rows = cur.fetchmany(MAX_RESULT_ROWS + 1) if cur.description else []
             columns = [desc[0] for desc in cur.description] if cur.description else []
+            # Backstop for the static check: if the query changed the RLS session
+            # variables, its rows may belong to another tenant, so drop them.
+            cur.execute("SELECT current_setting('app.current_account_id', true) AS a, "
+                        "current_setting('app.current_user_role', true) AS r")
+            after = cur.fetchone()
         conn.rollback()
+        if _session_changed(rls_context, after):
+            print("execute_sql refused: query changed the RLS session variables")
+            return {'statusCode': 400, 'body': json.dumps(
+                {'success': False, 'error': 'Query changed session settings and was refused'})}
         truncated = len(rows) > MAX_RESULT_ROWS
         rows = rows[:MAX_RESULT_ROWS]
         return {

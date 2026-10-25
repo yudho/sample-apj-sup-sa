@@ -36,3 +36,54 @@ def test_rename_on_another_table_is_ignored():
     obj = _obj(("promotion_code", "text", ""))
     changes = [{"type": "column_renamed", "object": "payments", "from": "promo_code", "to": "promotion_code"}]
     assert m.glue_columns("bookings", obj, EXISTING, changes) == [{"Name": "promotion_code", "Type": "string"}]
+
+
+class _FakeGlue:
+    class exceptions:
+        class EntityNotFoundException(Exception):
+            pass
+
+    def __init__(self, tables):
+        self.tables, self.calls = dict(tables), []
+
+    def get_table(self, DatabaseName, Name):
+        if Name not in self.tables:
+            raise self.exceptions.EntityNotFoundException(Name)
+        return {"Table": dict(self.tables[Name], Name=Name, DatabaseName=DatabaseName, CreateTime="t")}
+
+    def create_table(self, DatabaseName, TableInput):
+        self.calls.append(("create", TableInput["Name"])); self.tables[TableInput["Name"]] = TableInput
+
+    def update_table(self, DatabaseName, TableInput):
+        self.calls.append(("update", TableInput["Name"]))
+
+    def delete_table(self, DatabaseName, Name):
+        self.calls.append(("delete", Name)); self.tables.pop(Name, None)
+
+
+def test_renamed_table_moves_its_glue_entry(monkeypatch):
+    old = f"{m.AURORA_DATABASE}_public_bookings"
+    new = f"{m.AURORA_DATABASE}_public_rentals"
+    fake = _FakeGlue({old: {"StorageDescriptor": {"Columns": EXISTING}}})
+    monkeypatch.setattr(m, "GLUE", fake)
+    monkeypatch.setattr(m, "GLUE_DATABASE", "timely_unicorn")
+    changes = [{"type": "table_renamed", "object": "rentals", "from": "bookings"}]
+    obj = _obj(("booking_id", "uuid", ""))
+    assert m._update_glue_table("rentals", obj, "Rentals", changes)
+    for name in m.removed_objects(changes):
+        m._delete_glue_table(name)
+    assert fake.calls == [("create", new), ("delete", old)]
+    assert "CreateTime" not in fake.tables[new]
+
+
+def test_dropping_a_table_that_was_never_crawled_is_a_no_op(monkeypatch):
+    fake = _FakeGlue({})
+    monkeypatch.setattr(m, "GLUE", fake)
+    m._delete_glue_table("ghost")
+    assert fake.calls == [("delete", f"{m.AURORA_DATABASE}_public_ghost")]
+
+
+def test_older_snapshot_is_not_published_over_a_newer_one():
+    old = {"taken_at": "2026-10-25T10:00:00+00:00"}
+    new = {"taken_at": "2026-10-25T11:00:00+00:00"}
+    assert m.is_stale(old, new) and not m.is_stale(new, old) and not m.is_stale(new, None)

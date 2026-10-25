@@ -74,13 +74,20 @@ def diff(old, new):
             changes.append({"type": "view_definition_changed", "object": name})
         if (o[name].get("comment") or "") != (n[name].get("comment") or ""):
             changes.append({"type": "comment_changed", "object": name})
+        # Turning off RLS or dropping the policy changes no column, but rls_gaps must see it.
+        if (bool(o[name].get("rls")), bool(o[name].get("has_policy"))) != \
+                (bool(n[name].get("rls")), bool(n[name].get("has_policy"))):
+            changes.append({"type": "rls_changed", "object": name,
+                            "from": {"rls": bool(o[name].get("rls")), "has_policy": bool(o[name].get("has_policy"))},
+                            "to": {"rls": bool(n[name].get("rls")), "has_policy": bool(n[name].get("has_policy"))}})
     return changes
 
 
 def rls_gaps(new, changes):
     """Tenant tables touched by this change set that lack RLS or a policy."""
     touched = {c["object"] for c in changes if c["type"] in
-               ("table_added", "table_renamed", "column_added", "column_renamed", "column_retyped")}
+               ("table_added", "table_renamed", "column_added", "column_renamed", "column_retyped",
+                "rls_changed")}
     objs = new.get("objects", {})
     return sorted(t for t in touched if t in objs and _is_tenant_table(objs[t])
                   and not (objs[t].get("rls") and objs[t].get("has_policy")))
@@ -94,7 +101,7 @@ def classify(old, new):
         t = c["type"]
         if t.endswith("_added"):
             level = "additive"
-        elif t in ("comment_changed",):
+        elif t in ("comment_changed", "rls_changed"):  # a lost policy is caught by rls_gaps
             level = "none"
         else:
             level = "breaking"  # drops, renames, retypes, changed view definitions

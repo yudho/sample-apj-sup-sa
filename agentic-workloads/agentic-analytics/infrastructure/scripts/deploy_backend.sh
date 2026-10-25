@@ -36,8 +36,13 @@ set -euo pipefail
 STACK="${STACK:-agentic-analytics-demo}"
 REGION="${REGION:-us-west-2}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-# Account- and Region-specific default, so nobody else can own the bucket name first.
-BUCKET="${BUCKET:-agentic-analytics-demo-${ACCOUNT_ID}-${REGION}}"
+# An existing stack keeps its bucket. A new one gets an Account- and Region-specific
+# name, so nobody else can own the bucket name first.
+if [ -z "${BUCKET:-}" ]; then
+  BUCKET="$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
+    --query "Stacks[0].Parameters[?ParameterKey=='ArtifactsBucket'].ParameterValue" --output text 2>/dev/null || true)"
+  [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ] || BUCKET="agentic-analytics-demo-${ACCOUNT_ID}-${REGION}"
+fi
 DEMO_ROLE="${DEMO_ROLE:-rental_admin}"   # rental_admin has full access incl. create_booking
 
 # Voice (optional, additive). Set ENABLE_VOICE=true VOICE_MODE=agentcore plus

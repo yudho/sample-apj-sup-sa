@@ -134,6 +134,7 @@ region = os.getenv("AWS_REGION", "us-east-1")
 GUARDRAIL_ID = os.getenv("GUARDRAIL_ID", "")
 GUARDRAIL_VERSION = os.getenv("GUARDRAIL_VERSION", "DRAFT")
 GUARDRAIL_BLOCKED_MESSAGE = "I can only help with unicorn rental analytics. Please ask about bookings, revenue, customers, or unicorn management."
+EMPTY_TURN_MESSAGE = "I couldn't finish an answer this time. Please try again, or ask a narrower question."
 
 bedrock_model_kwargs = dict(
     model_id=model_id,
@@ -290,7 +291,7 @@ def _long_term_context(actor_id, query):
         return ""
     lines = []
     try:
-        client = MemoryClient(region_name=region)
+        client = globals().get("memory_client") or MemoryClient(region_name=region)
         for label, template, top_k in LTM_NAMESPACES:
             records = client.retrieve_memories(
                 memory_id=MEMORY_ID, namespace=template.format(actor=actor_id),
@@ -498,7 +499,7 @@ async def agent_invocation(payload, context):
             except Exception as e:
                 print(f"[CHART] Code interpreter unavailable: {e}")
 
-        system_prompt = system_prompt + _long_term_context(actor_id, user_message)
+        system_prompt = system_prompt + await asyncio.to_thread(_long_term_context, actor_id, user_message)
         request_agent = Agent(
             model=bedrock_model,
             system_prompt=system_prompt,
@@ -588,7 +589,8 @@ async def agent_invocation(payload, context):
         if not sent_text:
             stop = getattr(final, "stop_reason", None)
             print(f"[empty-turn] stop_reason={stop}")
-            yield {"event": {"contentBlockDelta": {"delta": {"text": GUARDRAIL_BLOCKED_MESSAGE}}}}
+            text = GUARDRAIL_BLOCKED_MESSAGE if stop == "guardrail_intervened" else EMPTY_TURN_MESSAGE
+            yield {"event": {"contentBlockDelta": {"delta": {"text": text}}}}
 
     except Exception as e:
         print(f"❌ Request failed: {str(e)}")

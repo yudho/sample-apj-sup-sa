@@ -209,7 +209,9 @@ def create_booking(args, rls_context):
             """, [unicorn_id])  # row lock: two concurrent bookings for one unicorn serialize here
             unicorn = cur.fetchone()
             if not unicorn:
-                return error_response(f'Unicorn {unicorn_id} not found')
+                # FOR UPDATE also applies the RLS UPDATE policies, so a read-only role
+                # (analyst) sees no row here even when the unicorn exists.
+                return error_response(f'Unicorn {unicorn_id} not found, or your role cannot create bookings')
             if not unicorn['is_available']:
                 return error_response(f'Unicorn {unicorn["name"]} is not available')
             

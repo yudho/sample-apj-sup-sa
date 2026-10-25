@@ -233,7 +233,7 @@ def _long_term_context(actor_id, query):
         return ""
     lines = []
     try:
-        client = MemoryClient(region_name=region)
+        client = globals().get("memory_client") or MemoryClient(region_name=region)
         for label, template, top_k in LTM_NAMESPACES:
             records = client.retrieve_memories(
                 memory_id=MEMORY_ID, namespace=template.format(actor=actor_id),
@@ -376,7 +376,7 @@ async def agent_invocation(payload, context):
 
         request_agent = Agent(
             model=bedrock_model,
-            system_prompt=SYSTEM_PROMPT + _long_term_context(actor_id, user_message),
+            system_prompt=SYSTEM_PROMPT + await asyncio.to_thread(_long_term_context, actor_id, user_message),
             tools=[mcp_client, current_datetime],
             hooks=memory_hooks,
             callback_handler=None,

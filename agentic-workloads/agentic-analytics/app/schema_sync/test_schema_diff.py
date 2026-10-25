@@ -93,3 +93,23 @@ def test_comment_only_change_is_none():
     new["objects"]["bookings"]["comment"] = "One row per rental"
     r = classify(snap(), new)
     assert r["severity"] == "none" and r["changes"][0]["type"] == "comment_changed"
+
+
+def test_disabling_rls_on_tenant_table_blocks():
+    new = snap()
+    new["objects"]["bookings"]["rls"] = False
+    r = classify(snap(), new)
+    assert r["severity"] == "blocked" and r["rls_gaps"] == ["bookings"]
+
+
+def test_dropping_policy_on_tenant_table_blocks():
+    new = snap()
+    new["objects"]["bookings"]["has_policy"] = False
+    assert classify(snap(), new)["severity"] == "blocked"
+
+
+def test_enabling_rls_is_not_breaking():
+    old = snap()
+    old["objects"]["bookings"]["has_policy"] = False
+    r = classify(old, snap())
+    assert r["severity"] == "none" and r["changes"][0]["type"] == "rls_changed"
