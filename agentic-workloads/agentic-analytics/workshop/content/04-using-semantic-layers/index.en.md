@@ -143,10 +143,10 @@ After deploying the baseline model files, Cube automatically picks them up in de
 
 You should now see the data models available in the Playground:
 
-1. Click the **Build** tab
-2. Click the dropdown on the **Bookings** cube: you'll see the measures and dimensions available for that cube
-3. Select the **Bookings Count** measure and the **Bookings Pickup Location** dimension
-4. Click **Run**: you should see booking counts grouped by pickup location
+1. Open the **Playground** tab. The left panel lists the five cubes.
+2. Choose the **bookings** cube to expand it: you'll see its dimensions and its one measure
+3. Choose the **count** measure and the **pickup_location** dimension
+4. Choose **Run Query**: you should see booking counts for about 30 pickup locations
 
 This confirms Cube can reach Aurora and the data models are correctly defined.
 
@@ -154,7 +154,7 @@ This confirms Cube can reach Aurora and the data models are correctly defined.
 
 ::alert[**Notice the limitation:** With baseline models, the agent can't ask "top customers by revenue" because there's no `total_revenue` measure and no joins between cubes. It can only count rows and group by columns within a single cube. This is why the progression to the full models matters.]{type="info"}
 
-You can click the **JSON Query** tab in the Playground to see the Cube JSON query object:
+Open the **REST API** tab under the query to see the same query as the JSON object the agent's tool sends:
 
 ```json
 {
@@ -189,7 +189,7 @@ Deploying Cube models: final
 ============================================================
 ```
 
-Cube reloads automatically. Refresh the Cube Playground UI to see the new dimensions, measures, and segments. You'll notice derived dimensions like `bookings.status`, subquery dimensions like `customers.lifetime_revenue`, and segments like `completed_bookings` and `vip_customers`.
+Cube reloads automatically. Refresh the Playground to see the new dimensions, measures, and segments. You'll notice derived dimensions like `bookings.status`, subquery dimensions like `customers.lifetime_revenue`, and segments like `completed_bookings` and `vip_customers`.
 
 ::alert[**Key takeaway:** Each layer you add to the Cube model expands what the agent can do reliably: without changing the Lambda, the agent code, or the SOP. The semantic layer is the single place where you encode business logic, and the agent automatically benefits from every enrichment.]{type="success"}
 
