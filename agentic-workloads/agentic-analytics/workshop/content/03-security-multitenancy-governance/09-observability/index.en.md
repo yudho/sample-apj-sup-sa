@@ -125,7 +125,7 @@ aws logs describe-log-groups \
   --query 'logGroups[*].logGroupName'
 ```
 
-Open the log group in the CloudWatch console. These logs show every policy decision (ALLOW/DENY), which target Lambda was called, and the latency of each tool invocation.
+Open the log group in the CloudWatch console. These logs show every policy decision (ALLOW/DENY), which target Lambda was called, and the latency of each tool invocation. To see only the policy decisions, type `"Policy evaluation completed"` (with the quotes) in **Filter events** and expand a row: `policy.decision` is the verdict and `policy.determiningPolicies` names the Cedar policy that decided it.
 
 ::alert[Gateway logs depend on the log-delivery resources in the template baseline: they were created by your first `make deploy` in Step 2.]
 
