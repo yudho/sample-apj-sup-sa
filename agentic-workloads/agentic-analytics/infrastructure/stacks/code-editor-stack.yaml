@@ -563,6 +563,8 @@ Resources:
                   - cloudformation:ListStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:GetTemplateSummary
+                  # Step 11.2 reads the Aurora cluster and secret ARNs from the exports.
+                  - cloudformation:ListExports
                 Resource: '*'
               # CloudFormation - participants deploy the AgentCore top-up + voice
               # stacks via `make deploy` / `make voice-deploy` (aws cloudformation
