@@ -28,5 +28,8 @@ global_settings:
       path: app/voice/pcc-deploy.toml
       reason: secret_set is the name of a Pipecat Cloud secret set; the keys live in that service.
     - rule_id: SECRET-SECRET-KEYWORD
+      path: .ash/.ash.yaml
+      reason: The reasons in this file quote the words secretsmanager and secret; there is no value.
+    - rule_id: SECRET-SECRET-KEYWORD
       path: specs/research/pipecat-cloud-deploy-and-ui-integration.md
       reason: Research note showing a placeholder variable name, no value.
