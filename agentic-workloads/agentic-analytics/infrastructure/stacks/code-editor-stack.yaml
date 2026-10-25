@@ -606,6 +606,8 @@ Resources:
                   - ssm:GetParameters
                   - ssm:PutParameter
                   - ssm:DeleteParameter
+                  # CloudFormation reads parameter tags when the top-up stack updates one.
+                  - ssm:ListTagsForResource
                 Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${EnvironmentName}/*
               - Effect: Allow
                 Action:
