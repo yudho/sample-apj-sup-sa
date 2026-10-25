@@ -47,21 +47,33 @@ AMPLIFY_APP_NAME = "agentic-analytics-semantic-ui"
 RUNTIME_AGENT_NAME = "unicorn_rental_semantic_agent"
 RUNTIME_ENTRYPOINT = "agent/unicorn_rental_semantic_agent.py"
 
-try:
-    from bedrock_agentcore_starter_toolkit.operations.gateway.client import (
-        GatewayClient, create_gateway_execution_role
-    )
-except ImportError:
-    print("Installing bedrock-agentcore-starter-toolkit...")
-    # Use subprocess with an argument list (no shell) so there is no command
-    # injection surface — the args are fixed literals, not an interpolated string.
-    subprocess.check_call([  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
-        sys.executable, "-m", "pip", "install",
-        "bedrock-agentcore-starter-toolkit==0.2.1", "-q",
-    ])
-    from bedrock_agentcore_starter_toolkit.operations.gateway.client import (
-        GatewayClient, create_gateway_execution_role
-    )
+GATEWAY_ROLE_NAME = "semantic-layer-gateway-role"
+
+
+def create_gateway_execution_role(session, log):
+    """Execution role for the semantic-layer Gateway: it may invoke only this lab's Lambdas.
+
+    Named semantic-layer-* so the Code Editor role (allowed to create semantic-layer-* roles)
+    can create it; the starter toolkit's helper uses a fixed name outside that scope."""
+    iam = session.client("iam")
+    account = session.client("sts").get_caller_identity()["Account"]
+    trust = {"Version": "2012-10-17", "Statement": [{
+        "Effect": "Allow", "Principal": {"Service": "bedrock-agentcore.amazonaws.com"},
+        "Action": "sts:AssumeRole", "Condition": {"StringEquals": {"aws:SourceAccount": account}}}]}
+    policy = {"Version": "2012-10-17", "Statement": [{
+        "Effect": "Allow", "Action": "lambda:InvokeFunction",
+        "Resource": [f"arn:aws:lambda:{REGION}:{account}:function:{LAMBDA_NAME}",
+                     f"arn:aws:lambda:{REGION}:{account}:function:{INTERCEPTOR_LAMBDA_NAME}"]}]}
+    try:
+        iam.create_role(RoleName=GATEWAY_ROLE_NAME, AssumeRolePolicyDocument=json.dumps(trust),
+                        Description="AgentCore Gateway role for the semantic-layer lab")
+        log.info("Created %s", GATEWAY_ROLE_NAME)
+    except iam.exceptions.EntityAlreadyExistsException:
+        iam.update_assume_role_policy(RoleName=GATEWAY_ROLE_NAME, PolicyDocument=json.dumps(trust))
+    iam.put_role_policy(RoleName=GATEWAY_ROLE_NAME, PolicyName="InvokeLabLambdas",
+                        PolicyDocument=json.dumps(policy))
+    return iam.get_role(RoleName=GATEWAY_ROLE_NAME)["Role"]["Arn"]
+
 
 # Add infrastructure/common to path for Amplify utilities
 sys.path.insert(0, str(PROJECT_ROOT))
