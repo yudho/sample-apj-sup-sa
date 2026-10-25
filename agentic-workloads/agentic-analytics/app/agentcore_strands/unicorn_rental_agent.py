@@ -516,6 +516,9 @@ async def agent_invocation(payload, context):
             return buf[:lt], tail
 
         sent_text = False
+        # Text after a tool call is a new model turn; without a break it runs into the
+        # previous sentence ("...against it.The schema...").
+        after_tool = False
         final = None
         async for event in request_agent.stream_async(enhanced_prompt):
             if isinstance(event, dict) and "result" in event:
@@ -524,7 +527,11 @@ async def agent_invocation(payload, context):
             if not isinstance(ev, dict):
                 continue
             if ev.get("contentBlockDelta", {}).get("delta", {}).get("text") is not None:
-                pending += ev["contentBlockDelta"]["delta"]["text"]
+                text = ev["contentBlockDelta"]["delta"]["text"]
+                if after_tool and text and (sent_text or pending) and not text[0].isspace():
+                    text = "\n\n" + text
+                after_tool = False
+                pending += text
                 flush, pending = _split_flushable(pending)
                 if flush:
                     sent_text = True
@@ -537,6 +544,7 @@ async def agent_invocation(payload, context):
             # (those carry the big SQL/args/rows that caused the IncompleteRead bloat).
             tool_use = ev.get("contentBlockStart", {}).get("start", {}).get("toolUse")
             if isinstance(tool_use, dict) and tool_use.get("name"):
+                after_tool = True
                 yield {"event": {"contentBlockStart": {"start": {"toolUse": {
                     "name": tool_use["name"],
                     "toolUseId": tool_use.get("toolUseId", ""),
