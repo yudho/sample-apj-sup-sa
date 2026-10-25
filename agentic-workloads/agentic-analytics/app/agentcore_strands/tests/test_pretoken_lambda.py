@@ -32,3 +32,9 @@ def test_access_token_gets_role_and_tenant(handler, trigger):
     out = handler(event, None)["response"]["claimsAndScopeOverrideDetails"]
     assert out["accessTokenGeneration"]["claimsToAddOrOverride"] == {"custom:role": "staff", "custom:account_id": "acct-1"}
     assert out["idTokenGeneration"]["claimsToAddOrOverride"]["custom:role"] == "staff"
+
+
+def test_user_without_role_gets_no_role_claim(handler):
+    event = {"triggerSource": "TokenGeneration_Authentication", "request": {"userAttributes": {"email": "x@example.com"}}}
+    out = handler(event, None)["response"]["claimsAndScopeOverrideDetails"]
+    assert "custom:role" not in out["accessTokenGeneration"]["claimsToAddOrOverride"]

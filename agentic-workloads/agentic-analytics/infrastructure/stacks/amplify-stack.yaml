@@ -158,6 +158,9 @@ Resources:
       ArtifactsKey: !Ref UIBuildKey
       CognitoUserPoolId: !Ref CognitoUserPoolId
       CognitoUserClientId: !Ref CognitoUserClientId
+      # Same list as UserLoginClient in cognito-stack.yaml; custom:role and
+      # custom:account_id must stay admin-only.
+      CognitoWriteAttributes: [email, name]
       EnvironmentVariables:
         REACT_APP_AWS_REGION: !Ref AWSRegion
         REACT_APP_COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId

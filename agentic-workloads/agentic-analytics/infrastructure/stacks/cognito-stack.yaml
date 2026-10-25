@@ -150,11 +150,11 @@ Resources:
 
               Every trigger gets the V2 shape, including TokenGeneration_RefreshTokens:
               a refreshed access token without these claims would skip the Cedar
-              role forbids and leave the RLS session variables unset."""
+              role forbids and leave the RLS session variables unset.
+              A user without a role gets no role claim, so the base Cedar permit
+              (hasTag custom:role) gives them no tools."""
               attrs = event.get('request', {}).get('userAttributes', {})
-              role = attrs.get('custom:role', 'user')
-              account_id = attrs.get('custom:account_id', '')
-              claims = {'custom:role': role, 'custom:account_id': account_id}
+              claims = {k: attrs[k] for k in ('custom:role', 'custom:account_id') if attrs.get(k)}
               event['response'] = {
                   'claimsAndScopeOverrideDetails': {
                       'accessTokenGeneration': {'claimsToAddOrOverride': claims},
