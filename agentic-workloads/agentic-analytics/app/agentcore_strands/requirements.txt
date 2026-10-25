@@ -4,10 +4,10 @@ fastapi==0.162.0
 uvicorn[standard]==0.54.0
 websockets==17.3
 python-multipart==0.0.32
-python-dotenv==1.2.1
+python-dotenv==1.2.4
 strands-agents[otel]==1.44.0
 strands-agents-tools==0.8.1
-mcp==1.28.1
+mcp==1.30.0
 requests==2.34.2
 bedrock-agentcore==1.18.1
 requests-aws4auth==1.4.0

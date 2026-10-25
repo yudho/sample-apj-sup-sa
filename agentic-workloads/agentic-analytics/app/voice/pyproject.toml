@@ -9,6 +9,7 @@ dependencies = [
     "pipecat-ai[daily,deepgram,aws,runner,sagemaker,silero,webrtc]>=0.0.60",
     "pipecatcloud",
     "python-dotenv",
+    "pillow>=13.0.0",  # pipecat pulls pillow in; 12.x has open critical advisories
     "boto3",
     "aiohttp",  # direct dep: JWT-native bearer HTTPS invoke of AgentCore Runtime
     "bedrock-agentcore",  # BedrockAgentCoreApp: voice runs as its own AgentCore Runtime
