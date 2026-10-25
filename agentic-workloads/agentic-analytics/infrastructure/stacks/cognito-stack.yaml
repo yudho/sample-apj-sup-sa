@@ -146,22 +146,21 @@ Resources:
       Code:
         ZipFile: |
           def lambda_handler(event, context):
-              """Add custom:role and custom:account_id to access token claims (V2 trigger)"""
-              trigger = event.get('triggerSource', '')
+              """Add custom:role and custom:account_id to access token claims (V2 trigger).
+
+              Every trigger gets the V2 shape, including TokenGeneration_RefreshTokens:
+              a refreshed access token without these claims would skip the Cedar
+              role forbids and leave the RLS session variables unset."""
               attrs = event.get('request', {}).get('userAttributes', {})
               role = attrs.get('custom:role', 'user')
               account_id = attrs.get('custom:account_id', '')
               claims = {'custom:role': role, 'custom:account_id': account_id}
-              
-              if trigger in ('TokenGeneration_HostedAuth', 'TokenGeneration_Authentication'):
-                  event['response'] = {
-                      'claimsAndScopeOverrideDetails': {
-                          'accessTokenGeneration': {'claimsToAddOrOverride': claims},
-                          'idTokenGeneration': {'claimsToAddOrOverride': claims}
-                      }
+              event['response'] = {
+                  'claimsAndScopeOverrideDetails': {
+                      'accessTokenGeneration': {'claimsToAddOrOverride': claims},
+                      'idTokenGeneration': {'claimsToAddOrOverride': claims}
                   }
-              else:
-                  event['response'] = {'claimsOverrideDetails': {'claimsToAddOrOverride': claims}}
+              }
               return event
 
   PreTokenLambdaPermission:

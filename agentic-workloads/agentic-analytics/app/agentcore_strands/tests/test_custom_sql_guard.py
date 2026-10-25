@@ -8,19 +8,23 @@ import json
 import pathlib
 import sys
 import types
+from unittest import mock
 
 import pytest
 
-for name in ("boto3", "psycopg2", "psycopg2.extras", "jwt"):
-    sys.modules.setdefault(name, types.ModuleType(name))
-sys.modules["boto3"].client = lambda *a, **k: None
-sys.modules["psycopg2.extras"].RealDictCursor = object
-sys.modules["jwt"].PyJWKClient = lambda *a, **k: None
+# Stub the Lambda's imports only while loading it, so other test modules in the
+# same run still get the real boto3 and PyJWT.
+_stubs = {name: types.ModuleType(name) for name in ("boto3", "psycopg2", "psycopg2.extras", "jwt")}
+_stubs["boto3"].client = lambda *a, **k: None
+_stubs["psycopg2"].extras = _stubs["psycopg2.extras"]
+_stubs["psycopg2.extras"].RealDictCursor = object
+_stubs["jwt"].PyJWKClient = lambda *a, **k: None
 
 _PATH = pathlib.Path(__file__).resolve().parents[1] / "tools" / "custom_sql_toolset_lambda.py"
 _spec = importlib.util.spec_from_file_location("custom_sql_toolset_lambda", _PATH)
 mod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(mod)
+with mock.patch.dict(sys.modules, _stubs):
+    _spec.loader.exec_module(mod)
 validate = mod.validate_readonly_sql
 
 

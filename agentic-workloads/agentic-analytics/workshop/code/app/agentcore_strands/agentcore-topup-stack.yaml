@@ -1047,15 +1047,15 @@ Resources:
 #       Name: allow_all_tools
 #       PolicyEngineId: !GetAtt PolicyEngine.PolicyEngineId
 #       ValidationMode: IGNORE_ALL_FINDINGS
-#       Description: Base permit — allow all tools for any authenticated principal
+#       Description: Base permit — allow all tools for a signed-in user with a role
 #       Definition:
 #         Cedar:
 #           Statement: !Sub |
 #             permit(
-#               principal,
+#               principal is AgentCore::OAuthUser,
 #               action,
 #               resource == AgentCore::Gateway::"${Gateway.GatewayArn}"
-#             );
+#             ) when { principal.hasTag("custom:role") };
 
 #   # Cedar action names use triple underscore: TargetName___tool_name.
 #   # These two policies enforce role-based access on top of allow_all_tools.

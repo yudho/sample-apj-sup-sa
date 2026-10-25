@@ -101,8 +101,9 @@ make deploy POLICY_MODE=ENFORCE
 The four policies (already written in the template) are:
 
 ```cedar
-// 1. Base permit — allow all tools for any authenticated principal
-permit(principal, action, resource == AgentCore::Gateway::"<arn>");
+// 1. Base permit: all tools, but only for a signed-in user whose token carries a role
+permit(principal is AgentCore::OAuthUser, action, resource == AgentCore::Gateway::"<arn>")
+when { principal.hasTag("custom:role") };
 
 // 2. Forbid booking tool for analysts
 forbid(principal is AgentCore::OAuthUser,
@@ -126,7 +127,7 @@ when { principal.getTag("custom:role") == "staff" };
 
 ::alert[**`make deploy POLICY_MODE=ENFORCE`** passes `PolicyMode=ENFORCE` to the stack: the same `PolicyMode` parameter the Gateway's `PolicyEngineConfiguration.Mode` reads. LOG_ONLY logs decisions but allows every call (useful for testing); ENFORCE blocks unauthorized calls at the Gateway.]{type="info"}
 
-::alert[**Forbid wins over permit.** Cedar uses default-deny with forbid-wins semantics. The base permit allows everything, then forbid policies carve out exceptions. If any forbid matches, access is denied: regardless of permits. This is the :link[recommended pattern]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/example-policies.html"} for AgentCore Policy.]{type="info"}
+::alert[**Forbid wins over permit.** Cedar uses default-deny with forbid-wins semantics. The base permit allows everything, then forbid policies carve out exceptions. If any forbid matches, access is denied: regardless of permits. The `hasTag` condition on the permit makes the forbids fail closed: a forbid only matches when it can read `custom:role`, so a token without a role would otherwise get every tool. With the condition it gets none. This is the :link[recommended pattern]{href="https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/example-policies.html"} for AgentCore Policy.]{type="info"}
 
 ### Step 7.2: Switch to the RLS-Enforced Database Role (TODO 7.2)
 
