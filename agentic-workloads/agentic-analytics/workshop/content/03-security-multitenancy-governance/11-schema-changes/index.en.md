@@ -91,7 +91,7 @@ Wait a minute for the knowledge-base sync, then start a new chat as `lyra.starwh
 
 > "Using custom SQL, how many bookings have a promotion code set?"
 
-The SQL in the approval card should use `promotion_code`. The Glue crawler has not seen the rename yet, so the agent found the new name in the knowledge-base card for `bookings`, which says the column was renamed.
+Choose **Approve & Run**. The answer is a count (0 is expected: nobody has used a promotion code yet), not a "column does not exist" error. You have not run the crawler since the rename, so where did the agent get the new name? Publish rewrote the Glue column list for `bookings` from its own snapshot of the database, and it rewrote the knowledge-base card for `bookings`, which notes that `promo_code` became `promotion_code`. The agent reads both, so it never sees the old name.
 
 ### Step 11.5: Try a tenant table without RLS
 
@@ -114,7 +114,7 @@ Now the change is additive and publishes.
 
 - The first `make schema-sync` run succeeds and publishes every table and view.
 - Adding a column publishes without approval; renaming it waits until `make approve`.
-- The agent's SQL uses `promotion_code` after the rename.
+- After the rename, the agent's custom SQL count runs without a "column does not exist" error.
 - The `promotions` table without RLS stops the run, and publishes once RLS is on.
 
 ## Troubleshooting

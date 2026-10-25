@@ -192,7 +192,38 @@ def schema_card(name, obj, description, changes):
     return "\n".join(lines) + "\n"
 
 
-def _update_glue_description(name, description):
+_PG_TO_GLUE = (("character varying", "string"), ("character", "string"), ("text", "string"),
+               ("uuid", "string"), ("json", "string"), ("bigint", "bigint"), ("integer", "int"),
+               ("smallint", "smallint"), ("boolean", "boolean"), ("double precision", "double"),
+               ("real", "float"), ("timestamp", "timestamp"), ("date", "date"))
+
+
+def _glue_type(pg_type):
+    if pg_type.startswith("numeric"):
+        return "decimal" + pg_type[len("numeric"):]
+    return next((g for p, g in _PG_TO_GLUE if pg_type.startswith(p)), "string")
+
+
+def glue_columns(name, obj, existing, changes):
+    """The Glue column list for a table, rebuilt from the Postgres snapshot.
+
+    The text-to-SQL tool reads columns from Glue, and the crawler only refreshes them on its next
+    run, so Publish rewrites them: renamed and added columns are visible to the agent at once.
+    Columns Glue already has keep the crawler's type; a renamed column keeps its old one."""
+    renamed = {c["to"]: c["from"] for c in changes
+               if c["type"] == "column_renamed" and c["object"] == name}
+    by_name = {c["Name"]: c for c in existing}
+    cols = []
+    for c in obj["columns"]:
+        old = by_name.get(c["name"]) or by_name.get(renamed.get(c["name"], ""))
+        col = {"Name": c["name"], "Type": old["Type"] if old else _glue_type(c["type"])}
+        if c.get("comment"):
+            col["Comment"] = c["comment"][:255]
+        cols.append(col)
+    return cols
+
+
+def _update_glue_table(name, obj, description, changes):
     glue_name = f"{AURORA_DATABASE}_public_{name}"
     try:
         table = GLUE.get_table(DatabaseName=GLUE_DATABASE, Name=glue_name)["Table"]
@@ -202,6 +233,9 @@ def _update_glue_description(name, description):
                "TableType", "Parameters", "ViewOriginalText", "ViewExpandedText", "TargetTable")
     table_input = {k: v for k, v in table.items() if k in allowed}
     table_input["Description"] = description
+    sd = table_input.get("StorageDescriptor")
+    if sd is not None and obj["kind"] == "table":
+        sd["Columns"] = glue_columns(name, obj, sd.get("Columns", []), changes)
     GLUE.update_table(DatabaseName=GLUE_DATABASE, TableInput=table_input)
     return True
 
@@ -212,7 +246,7 @@ def action_publish(event):
     glue_updated, cards = 0, 0
     for name, desc in descriptions.items():
         obj = snap["objects"][name]
-        if GLUE_DATABASE and _update_glue_description(name, desc):
+        if GLUE_DATABASE and _update_glue_table(name, obj, desc, event["changes"]):
             glue_updated += 1
         if KB_DOCS_BUCKET:
             S3.put_object(Bucket=KB_DOCS_BUCKET, Key=f"{CARD_PREFIX}{name}.md",

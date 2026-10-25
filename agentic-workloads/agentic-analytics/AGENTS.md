@@ -51,7 +51,7 @@ User asks ──┤                                                 ├─► Fr
 
 ### Schema change pipeline
 
-Step Functions `<env>-schema-sync`, started by a Glue crawler success (EventBridge), daily at 18:00 UTC (demo only) or by hand: Snapshot (pg_catalog: columns, comments, RLS, policies, view SQL) → Classify against `schema/current.json` (none / additive / breaking / blocked) → Describe (agent model) → WaitForApproval for breaking changes (task token in `schema/pending/`) → Publish (Glue table descriptions, `docs/schema/<name>.md` KB cards, KB ingestion with retry on ConflictException, EventBridge `agentic-analytics.schema`). A table with `account_id` but no RLS policy fails the run. Input `{"rebuild": true}` republishes everything. Only table/view drops delete cards; a dropped column rewrites its table's card.
+Step Functions `<env>-schema-sync`, started by a Glue crawler success (EventBridge), daily at 18:00 UTC (demo only) or by hand: Snapshot (pg_catalog: columns, comments, RLS, policies, view SQL) → Classify against `schema/current.json` (none / additive / breaking / blocked) → Describe (agent model) → WaitForApproval for breaking changes (task token in `schema/pending/`) → Publish (Glue table descriptions and column lists rebuilt from the snapshot, so the text-to-SQL tool sees a rename before the next crawl; `docs/schema/<name>.md` KB cards, KB ingestion with retry on ConflictException, EventBridge `agentic-analytics.schema`). A table with `account_id` but no RLS policy fails the run. Input `{"rebuild": true}` republishes everything. Only table/view drops delete cards; a dropped column rewrites its table's card.
 
 ### Schema context for text-to-SQL
 
