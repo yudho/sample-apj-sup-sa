@@ -81,6 +81,9 @@ _CHART_TAG_RE = _re_chart.compile(r'<chart\b([^>]*?)/?>(?:\s*</chart>)?', _re_ch
 _S3KEY_ATTR_RE = _re_chart.compile(r'\bs3key\s*=\s*"([^"]+)"', _re_chart.IGNORECASE)
 _CHART_TAG_MAX = 4096
 _s3_presign_client = None
+# Only the chart sandbox's own output is presigned. The model writes the tag, so a
+# prompt could otherwise ask it to "chart" data/customers.csv and get a signed URL.
+_CHART_KEY_RE = _re_chart.compile(r"charts/[A-Za-z0-9_-]{1,64}\.png")
 
 
 def _presign_chart_key(s3key):
@@ -89,6 +92,8 @@ def _presign_chart_key(s3key):
     if not bucket or not s3key:
         return None
     key = s3key.replace("s3://%s/" % bucket, "").lstrip("/")
+    if not _CHART_KEY_RE.fullmatch(key):
+        return None
     global _s3_presign_client
     try:
         if _s3_presign_client is None:

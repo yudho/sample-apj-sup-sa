@@ -1628,7 +1628,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                Resource: !Sub arn:aws:s3:::${ArtifactsBucket}/*
+                # The SOP and the chart PNGs only. The bucket also holds the raw
+                # dataset, and charts are presigned with this role.
+                Resource:
+                  - !Sub arn:aws:s3:::${ArtifactsBucket}/sops/*
+                  - !Sub arn:aws:s3:::${ArtifactsBucket}/charts/*
               # Chart code interpreter: the runtime role must be allowed to START
               # and drive sessions on the custom CI (the CI's OWN execution role only
               # governs what the sandbox can do once running — it does NOT grant the

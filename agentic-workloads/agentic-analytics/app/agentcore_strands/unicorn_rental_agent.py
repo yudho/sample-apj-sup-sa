@@ -43,10 +43,10 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from bedrock_agentcore.memory import MemoryClient
 
 # Load SOP from S3 or local fallback
-def load_system_prompt(s3_key_override: str | None = None):
+def load_system_prompt():
     """Load SOP from S3 if configured, otherwise use local file"""
     s3_bucket = os.getenv("SOP_S3_BUCKET")
-    s3_key = s3_key_override or os.getenv("SOP_S3_KEY", "sops/unicorn_rental_analytics.sop.md")
+    s3_key = os.getenv("SOP_S3_KEY", "sops/unicorn_rental_analytics.sop.md")
     
     print(f"DEBUG: SOP_S3_BUCKET={s3_bucket}, SOP_S3_KEY={s3_key}")
     
@@ -82,6 +82,7 @@ _S3KEY_ATTR_RE = re.compile(r'\bs3key\s*=\s*"([^"]+)"', re.IGNORECASE)
 _CHART_TAG_MAX = 4096
 
 _s3_presign_client = None
+_CHART_KEY_RE = re.compile(r"charts/[A-Za-z0-9_-]{1,64}\.png")
 
 
 def _presign_chart_key(s3key: str) -> str | None:
@@ -90,6 +91,11 @@ def _presign_chart_key(s3key: str) -> str | None:
     if not bucket or not s3key:
         return None
     key = s3key.replace(f"s3://{bucket}/", "").lstrip("/")
+    # Only the chart sandbox's own output. The model writes the tag, so a prompt
+    # could otherwise ask it to "chart" data/customers.csv and get a signed URL.
+    if not _CHART_KEY_RE.fullmatch(key):
+        print("[CHART] refused to presign a key outside charts/")
+        return None
     global _s3_presign_client
     try:
         if _s3_presign_client is None:
@@ -382,7 +388,6 @@ async def agent_invocation(payload, context):
         return token.strip() if token else None
 
     gateway_token = _bearer_from_headers(context)
-    sop_s3_key = payload.get("sop_s3_key")
     # Response mode: 'text' (default, markdown) or 'voice' (spoken <speak> headline +
     # displayed detail). The browser's text chat sends mode='text'; the voice bot
     # sends mode='voice'. ONE SOP serves both — mode selects the Response Formatting
@@ -441,7 +446,7 @@ async def agent_invocation(payload, context):
         
         mcp_client = MCPClient(create_transport)
         
-        system_prompt = load_system_prompt(s3_key_override=sop_s3_key) if sop_s3_key else SYSTEM_PROMPT
+        system_prompt = SYSTEM_PROMPT
         # Tell the agent which Response Formatting branch (Step 5 of the SOP) to follow
         # this turn. Appended (not file-swapped) so one SOP serves both modalities.
         system_prompt = (

@@ -13,6 +13,7 @@ import asyncio
 import codecs
 import json
 import os
+import re
 import secrets
 from collections.abc import Callable
 from urllib.parse import quote
@@ -474,6 +475,10 @@ class AnalyticsAgentCoreProcessor(FrameProcessor):
             return None
         # Guard against the agent emitting an absolute s3:// URI or a stray bucket prefix.
         key = s3key.replace(f"s3://{bucket}/", "").lstrip("/")
+        # Same rule as the agent: only chart PNGs, never other objects in the bucket.
+        if not re.fullmatch(r"charts/[A-Za-z0-9_-]{1,64}\.png", key):
+            logger.warning("refused to presign a key outside charts/")
+            return None
         try:
             async with self._aws_session.create_client(  # pyright: ignore
                 "s3", **self._aws_params  # pyright: ignore

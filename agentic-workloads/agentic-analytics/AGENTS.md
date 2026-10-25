@@ -69,7 +69,7 @@ Step Functions `<env>-schema-sync`, started by a Glue crawler success (EventBrid
 ### Charts (both modes)
 
 The agent renders charts in an AgentCore **Code Interpreter** sandbox (matplotlib), which uploads the PNG to `s3://<artifacts>/charts/` and prints only the S3 key. The agent emits a short `<chart s3key="charts/….png" />` tag in its output; the **agent's outbound stream loop presigns that key and rewrites the tag to `<chart url="…" />`** before it leaves the runtime. So:
-- The presigned URL is created once, server-side (agent role has `s3:GetObject`); the short S3 key — never the URL — is what lands in Memory.
+- The presigned URL is created once, server-side; the short S3 key — never the URL — is what lands in Memory. Only keys matching `charts/<name>.png` are presigned (the model writes the tag, and the bucket also holds the raw dataset), and the runtime role can read only `sops/*` and `charts/*`.
 - Both consumers receive the identical `<chart url="…" />`: the **voice bot** re-emits it as an RTVI `chart` message; the **text UI** parses it from the stream. Same render path in `ChatPanel.js`.
 
 ## Key Files
