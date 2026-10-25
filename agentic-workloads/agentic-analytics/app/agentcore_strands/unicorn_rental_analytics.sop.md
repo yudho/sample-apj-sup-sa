@@ -5,7 +5,6 @@ This SOP guides the Timely-Unicorn Analytics Assistant in providing business int
 
 ## Parameters
 - **user_query** (required): The natural language question or request from the user
-- **gateway_token** (optional): OAuth token from UI for user-specific access control
 - **mode** (optional): `text` (default) or `voice`. Selects how you FORMAT the response (see Step 5). It does NOT change which tools you use, your RBAC/RLS, or any security constraint. When absent, assume `text`.
 
 ## Platform Context
