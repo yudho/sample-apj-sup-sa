@@ -697,6 +697,11 @@ def deploy_ui(gateway_url, runtime_arn):
         'REACT_APP_COGNITO_IDENTITY_POOL_ID': identity_pool_id,
         'REACT_APP_COGNITO_USER_CLIENT_ID': user_login_client_id,
         'REACT_APP_COGNITO_DOMAIN': cognito_domain,
+        # The participant's app/ui/.env points at the main agent (front door, voice); this
+        # UI must call the semantic runtime only, so those are blanked for this build.
+        'REACT_APP_FRONTDOOR_URL': '',
+        'REACT_APP_VOICE_SIGNALING_URL': '',
+        'REACT_APP_VOICE_START_URL': '',
     }
 
     print(f"[OK] React env vars:")
@@ -707,7 +712,7 @@ def deploy_ui(gateway_url, runtime_arn):
     # Build and deploy using shared utilities
     ui_dir = PROJECT_ROOT / 'app' / 'ui'
     print(f"\nBuilding React app from {ui_dir}...")
-    build_dir = build_react_app(ui_dir, env_vars)
+    build_dir = build_react_app(ui_dir, env_vars, write_env_file=False)
     zip_path = create_deployment_zip(build_dir)
 
     try:
