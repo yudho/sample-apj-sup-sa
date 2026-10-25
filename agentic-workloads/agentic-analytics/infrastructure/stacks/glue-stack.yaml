@@ -187,6 +187,28 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::${GlueDriverBucket}
                   - !Sub arn:aws:s3:::${GlueDriverBucket}/*
+        # A crawler that uses a custom JDBC driver runs as a Glue job under this
+        # same role, so the role must be able to start that job and pass itself to
+        # Glue. Without this the crawl fails with "Crawler service is not granted
+        # iam permissions required".
+        - PolicyName: GlueCustomDriverJob
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:CreateJob
+                  - glue:DeleteJob
+                  - glue:GetJob
+                  - glue:GetJobRun
+                  - glue:StartJobRun
+                Resource: !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/*
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/${EnvironmentName}-glue-role
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: glue.amazonaws.com
 
   #============================================================================
   # S3 Bucket for JDBC Driver (Glue needs write access to driver bucket)
