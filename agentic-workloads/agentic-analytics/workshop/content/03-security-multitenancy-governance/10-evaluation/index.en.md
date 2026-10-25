@@ -66,7 +66,7 @@ cd /workshop/agentic-analytics/app/agentcore_strands
 make deploy
 ```
 
-The fence adds an `AWS::BedrockAgentCore::OnlineEvaluationConfig` named `unicorn_rental_online_eval`. Its execution role, `EvaluationRole`, has been in your template since Step 2: CloudFormation checks at create time that the role can read the runtime's log group, and a role created in the same deploy fails that check because IAM has not finished propagating it. The config:
+The fence adds an IAM role that can read the runtime's spans and an `AWS::BedrockAgentCore::OnlineEvaluationConfig` named `unicorn_rental_online_eval`. It:
 - samples 10% of finished conversations (raise it while you test, lower it for cost in production)
 - scores each with Correctness, Faithfulness, Helpfulness, ToolSelectionAccuracy and GoalSuccessRate
 - writes scores to a results log group and as CloudWatch metrics in the `Bedrock-AgentCore/Evaluations` namespace, so you can alarm on quality like you alarm on errors

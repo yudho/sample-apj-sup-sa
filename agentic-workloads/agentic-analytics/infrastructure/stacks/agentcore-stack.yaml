@@ -2407,9 +2407,13 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # DescribeLogGroups is a list call: scoped to a log group, CreateOnlineEvaluationConfig
+              # fails with "execution role does not have permissions to access the specified log groups".
+              - Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
               - Effect: Allow
                 Action:
-                  - logs:DescribeLogGroups
                   - logs:StartQuery
                   - logs:GetQueryResults
                   - logs:StopQuery

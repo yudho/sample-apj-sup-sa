@@ -2304,57 +2304,6 @@ Resources:
       WebACLArn: !GetAtt FrontDoorWebAcl.Arn
 
 
-  # Execution role for Step 10's online evaluation. It is part of the baseline on purpose:
-  # CreateOnlineEvaluationConfig checks that the role can read the runtime's log group, and a
-  # role created in the same deploy fails that check because IAM has not propagated it yet.
-  # Nothing uses it until you uncomment Step 10.
-  EvaluationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: bedrock-agentcore.amazonaws.com
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:SourceAccount: !Ref AWS::AccountId
-      Policies:
-        - PolicyName: ReadSpansAndScore
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:DescribeLogGroups
-                  - logs:StartQuery
-                  - logs:GetQueryResults
-                  - logs:StopQuery
-                Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws/spans*
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/evaluations/*
-              - Effect: Allow
-                Action: cloudwatch:PutMetricData
-                Resource: '*'
-                Condition:
-                  StringEquals:
-                    cloudwatch:namespace: Bedrock-AgentCore/Evaluations
-              - Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                  - bedrock:InvokeModelWithResponseStream
-                Resource:
-                  - arn:aws:bedrock:*::foundation-model/*
-                  - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
-
   # ===== UNCOMMENT FROM HERE (Step 10: online evaluation) ======
 #   #============================================================================
 #   # Online evaluation (AgentCore Evaluations)
@@ -2364,6 +2313,57 @@ Resources:
 #   # metrics (namespace Bedrock-AgentCore/Evaluations), so quality can be watched
 #   # and alarmed on like latency or errors.
 #   #============================================================================
+#   EvaluationRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: bedrock-agentcore.amazonaws.com
+#             Action: sts:AssumeRole
+#             Condition:
+#               StringEquals:
+#                 aws:SourceAccount: !Ref AWS::AccountId
+#       Policies:
+#         - PolicyName: ReadSpansAndScore
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               # DescribeLogGroups is a list call: scoped to a log group, CreateOnlineEvaluationConfig
+#               # fails with "execution role does not have permissions to access the specified log groups".
+#               - Effect: Allow
+#                 Action: logs:DescribeLogGroups
+#                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+#               - Effect: Allow
+#                 Action:
+#                   - logs:StartQuery
+#                   - logs:GetQueryResults
+#                   - logs:StopQuery
+#                 Resource:
+#                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/*
+#                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:aws/spans*
+#               - Effect: Allow
+#                 Action:
+#                   - logs:CreateLogGroup
+#                   - logs:CreateLogStream
+#                   - logs:PutLogEvents
+#                 Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/evaluations/*
+#               - Effect: Allow
+#                 Action: cloudwatch:PutMetricData
+#                 Resource: '*'
+#                 Condition:
+#                   StringEquals:
+#                     cloudwatch:namespace: Bedrock-AgentCore/Evaluations
+#               - Effect: Allow
+#                 Action:
+#                   - bedrock:InvokeModel
+#                   - bedrock:InvokeModelWithResponseStream
+#                 Resource:
+#                   - arn:aws:bedrock:*::foundation-model/*
+#                   - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*
+#
 #   OnlineEvaluation:
 #     Type: AWS::BedrockAgentCore::OnlineEvaluationConfig
 #     DependsOn: AgentRuntimeEndpoint
