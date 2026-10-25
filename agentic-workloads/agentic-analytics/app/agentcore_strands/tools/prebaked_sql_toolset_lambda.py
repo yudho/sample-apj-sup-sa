@@ -358,7 +358,15 @@ def get_unicorn_availability(args, rls_context):
         sql = "SELECT * FROM unicorn_availability WHERE unicorn_id = %s ORDER BY created_at DESC LIMIT 10"
         cur.execute(sql, [unicorn_id])
         availability = cur.fetchall()
-    return success_response({'success': True, 'availability': availability})
+        # Status records alone miss slots already taken, so also return the unicorn's
+        # upcoming bookings (same rule create_booking_tool uses to refuse an overlap).
+        cur.execute("""
+            SELECT booking_reference, start_datetime, end_datetime FROM bookings
+            WHERE unicorn_id = %s AND cancellation_reason IS NULL AND end_datetime > NOW()
+            ORDER BY start_datetime LIMIT 20
+        """, [unicorn_id])
+        upcoming = cur.fetchall()
+    return success_response({'success': True, 'availability': availability, 'upcoming_bookings': upcoming})
 
 def get_users(args, rls_context):
     with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:

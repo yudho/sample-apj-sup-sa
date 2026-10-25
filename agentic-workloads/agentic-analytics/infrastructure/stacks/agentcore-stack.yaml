@@ -821,7 +821,7 @@ Resources:
                       transaction_type: { Type: string }
                       limit: { Type: integer }
                 - Name: get_unicorn_availability_tool
-                  Description: Get unicorn availability history
+                  Description: Get unicorn status history and its upcoming bookings (check before booking)
                   InputSchema:
                     Type: object
                     Properties:
