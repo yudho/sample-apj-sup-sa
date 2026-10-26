@@ -292,19 +292,24 @@ The script performs four deployment steps, then saves its configuration:
 Expected output:
 
 ```
-Deploying Semantic Layer Parallel Stack
-============================================================
-[1/4] Creating separate Gateway...
-[OK] Gateway created: SemanticLayerGateway-xxxxxxxxxx
-[2/4] Registering SemanticLayer target...
-[OK] Target registered with 2 tools
-[3/4] Deploying AgentCore Runtime...
+Step 1: Create Semantic Layer Gateway
+[OK] Gateway URL: https://...gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp
+[OK] Gateway ID: ...
+Step 2: Register SemanticLayer Target
+[OK] Created SemanticLayer target: ...
+Step 3: Deploy Semantic Layer Runtime
+...
 [OK] Runtime deployed: unicorn_rental_semantic_agent
-[4/4] Deploying Amplify UI...
-[OK] Amplify app deployed: agentic-analytics-semantic-ui
-============================================================
-Semantic Layer UI: https://main.xxxxxxxxxx.amplifyapp.com
-Config saved to: semantic_config.env
+...
+[OK] JWT authorizer + Authorization header allowlist attached
+Step 4: Deploy Semantic Layer UI
+...
+[OK] Amplify app deployed:
+   App ID:  ...
+   URL:     https://main.xxxxxxxxxx.amplifyapp.com
+...
+[OK] Parallel Stack Deployment Complete!
+   Config saved: /workshop/agentic-analytics/app/agentcore_strands/semantic_config.env
 ```
 
 **Open two browser tabs for side-by-side comparison:**
