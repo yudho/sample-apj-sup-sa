@@ -1628,10 +1628,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                # The SOP and the chart PNGs only. The bucket also holds the raw
-                # dataset, and charts are presigned with this role.
+                # The chart PNGs only. The bucket also holds the raw dataset,
+                # and charts are presigned with this role.
                 Resource:
-                  - !Sub arn:aws:s3:::${ArtifactsBucket}/sops/*
                   - !Sub arn:aws:s3:::${ArtifactsBucket}/charts/*
               # Chart code interpreter: the runtime role must be allowed to START
               # and drive sessions on the custom CI (the CI's OWN execution role only
@@ -1900,7 +1899,7 @@ Resources:
   # the PNG to s3://${ArtifactsBucket}/charts/ and print only the S3 key. A CUSTOM
   # interpreter is required because the default aws.codeinterpreter.v1 has NO
   # execution role and therefore cannot reach S3. The agent then presigns the key
-  # for the UI (its runtime role has s3:GetObject on charts/* and sops/*).
+  # for the UI (its runtime role has s3:GetObject on charts/*).
   #============================================================================
   ChartCodeInterpreterRole:
     Type: AWS::IAM::Role
@@ -2115,7 +2114,8 @@ Resources:
         # The agent verifies the user token (memory is scoped to its sub).
         COGNITO_USER_POOL_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-UserPoolId'}
         COGNITO_USER_LOGIN_CLIENT_ID: {'Fn::ImportValue': !Sub '${EnvironmentName}-UserLoginClientId'}
-        SOP_S3_BUCKET: !Ref ArtifactsBucket
+        # No SOP_S3_BUCKET here: nothing uploads a SOP to this bucket in the
+        # workshop, so the agent uses the SOP baked into the image (`make build`).
         # Charts: the agent renders matplotlib PNGs in the custom Code Interpreter
         # below (which can write to S3), then presigns the key for the UI. The agent
         # role has s3:GetObject on charts/*, so it can presign them.
