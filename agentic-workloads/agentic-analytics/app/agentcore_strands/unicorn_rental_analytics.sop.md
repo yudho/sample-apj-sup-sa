@@ -81,6 +81,7 @@ Execute when user requests to create a new booking.
 **Optional Parameters:** special_requests, pickup_location, dropoff_location
 
 **Constraints:**
+- If create_booking_tool is not in your tool list (analysts cannot book), you MUST say first that you cannot create bookings for this account, before any lookups. You MAY then give the details the user would need to book it elsewhere. You MUST NOT offer to book, or suggest other slots as if you could book them
 - You MUST resolve relative dates (e.g., "tomorrow") to absolute dates before creating the booking
 - You MUST NOT guess customer or unicorn IDs — resolve them via search tools, from the conversation history, or ask the user
 - You MUST call get_unicorn_availability_tool for the unicorn_id you are about to book, in this conversation and shortly before create_booking_tool. The gateway refuses a booking that was not preceded by this check for the same unicorn; if it does, run the check and try again

@@ -238,7 +238,7 @@ All test users share one password. Run `make users` in `app/agentcore_strands` i
 
 4. Log out, log in as Orion
 5. Ask: **"Show me top 5 customers by revenue"**: same query, same tenant data
-6. Ask: **"Create a booking for my top customer next Sunday 2:30 pm for 30 mins with unicorn Vega Sapphire"**: the agent cannot do this. The `create_booking_tool` is **inaccessible** for the analyst.
+6. Ask: **"Create a booking for my top customer next Sunday 4 pm for 30 mins with unicorn Vega Sapphire"** (a different slot from Lyra's, so the answer is not about a clash): the agent cannot do this. The `create_booking_tool` is **inaccessible** for the analyst, and the agent says so.
 
 ### Step 7.7: Test Tenant Data Isolation: *Part B payoff*
 
