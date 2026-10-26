@@ -552,9 +552,11 @@ def deploy_runtime(gateway_url):
             if match:
                 candidate = match.group(1)
                 # Guard against box-wrapped truncation: the runtime id must be
-                # the agent name PLUS the AgentCore-assigned "-XXXXXXXXXX" suffix.
+                # the agent name PLUS the full AgentCore-assigned 10-character
+                # suffix. A wrap can cut the suffix short ("-x3sRVF"), and
+                # AgentCore answers an unknown id with AccessDenied.
                 rid = candidate.rsplit('/', 1)[-1]
-                if re.match(rf'^{re.escape(RUNTIME_AGENT_NAME)}-[A-Za-z0-9]+$', rid):
+                if re.fullmatch(rf'{re.escape(RUNTIME_AGENT_NAME)}-[A-Za-z0-9]{{10}}', rid):
                     runtime_arn = candidate
 
     # Fallback (also used when stdout only had a truncated/wrapped ARN): the
