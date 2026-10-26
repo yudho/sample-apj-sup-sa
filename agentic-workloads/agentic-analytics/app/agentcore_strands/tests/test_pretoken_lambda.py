@@ -1,5 +1,6 @@
 """The Cognito pre-token Lambda must put the role and tenant into every access token,
 including refreshed ones: the Cedar role forbids and the RLS session variables read them."""
+import importlib.util
 import os
 
 import pytest
@@ -18,12 +19,16 @@ _Loader.add_multi_constructor("!", lambda loader, suffix, node: None)
 
 
 @pytest.fixture(scope="module")
-def handler():
+def handler(tmp_path_factory):
     with open(TEMPLATE) as f:
-        code = yaml.load(f, Loader=_Loader)["Resources"]["PreTokenLambda"]["Properties"]["Code"]["ZipFile"]
-    ns = {}
-    exec(compile(code, "pretoken_index.py", "exec"), ns)  # nosec B102 - our own template's inline Lambda
-    return ns["lambda_handler"]
+        template = _Loader(f).get_single_data()
+    # Write the template's inline Lambda to a file and import it like Lambda would.
+    path = tmp_path_factory.mktemp("pretoken") / "index.py"
+    path.write_text(template["Resources"]["PreTokenLambda"]["Properties"]["Code"]["ZipFile"])
+    spec = importlib.util.spec_from_file_location("pretoken_index", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.lambda_handler
 
 
 @pytest.mark.parametrize("trigger", TRIGGERS)

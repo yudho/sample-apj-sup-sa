@@ -418,7 +418,12 @@ Resources:
                       - events.amazonaws.com
                       - amplify.amazonaws.com
                       - apigateway.amazonaws.com
-              # Lab roles never get admin-level managed policies attached.
+              # Blocks attaching the AWS admin-level managed policies to lab roles. It does
+              # not stop broad inline or customer managed policies, and created roles need no
+              # permissions boundary, so this role can reach admin-equivalent access. That is
+              # acceptable only because the Workshop Studio participant already has
+              # AdministratorAccess in this single-use account. Outside such an account, add
+              # a required permissions boundary on iam:CreateRole and the policy-writing actions.
               - Effect: Deny
                 Action: iam:AttachRolePolicy
                 Resource: '*'
