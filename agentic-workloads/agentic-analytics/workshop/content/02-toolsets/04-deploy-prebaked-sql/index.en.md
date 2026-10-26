@@ -129,7 +129,7 @@ Check which tool the agent called and what SQL the tool ran.
 
 1. If you are accessing AWS through the sandbox account provided by AWS workshop studio, go to the workshop studio dashboard and click "Open AWS console" link on the left pane. This will open a AWS UI console in a new tab.
 2. Head to :link[CloudWatch GenAI Observability for AgentCore]{href="https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#/gen-ai-observability/agent-core/agents" external=true}
-3. Find your agent → **DEFAULT** endpoint → **Sessions** tab (see the two screenshots below)
+3. Find your agent → **DEFAULT** endpoint → **OTEL sessions** tab (see the two screenshots below)
 4. Click the most recent session → click the trace
 5. In the **Spans Timeline**, find the tool call span
 6. Verify: the tool name is `PrebakedSQL___get_top_revenue_customers_tool` and the input includes `limit: 5`
@@ -138,7 +138,7 @@ In the **Agents** list, click the **DEFAULT** endpoint under your agent:
 
 :image[The CloudWatch GenAI Observability Agents list, with the DEFAULT endpoint link highlighted under the agent]{src="/static/images/cw-genai-agents-default-endpoint.png"}
 
-On the agent's endpoint page, open the **Sessions** tab:
+On the agent's endpoint page, open the **OTEL sessions** tab:
 
 :image[The agent endpoint page, with the Sessions tab highlighted next to Overview]{src="/static/images/cw-genai-sessions-tab.png"}
 
