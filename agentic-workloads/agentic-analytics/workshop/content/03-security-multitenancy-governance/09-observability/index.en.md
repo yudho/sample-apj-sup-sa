@@ -84,7 +84,7 @@ The second query should be blocked by guardrails: we'll see that in the traces.
 ### Step 9.3: Open the GenAI Dashboard
 
 1. Open the **AWS Console**, go to **CloudWatch** service, click **GenAI Observability** on left pane, and click **Bedrock AgentCore** menu.
-2. Find your agent (`unicorn_rental_agent`) → click it → select **DEFAULT** endpoint
+2. In the **Agents** table, expand `agentic_analytics_agent` and click the **DEFAULT** endpoint (the UI calls this one; `agentic_analytics_endpoint` shows little or no traffic)
 3. Set the time range to **1 hour** in the upper right
 
 ::alert[If you don't see your agent, ensure you're in the correct region (us-east-1), that you've invoked the agent at least once, and that Transaction Search is enabled (CloudWatch → Settings → X-Ray traces tab → Transaction Search should show "Enabled").]{type="info"}
@@ -131,7 +131,7 @@ Open the log group in the CloudWatch console. These logs show every policy decis
 
 ### Step 9.7: Watch the Front Door (after Step 7c)
 
-The front door has its own metrics. Open **AWS WAF** → **Web ACLs** (Region us-east-1) → `agentic-analytics-frontdoor` → **Traffic overview**. You see allowed and blocked requests per rule: `rate-per-ip`, `ip-reputation`, `known-bad-inputs`, and the body rules that only count by default. **Sampled requests** shows a few real requests per rule, which is the quickest way to check why a call was blocked. The same numbers are in CloudWatch under the `AWS/WAFV2` namespace if you want an alarm.
+The front door has its own metrics. Open **AWS WAF** → **Web ACLs** (Region us-east-1) → `agentic-analytics-frontdoor` → **Traffic overview**. You see allowed and blocked requests, and **Top 10 rules** shows which rules matched. The **Rules** tab lists the five rules: `RatePerIp`, `IpReputation`, `KnownBadInputs`, and the body rules `CommonRules` and `SqlInjection`, which only count by default. **Sampled requests** shows a few real requests per rule, which is the quickest way to check why a call was blocked. The same numbers are in CloudWatch under the `AWS/WAFV2` namespace (metric names `rate-per-ip`, `ip-reputation`, `known-bad-inputs`, `common-rules`, `sql-injection`) if you want an alarm.
 
 ## Verification
 
