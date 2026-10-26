@@ -144,15 +144,17 @@ On the agent's endpoint page, open the **Sessions** tab:
 
 #### Part B: Check the Lambda implementation
 
-Open :code[tools/prebaked_sql_toolset_lambda.py]{showCopyAction=true} and go to **line 403**:
+Open :code[tools/prebaked_sql_toolset_lambda.py]{showCopyAction=true} and search for `def get_top_revenue_customers` (**Ctrl+F**):
 
 ```python
-def get_top_revenue_customers(args):
+def get_top_revenue_customers(args, rls_context):
     limit = args.get('limit', 20)
-    conn = get_db_connection()
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+    with closing(get_db_connection(rls_context)) as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("SELECT * FROM top_revenue_customers LIMIT %s", [limit])
+        data = cur.fetchall()
 ```
+
+`rls_context` carries the caller's tenant and role from their token; Step 7 shows how the database uses it.
 
 Notice: the function queries the `top_revenue_customers` **View**, not a raw table with complex joins. The View is pre-defined in the database schema by your team. The LLM never saw this SQL. If you are interested in looking at the query implementation for this View, find it from `/workshop/agentic-analytics/dataset/schema/schema.sql`.
 
