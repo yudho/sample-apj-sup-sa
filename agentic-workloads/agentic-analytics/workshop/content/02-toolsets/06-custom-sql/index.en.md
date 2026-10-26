@@ -66,9 +66,11 @@ You'll see:
 2. Click **Test** (next to **Delete** at the top of the page). The **Test Knowledge Base** page opens with **Configurations** on the left and **Test** on the right
 3. Under **Retrieval and response generation**, select **Standard retrieval only**. This is the same `Retrieve` call the agent makes: it returns the matching chunks without asking a model to write an answer, so you can see exactly what the agent will read. (The **Agentic retrieval** options also work if you want a synthesized answer.)
 4. Type each query in the prompt box on the right and press **Enter**:
-   - "How to calculate booking duration?": should return the section about `end_datetime - start_datetime`
-   - "What is the relationship between bookings and unicorns?": should return JOIN patterns
-   - "How is revenue calculated?": should return the revenue formula
+   - "How to calculate booking duration?": the top results hold the duration rule and SQL that uses `end_datetime - start_datetime`
+   - "What is the relationship between bookings and unicorns?": the bookings table description, including its **Relationships** list (each booking points to one unicorn and one customer)
+   - "How is revenue calculated?": the revenue rule, `SUM(transactions.amount)` over `booking_fee`, `subscription` and `storage_overage`
+
+   The preview shortens each result; turn on **Details** and pick a result to read the whole chunk.
 
 This is the same RAG retrieval the agent uses when generating SQL.
 
