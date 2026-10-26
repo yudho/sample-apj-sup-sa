@@ -516,7 +516,9 @@ def deploy_runtime(gateway_url):
 
     # Deploy
     print("Deploying to AgentCore Runtime (this takes ~2-3 minutes)...")
-    deploy_cmd = ["agentcore", "deploy"]
+    # --auto-update-on-conflict keeps a re-run idempotent: without it a second
+    # run fails with "already exists and auto_update_on_conflict is disabled".
+    deploy_cmd = ["agentcore", "deploy", "--auto-update-on-conflict"]
     result = subprocess.run(  # nosec B603 # nosemgrep: dangerous-subprocess-use-audit
         deploy_cmd, cwd=str(ROOT_DIR),
         capture_output=True, text=True, timeout=600
