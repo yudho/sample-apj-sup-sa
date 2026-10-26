@@ -262,7 +262,7 @@ The Cedar policy also makes the booking tool **invisible** to the analyst.
 1. Log in as **Orion (analyst)**, ask: **"List every tool you can use."**
 2. Log in as **Lyra (admin)**, ask the **same** question.
 
-::alert[**What you should see.** Orion's list contains only *read* booking tools (e.g. `get_bookings`, `get_booking_summary`): there is **no create-booking tool**. Lyra's list **includes `APIInteg___create_booking_tool`.** Same agent, same Gateway; the only difference is the `custom:role` claim in their JWT, and Cedar uses it to hide the write tool from the analyst *at the Gateway, before the agent runs.* A prompt restriction ("don't let analysts create bookings") can be talked around with prompt injection. A tool hidden at the Gateway **cannot be called at all.**]{type="info"}
+::alert[**What you should see.** Orion's list contains only *read* booking tools (e.g. `get_bookings`, `get_booking_summary`): there is **no create-booking tool**. Lyra's list **includes creating a booking** (the agent may name `APIInteg___create_booking_tool` or just describe it). Same agent, same Gateway; the only difference is the `custom:role` claim in their JWT, and Cedar uses it to hide the write tool from the analyst *at the Gateway, before the agent runs.* A prompt restriction ("don't let analysts create bookings") can be talked around with prompt injection. A tool hidden at the Gateway **cannot be called at all.**]{type="info"}
 
 ### Step 7.9: Guardrails and a booking-order rule in policy (Step 7b)
 
