@@ -585,7 +585,7 @@ def semantic_search(args, rls_context):
     
     Args:
         query: Natural language query describing what data the user is looking for
-        top_k: Number of results to return (default: 10)
+        top_k: Number of results to return (default: 10; the knowledge base returns at most 5)
     
     Returns:
         List of relevant context with similarity scores
@@ -601,18 +601,16 @@ def semantic_search(args, rls_context):
     
     try:
         # Use Bedrock KB Retrieve API
+        # No retrievalConfiguration: a managed knowledge base rejects
+        # vectorSearchConfiguration, and the Lambda runtime's boto3 does not know
+        # managedSearchConfiguration yet. The default returns 5 results.
         response = bedrock_agent_runtime.retrieve(
             knowledgeBaseId=KNOWLEDGE_BASE_ID,
             retrievalQuery={'text': query},
-            retrievalConfiguration={
-                'vectorSearchConfiguration': {
-                    'numberOfResults': top_k
-                }
-            }
         )
-        
+
         results = []
-        for result in response.get('retrievalResults', []):
+        for result in response.get('retrievalResults', [])[:top_k]:
             content = result.get('content', {}).get('text', '')
             score = result.get('score', 0.0)
             metadata = result.get('metadata', {})

@@ -251,13 +251,15 @@ def rag_retrieve(query):
         return [{'content': 'Knowledge Base not configured. Use appropriate JOINs and filter by account_id.', 'score': 0.5}]
 
     try:
+        # No retrievalConfiguration: a managed knowledge base rejects
+        # vectorSearchConfiguration, and the Lambda runtime's boto3 does not know
+        # managedSearchConfiguration yet. The default returns 5 results.
         response = bedrock_agent_runtime.retrieve(
             knowledgeBaseId=KB_ID,
             retrievalQuery={'text': query},
-            retrievalConfiguration={'vectorSearchConfiguration': {'numberOfResults': 5}}
         )
         results = []
-        for r in response.get('retrievalResults', []):
+        for r in response.get('retrievalResults', [])[:5]:
             results.append({
                 'content': r.get('content', {}).get('text', ''),
                 'score': r.get('score', 0.0)

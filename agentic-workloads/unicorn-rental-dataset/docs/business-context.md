@@ -12,6 +12,20 @@ FROM transactions t
 WHERE t.transaction_type IN ('booking_fee', 'subscription', 'storage_overage');
 ```
 
+### How to attribute revenue to unicorns, breeds, colors or customers
+
+A `booking_fee` transaction points to its booking through `transactions.booking_id`. To split revenue by anything on a booking (unicorn, breed, color, customer), join `transactions` to `bookings` on `t.booking_id = b.booking_id`, then join `unicorns` or `customers` from the booking. Never join `transactions` to `bookings` on `customer_id` or `account_id`: each booking then matches every transaction of that customer or tenant, and the totals come out many times too high. `subscription` and `storage_overage` transactions, when present, have no booking, so they belong to the account, not to a unicorn or customer.
+
+```sql
+SELECT u.color, SUM(t.amount) AS revenue
+FROM transactions t
+JOIN bookings b ON t.booking_id = b.booking_id
+JOIN unicorns u ON b.unicorn_id = u.unicorn_id
+WHERE t.transaction_type = 'booking_fee'
+GROUP BY u.color
+ORDER BY revenue DESC;
+```
+
 ### How to calculate booking duration
 
 Booking duration in hours = `EXTRACT(EPOCH FROM (end_datetime - start_datetime)) / 3600.0` on the `bookings` table. A booking's `total_cost` is `base_hourly_rate` times that duration.
