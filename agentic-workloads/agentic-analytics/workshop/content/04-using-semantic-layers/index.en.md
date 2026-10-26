@@ -127,12 +127,18 @@ The script uploads all five YAML model files (`accounts.yml`, `bookings.yml`, `c
 Expected output:
 
 ```
-Deploying Cube models: initial
+Deploying Cube initial models
 ============================================================
-[OK] Uploaded 5 YAML files to s3://<bucket>/models/initial/
-[OK] SSM command completed — models synced to /cube/conf/model/
-[OK] Cube verification: 5 cubes loaded
+...
+[OK] All 5 files uploaded to S3
+...
+  [OK] SSM command completed successfully
+...
+  [OK] Verification passed: 5 cubes loaded
+  Cubes: ['accounts', 'bookings', 'customers', 'transactions', 'unicorns']
+
 ============================================================
+[OK] Cube initial models deployed successfully!
 ```
 
 ::alert[**Why start with a baseline?** Starting with minimal models lets you see what the agent can and cannot do with just raw columns. As you enrich the models in the next steps, you'll see the agent's capabilities expand without changing any application code.]{type="info"}
@@ -181,12 +187,18 @@ This uploads the enriched model files to S3 and deploys them to the Cube EC2 ins
 Expected output:
 
 ```
-Deploying Cube models: final
+Deploying Cube final models
 ============================================================
-[OK] Uploaded 5 YAML files to s3://<bucket>/models/final/
-[OK] SSM command completed — models synced to /cube/conf/model/
-[OK] Cube verification: 5 cubes loaded
+...
+[OK] All 5 files uploaded to S3
+...
+  [OK] SSM command completed successfully
+...
+  [OK] Verification passed: 5 cubes loaded
+  Cubes: ['accounts', 'bookings', 'customers', 'transactions', 'unicorns']
+
 ============================================================
+[OK] Cube final models deployed successfully!
 ```
 
 Cube reloads automatically. Refresh the Playground to see the new dimensions, measures, and segments. You'll notice derived dimensions like `bookings.status`, subquery dimensions like `customers.lifetime_revenue`, and segments like `completed_bookings` and `vip_customers`.
