@@ -194,7 +194,7 @@ Uploading to Amplify (job: 1)
 Waiting for deployment 1
 Status: PENDING
 Status: SUCCEED
-  No gateway_config.json — skipping Cognito callback update
+  [OK] Added https://main.xxxxxxxxxxxxxx.amplifyapp.com to Cognito callback URLs
 
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    Deployment Complete!                          ║
