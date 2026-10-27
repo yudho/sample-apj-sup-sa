@@ -293,6 +293,10 @@
       "summary": "get_daily_bookings_summary tests: group_by=day aggregates, date filters, row cap"
     },
     {
+      "path": "app/agentcore_strands/tests/test_kb_retrieve.py",
+      "summary": "Managed KB Retrieve tests: rag_retrieve and semantic_search send no retrievalConfiguration (managed KBs reject vectorSearchConfiguration) and cap results"
+    },
+    {
       "path": "workshop/content/02-toolsets/06b-web-search/index.en.md",
       "summary": "Workshop Step 6b: add the AgentCore Web Search connector target, SOP rules, test"
     }
